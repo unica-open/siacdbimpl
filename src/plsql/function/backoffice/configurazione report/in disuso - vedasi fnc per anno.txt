@@ -1,0 +1,26 @@
+--1 fare insert tipo
+
+INSERT INTO
+  siac.bko_t_report_importi
+(
+  rep_codice,
+  rep_desc,
+  repimp_codice,
+  repimp_desc,
+  repimp_importo,
+  repimp_modificabile,
+  repimp_progr_riga
+)
+values
+('BILR001',
+'Allegato 9 - Entrate: Riepilogo per Titolo - Tipologia (BILR001)',
+'fpv_sc_prec',
+'Anno Precedente - Fondo pluriennale vincolato per spese correnti ',
+0,
+'N',
+'6');
+
+--2 esecuzione function
+
+select  * from fnc_siac_bko_configura_report_all_enti();
+

@@ -1,0 +1,527 @@
+﻿------------------------
+SIAC BIL DB
+------------------------
+
+Funzionalità rilasciate
+------------------------
+
+build 27/11/2019 versione 4.18.0
+ SIAC-6840
+ SIAC-6881
+ SIAC-7041
+ SIAC-7140
+ SIAC-7145
+ SIAC-7149
+ SIAC-7164
+ SIAC-7200
+ SIAC-7211
+ SIAC-7212
+ SIAC-7222
+  
+
+build 22/10/2019 versione 4.17.0
+ SIAC-6888
+ SIAC-6985
+ SIAC-7012
+ SIAC-7089
+ SIAC-7090
+ SIAC-7074
+ SIAC-7075
+ SIAC-7076
+ SIAC-7079
+ SIAC-7096
+ 
+build 07/10/2019 versione 4.16.0
+ SIAC-6677
+ SIAC-6702
+ SIAC-6843
+ SIAC-6934
+ SIAC-6972
+ SIAC-6978
+ SIAC-7006
+ SIAC-7010
+ SIAC-7014
+ SIAC-7023
+ SIAC-7028
+ SIAC-7034
+ --componenti-capitolo--
+ SIAC-7058
+ SIAC-7065
+ SIAC-7066
+
+build 28/08/2019 versione 4.15.0
+ SIAC-6971
+ SIAC-6950
+
+build 24/07/2019 versione 4.14.0
+ SIAC-6693
+ SIAC-6939
+ SIAC-6956
+ SIAC-6854
+ SIAC-6973
+ SIAC-6719
+ SIAC-6963
+ SIAC-6979
+
+build 26/06/2019 versione 4.13.0
+ SIAC-6875
+ SIAC-6893
+ SIAC-6911
+ SIAC-6931
+ SIAC-6937
+ SIAC-6933 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) adeguamento function fnc_siac_dwh_programma, fnc_siac_dwh_programma_cronop  e vista siac_v_dwh_anag_programma
+ SIAC-6720
+
+build 29/05/2019 versione 4.12.0
+ SIAC-6255
+ SIAC-6792
+ SIAC-6795
+ SIAC-6805
+ SIAC-6810
+ SIAC-6819
+ SIAC-6820
+ SIAC-6821
+ SIAC-6849
+ SIAC-6611
+ SIAC-6855
+ SIAC-6870
+ SIAC-6856
+ 
+build 29/04/2019 versione 4.11.0
+ SIAC-6788
+ SIAC-6791
+
+
+build 27/03/2019 versione 4.10.0
+ SIAC-6565
+ SIAC-6623
+ SIAC-6736
+ SIAC-6661
+
+
+build 06/03/2019 versione 4.9.0
+ SIAC-6642
+ SIAC-6683
+ SIAC-6331
+ SIAC-6468
+ SIAC-6713
+ SIAC-6718
+ SIAC-6630
+
+build 13/02/2019 versione 4.8.0
+ SIAC-6257
+ SIAC-6640 
+ SIAC-6641
+ SIAC-6586
+
+build 23/01/2019 versione 4.7.0
+ SIAC-6533
+ SIAC-6637
+
+build 09/01/2019 versione 4.6.0
+ SIAC-6365
+ SIAC-6466
+ SIAC-6467
+ SIAC-6604
+ SIAC-6608
+
+build 13/12/2018 versione 4.5.0
+ SIAC-6573 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento function fnc_siac_dwh_accertamento per anomalia segnalata 
+ SIAC-6261 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento function fnc_siac_dwh_soggetto  per i campi aggiunti per la gestione del DURC
+ SIAC-6498
+ SIAC-6602
+ SIAC-6608
+
+build 22/11/2018 versione 4.4.0
+ SIAC-6351
+ SIAC-6548 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento function fnc_siac_dwh_impegno per anomalia segnalata
+
+build 15/11/2018 versione 4.3.0
+ SIAC-6504
+
+build 08/11/2018 versione 4.2.0
+ SIAC-6499 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento function fnc_siac_dwh_ordinativo_pagamento,fnc_siac_dwh_ordinativo_incasso per anomalia segnalata
+ SIAC-6486
+
+build 31/10/2018 versione 4.1.0
+ SIAC-6336 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento tabelle siac_dwh_impegno, siac_dwh_accertamento per nuovi campi su cronp., creazione nuova tabella siac_dwh_programma_cronop per nuovo scarico programmi-cronoprogrammi
+ SIAC-6477 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento vista siac_v_dwh_ricevuta_ordinativo per anomalia segnalata
+ SIAC-6482 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento vista siac_v_dwh_registrazioni per risoluzione rallentamento segnalato
+ SIAC-6488 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento fnc fnc_siac_dwh_ordinativo_pagamento per popolamento dati soggetto in caso di sede secondaria
+ SIAC-6347
+
+build 25/10/2018 versione 4.0.0
+ SIAC-6464
+ Cespiti-V3
+ incremento versione per modifiche architettura
+
+build 11/10/2018 versione 3.53.0
+ SIAC-6360
+ 
+build 04/10/2018 versione 3.52.0
+ SIAC-6421
+ SIAC-6427 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento vista siac_v_dwh_vincoli_movgest per richiesta di estrazione vincoli su accertamenti senza impegni
+ SIAC-6451
+
+build 27/09/2018 versione 3.51.0
+ SIAC-6433
+ SIAC-6448
+
+build 13/09/2018 versione 3.50.0
+ SIAC-6429
+ 
+build 06/09/2018 versione 3.49.0
+ SIAC-6306
+ SIAC-6292  Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Adeguamento viste per aggiunta campo data_creazione, siac_v_dwh_mod_impegno, siac_v_dwh_mod_impegno_classe, siac_v_dwh_mod_impegno_sogg, siac_v_dwh_mod_imp_sogg_classe, siac_v_dwh_mod_accertamento, siac_v_dwh_mod_accert_sogg, siac_v_dwh_mod_accert_classe
+ SIAC-6313  Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Creazione tabella e function per nuovo scarico, siac_dwh_capitolo_fpv e fnc_siac_dwh_capitolo_fpv
+ SIAC-6266
+ 
+ build 26/07/2018 versione 3.48.0
+ SIAC-6175  Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Correzione function fnc_siac_dwh_ordinativo_incasso.sql, \fnc_siac_dwh_ordinativo_pagamento.sql, siac_dwh_ordinativo_pagamento, siac_dwh_ordinativo_incasso 
+ SIAC-6193
+ SIAC-6206
+
+
+build 19/07/2018 versione 3.47.0
+ SIAC-6271
+ 
+build 12/07/2018 versione 3.46.0
+ SIAC-6296
+
+build 05/07/2018 versione 3.46.0
+ SIAC-6237
+ SIAC-6275
+ SIAC-6270
+ 
+build 28/06/2018 versione 3.45.0
+ SIAC-6216
+ SIAC-6217
+ SIAC-6250
+ SIAC-6282 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Correzione function fnc_siac_dwh_contabilita_generale
+ 
+build 21/06/2018 versione 3.44.0
+ SIAC-6272
+ SIAC-6291
+
+build 21/06/2018 versione 3.43.0
+ SIAC-6239
+ SIAC-6251
+ SIAC-6279
+
+build 14/06/2018 versione 3.42.0
+ SIAC-6200
+ SIAC-6201
+ SIAC-6215
+ SIAC-6233 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Correzione vista siac_dwh_oneri_doc per record mancanti
+ SIAC-6246 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Correzione function fnc_siac_dwh_documento_spesa
+
+build 07/06/2018 versione 3.41.0
+ SIAC-6220 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Aggiunto campo flag_attiva_gsa alle tabelle
+                           siac_dwh_accertamento, siac_dwh_subaccertamento
+ SIAC-6197
+ SIAC-6234
+ 
+build 31/05/2018 versione 3.40.0
+ SIAC-6126 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Aggiunti campi provc_conto_evidenza,provc_descrizione_conto_evidenza
+                           alla vista  siac_v_dwh_provvisori_cassa
+ SIAC-6202 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Aggiunto campo flag_attiva_gsa alle tabelle
+                           siac_dwh_impegno, siac_dwh_subimpegno
+ SIAC-6228
+
+build 24/05/2018 versione 3.39.0
+ SIAC-6174
+ SIAC-6124 Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Aggiunti campi data_ins_atto_allegato,
+                          data_completa_atto_allegato,
+                          data_convalida_atto_allegato,
+                          data_sosp_atto_allegato,
+                          causale_sosp_atto_allegato,
+                          data_riattiva_atto_allegato alle tabelle siac_dwh_documento_spesa e siac_dwh_documento_entrata. 
+                          Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it)
+ SIAC-6163						  
+ SIAC-6125  Avvisare gruppo DWBICO (carmine.graziano@csi.it, dwh_bilancio@csi.it) Aggiunti campi esito_stato_fattura_fel, data_scadenza_pagamento_pcc alla vista siac_v_dwh_fattura_sirfel.
+          
+ SIAC-6137
+
+build 17/05/2018 versione 3.38.0
+ SIAC-6144
+ SIAC-6137
+ SIAC-6170
+ 
+build 10/05/2018 versione 3.37.0
+ SIAC-6090
+ SIAC-6055
+ SIAC-6143
+ SIAC-6063
+ SIAC-6156
+
+build 26/04/2018 versione 3.36.0
+ SIAC-5934
+ SIAC-6067
+ SIAC-6097
+ SIAC-6011
+ SIAC-6112
+ SIAC-6129
+
+build 19/04/2018 versione 3.35.0
+ SIAC-6089
+ SIAC-5427
+ SIAC-6100
+ 
+build 12/04/2018 versione 3.34.0
+ SIAC-5969
+ SIAC-6054
+ SIAC-6008
+ SIAC-6094
+ SIAC-6015
+
+build 05/04/2018 versione 3.33.0
+ SIAC-6068
+ SIAC-6064
+ SIAC-6070
+ SIAC-5463
+ SIAC-6071
+
+build 29/03/2018 versione 3.32.0
+ SIAC-5973
+ SIAC-6007
+ SIAC-5941
+ SIAC-6053
+ 
+build 22/03/2018 versione 3.31.0
+ SIAC-5900
+ SIAC-6036
+ SIAC-5968
+ 
+build 15/03/2018 versione 3.30.0
+ SIAC-5899
+ SIAC-5988
+ SIAC-6017
+ SIAC-5303
+
+build 08/03/2018 versione 3.29.0
+ SIAC-5977
+ SIAC-5999
+ 
+build 01/03/2018 versione 3.28.0
+ SIAC-5964
+ SIAC-5849
+ SIAC-5951
+ SIAC-5955
+
+build 22/02/2018 versione 3.27.0
+ SIAC-5472
+ SIAC-5874
+ SIAC-5897
+ SIAC-5368
+ SIAC-5895
+ SIAC-5942
+ SIAC-5854
+ SIAC-5866
+ SIAC-5884
+
+build 15/02/2018 versione 3.26.0
+ SIAC-5623
+ SIAC-5882
+ SIAC-5874
+ SIAC-5878
+ SIAC-5883
+ SIAC-5809
+ SIAC-5907
+ SIAC-5849
+ SIAC-5893
+ SIAC-5834
+ SIAC-5909
+ 
+build 08/02/2018 versione 3.25.0
+ SIAC-5778
+ SIAC-5877
+
+build 01/02/2018 versione 3.24.0
+ SIAC-5696
+ SIAC-5487
+
+build 25/01/2018 versione 3.23.0
+ SIAC-5333
+ SIAC-5344
+ SIAC-5582 Aggiunto campo flagaccertatopercassa alla tabella siac_dwh_capitolo_entrata. Avvisare gruppo DWBICO (Carmine Graziano)
+
+build 18/01/2018 versione 3.22.0
+ SIAC-5685
+ SIAC-5764 Creata nuova vista siac_v_dwh_subdoc_sospensione, valorizzati a NULL i campi data_sospensione, data_riattivazione, causale_sospensione della tabella siac_dwh_documento_spesa. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5557
+ SIAC-5571
+ SIAC-5570 Aggiunti campi alla vista siac_v_dwh_oneri_doc. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5573 Aggiunto campo doc_id. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5765 pto 18 D
+ 
+build 11/01/2018 versione 3.21.0
+ SIAC-5772
+ SIAC-5485
+ 
+build 28/12/2017 versione 3.20.0
+ SIAC-5336
+ SIAC-5518
+ SIAC-5520
+ SIAC-5641 Integrazione
+ SIAC-5642 Aggiunti campi alla vista siac_v_dwh_pdce. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5665 - rilascio di alcuni punti
+
+build 21/12/2017 versione 3.19.0
+ SIAC-5334
+ SIAC-5670
+ SIAC-5656
+ SIAC-5708
+ SIAC-5567
+ SIAC-5601
+ SIAC-5641 Aggiunto campo tipo_evento alla tabella siac_dwh_contabilita_generale. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5522 Aggiunto campo caus_id alle tabelle siac_dwh_ordinativo_incasso e siac_dwh_subordinativo_incasso. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5525
+
+build 14/12/2017 versione 3.18.0
+ SIAC-5279
+ SIAC-5551
+ SIAC-5556
+
+build 30/11/2017 versione 3.17.0
+ SIAC-5508
+ SIAC-5566
+ SIAC-5494
+ SIAC-5531
+ SIAC-5495 Aggiunti campi doc_stato_code, doc_stato_desc, doc_id. Avvisare gruppo DWBICO (Carmine Graziano)
+ 
+build 23/11/2017 versione 3.16.0
+ SIAC-5293
+ SIAC-5540
+ SIAC-5478
+
+build 16/11/2017 versione 3.15.0
+ SIAC-5536
+ SIAC-5420
+ SIAC-5118
+ SIAC-5526
+
+build 09/11/2017 versione 3.14.0
+ SIAC-5263 Modificate le viste siac_v_dwh_mod_impegno_classe e siac_v_dwh_mod_impegno_sogg. Creata vista siac_v_dwh_mod_imp_sogg_classe. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5435
+ SIAC-5431
+ SIAC-5456 Aggiunti campi siope. Avvisare gruppo DWBICO (Carmine Graziano)
+
+build 26/10/2017 versione 3.13.0
+ SIAC-5115
+ SIAC-5289
+ SIAC-5311
+ SIAC-5313
+ SIAC-5323
+ SIAC-5325
+ SIAC-5361
+ SIAC-5366
+ SIAC-5425
+ 
+ Integrazione alla jira. Risolta anomalia della vista siac_v_dwh_predocumenti_incasso
+
+build 19/10/2017 versione 3.12.0
+ SIAC-5287
+ SIAC-5313
+ SIAC-5337
+ SIAC-5373
+ SIAC-5417
+ 
+build 12/10/2017 versione 3.11.0
+ SIAC-5297
+ SIAC-5298
+ SIAC-5352
+ SIAC-5284
+ SIAC-5286 Rilasciata come patch sulla versione 3.11.0
+ SIAC-5322 Rilasciata come patch sulla versione 3.11.0
+
+build 05/10/2017 versione 3.10.0
+ SIAC-5255
+ SIAC-5119
+ SIAC-5281
+ SIAC-5332
+
+build 28/09/2017 versione 3.9.0
+ SIAC-5228 Aggiunto un campo alle tabelle siac_dwh_ordinativo_pagamento e siac_dwh_liquidazione. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5247
+ SIAC-5249
+ SIAC-5315
+ SIAC-5316
+ SIAC-5317
+ SIAC-5326
+ SIAC-5314
+ SIAC-5328
+ SIAC-5245
+
+build 21/09/2017 versione 3.8.0
+ SIAC-5230
+ SIAC-5231
+ SIAC-5254
+ SIAC-5265
+
+build 14/09/2017 versione 3.7.0
+ SIAC-5226
+ SIAC-5186
+ SIAC-5216
+ 
+build 07/09/2017 versione 3.6.0
+ SIAC-5212
+ SIAC-5198
+ SIAC-5190
+
+build 31/08/2017 versione 3.5.0
+ SIAC-5152
+ SIAC-5164
+ SIAC-5155
+ SIAC-5124 Aggiunto un campo alla vista siac_v_dwh_vincoli_movgest. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5187
+ SIAC-5123
+ SIAC-5157
+ SIAC-5177
+ SIAC-5199
+ SIAC-5202
+ SIAC-5208
+ SIAC-5203
+
+build 27/07/2017 versione 3.4.0
+ SIAC-5134
+ SIAC-5136
+ SIAC-5141
+ SIAC-5132
+ SIAC-5150
+ 
+build 20/07/2017 versione 3.3.0
+ SIAC-5016
+ SIAC-5024
+ SIAC-5088
+ SIAC-5105
+ SIAC-5107
+ SIAC-5121
+ SIAC-5122
+ SIAC-5128
+
+build 13/07/2017 versione 3.2.0
+ SIAC-5073  deve andare su insieme alla SIAC-5074 (insert in incr3/cmto-01.sql devono essere eseguiti solo se va su anche la 5074)
+ SIAC-5077
+ SIAC-5064
+ SIAC-5069
+ SIAC-5084
+ INC000001885831
+
+build 06/07/2017 versione 3.1.0
+ SIAC-4996
+ SIAC-5023
+ SIAC-5030
+ SIAC-5036
+ SIAC-5037
+ SIAC-5039
+ SIAC-5040
+
+build 29/06/2017 versione 3.0.0
+ SIAC-4799
+ SIAC-4961
+ SIAC-4970
+ SIAC-5019
+ SIAC-5029
+ SIAC-5034
+ SIAC-5035
+ SIAC-5041

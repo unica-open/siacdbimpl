@@ -1,0 +1,19 @@
+CREATE OR REPLACE VIEW siac_v_dwh_oneri_split (
+ente_proprietario_id,
+cod_onere,
+desc_onere,
+cod_tipo_onere,
+desc_tipo_onere,
+cod_tipo_iva_split_reverse,
+desc_tipo_iva_split_reverse,
+data_creazione_tipo_onere,
+vaidita_inizio_tipo_onere,
+validita_fine_tipo_onere
+)
+AS
+SELECT a.ente_proprietario_id, a.onere_code, a.onere_desc, b.onere_tipo_code, b.onere_tipo_desc, d.sriva_tipo_code, d.sriva_tipo_desc, b.data_creazione, b.validita_inizio, b.validita_fine
+FROM  siac_d_onere a
+INNER JOIN siac_d_onere_tipo b ON a.onere_tipo_id = b.onere_tipo_id
+LEFT JOIN siac_r_onere_splitreverse_iva_tipo c ON a.onere_id = c.onere_id and c.data_cancellazione is null 
+LEFT JOIN siac_d_splitreverse_iva_tipo d ON c.sriva_tipo_id = d.sriva_tipo_id
+WHERE a.data_cancellazione IS NULL;

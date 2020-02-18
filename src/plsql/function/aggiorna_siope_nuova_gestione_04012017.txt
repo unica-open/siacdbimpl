@@ -1,0 +1,18 @@
+- per gli oggetti del bilancio 2017 andare a sostituire  il legame presente per il classif_id (SIOPE_SPESA_I, SIOPE_ENTRATA_I)
+-- con il corrispondente valore YYYY
+-- predisponiamo chiusura del vecchio legame ( update con data_cancellazione e validita_fine )
+-- insert del nuovo
+-- magari commentato comincia cmq a predisporre update su legame esistente rispetto al nuovo classif_id
+-- predisponiamo anche solo insert con il nuovo legame 
+
+select c.*
+from siac_t_class c , siac_d_class_tipo tipo
+where tipo.ente_proprietario_id=5
+and   tipo.classif_tipo_code='SIOPE_SPESA_I'
+and   c.classif_tipo_id=tipo.classif_tipo_id
+
+
+-- siac_r_bil_elem_class --- capitoli
+-- siac_r_movgest_class  --- movimenti
+-- siac_r_liquidazione_class -- liquidazioni
+-- siac_r_ordinativo_class   -- ordinativi ( no su  ordinativi non serve )

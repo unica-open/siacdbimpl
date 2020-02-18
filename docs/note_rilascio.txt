@@ -1,0 +1,17 @@
+########## NOTE RILASCIO ##########
+
+# GESTIONE all.sql
+Prima di rilasciare il file all.sql della nuova versione, a termine della fase, è opportuno verificare
+che l'encoding del file sia corretto.
+Uno dei possibili comandi per effettuare questo controllo è il seguente:
+` iconv -f us-ascii -t UTF-8 all.sql > /dev/null
+[su piattaforma Linux]
+ATTENZIONE!! Questo comando può dare dei falsi positivi. Controllare accuratamente le righe segnalate
+
+# TEST all.sql
+Dati i tre database, generalmente l'utilizzo maggiore è su REGP, con MULT come seconda scelta.
+CMTO è utilizzato di meno.
+É opportuno tenere il db in utilizzo allineato con l'all.sql in consegna con la fase, e almeno uno dei
+due non utilizzati allineato con la versione precedente del file.
+In tal modo è possibile utilizzare tale db come test di esecuzione del file all.sql prima della consegna
+in CSI. É opportuno effettuare tale test a valle dell'esecuzione dell'iconv (vedasi sopra).

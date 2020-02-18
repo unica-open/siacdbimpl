@@ -1,0 +1,8 @@
+Ricordarsi di rilasciare per la componente siacetlbo  file 
+17-fnc_fasi_bil_gest_apertura_programmi.ktr
+fase-bilancio.kjb
+in
+siacetlbo\src\etlopen\bilancio
+
+inoltre il file xml per il lancio del job da schedulatore
+/appserv/jobscheduler/bilancio/config/live/siac/jobs/fasi-bilancio/17.apertura-programmi-cronop.job.xml (tst-sked1) 

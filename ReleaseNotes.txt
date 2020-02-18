@@ -1,0 +1,66 @@
+﻿------------------------
+SIAC BIL DB
+------------------------
+
+Funzionalità rilasciate
+
+build dd/mm/yyyy versione 3.0.0
+SIAC-XXXX
+
+build 31/08/2017 versione 3.5.0
+ SIAC-5152
+ SIAC-5164
+ SIAC-5155
+ SIAC-5124 Aggiunto un campo alla vista siac_v_dwh_vincoli_movgest. Avvisare gruppo DWBICO (Carmine Graziano)
+ SIAC-5187
+ SIAC-5123
+ SIAC-5157
+ SIAC-5177
+ SIAC-5199
+ SIAC-5202
+ SIAC-5208
+ SIAC-5203
+
+build 27/07/2017 versione 3.4.0
+ SIAC-5134
+ SIAC-5136
+ SIAC-5141
+ SIAC-5132
+ SIAC-5150
+ 
+build 20/07/2017 versione 3.3.0
+ SIAC-5016
+ SIAC-5024
+ SIAC-5088
+ SIAC-5105
+ SIAC-5107
+ SIAC-5121
+ SIAC-5122
+ SIAC-5128
+
+build 13/07/2017 versione 3.2.0
+ SIAC-5073  deve andare su insieme alla SIAC-5074 (insert in incr3/cmto-01.sql devono essere eseguiti solo se va su anche la 5074)
+ SIAC-5077
+ SIAC-5064
+ SIAC-5069
+ SIAC-5084
+ INC000001885831
+
+build 06/07/2017 versione 3.1.0
+ SIAC-4996
+ SIAC-5023
+ SIAC-5030
+ SIAC-5036
+ SIAC-5037
+ SIAC-5039
+ SIAC-5040
+
+build 29/06/2017 versione 3.0.0
+ SIAC-4799
+ SIAC-4961
+ SIAC-4970
+ SIAC-5019
+ SIAC-5029
+ SIAC-5034
+ SIAC-5035
+ SIAC-5041

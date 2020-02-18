@@ -1,0 +1,37 @@
+# Class files
+*.class
+
+# Package Files
+*.jar
+*.war
+*.ear
+
+# Target folder
+target/
+dist/
+logs/
+
+# Eclipse files
+.classpath
+.metadata
+.project
+.springBeans
+*.launch
+
+# Eclipse folders
+.externalToolBuilders/
+.recommenders/
+.settings/
+.sonar/
+
+# Own properties file
+/buildfiles/own.properties
+/bin/
+/build/
+/testbin/
+/buildfiles/local.properties
+
+# Mail utilities
+src/test/java/it/csi/siac/mail/include/*
+!src/test/java/it/csi/siac/mail/include/DND
+/own.properties
