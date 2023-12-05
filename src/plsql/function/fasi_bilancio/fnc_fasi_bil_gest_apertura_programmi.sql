@@ -2,12 +2,40 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi (
+
+DROP FUNCTION IF EXISTS siac.fnc_fasi_bil_gest_apertura_programmi 
+(
   annobilancio integer,
   enteproprietarioid integer,
   tipoapertura varchar,
   loginoperazione varchar,
   dataelaborazione timestamp,
+  out fasebilelabidret integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+DROP FUNCTION IF EXISTS siac.fnc_fasi_bil_gest_apertura_programmi 
+(
+  annobilancio integer,
+  enteproprietarioid integer,
+  tipoapertura varchar,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  ribalta_coll_mov boolean,    -- 17.05.2023 Sofia SIAC-8633
+  out fasebilelabidret integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi 
+(
+  annobilancio integer,
+  enteproprietarioid integer,
+  tipoapertura varchar,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  ribalta_coll_mov boolean DEFAULT false, -- 17.05.2023 Sofia SIAC-8633
   out fasebilelabidret integer,
   out codicerisultato integer,
   out messaggiorisultato varchar
@@ -29,6 +57,8 @@ $body$
    APE_GEST_PROGRAMMI    	    CONSTANT varchar:='APE_GEST_PROGRAMMI';
    P_FASE						CONSTANT varchar:='P';
    G_FASE					    CONSTANT varchar:='G';
+   -- 25.05.2023 Sofia Jira SIAC-8633
+   E_FASE					    CONSTANT varchar:='E';
   BEGIN
 
    messaggioRisultato:='';
@@ -103,12 +133,16 @@ $body$
      and   fase.fase_operativa_id=r.fase_operativa_id
      and   r.data_cancellazione is null
      and   r.validita_fine is null;
-     if faseOp is null or faseOp not in (P_FASE,G_FASE) then
-      	raise exception ' Il bilancio deve essere in fase % o %.',P_FASE,G_FASE;
+--     if faseOp is null or faseOp not in (P_FASE,G_FASE) then 25.05.2023 Sofia Jira SIAC-8633
+     -- 25.05.2023 Sofia Jira SIAC-8633
+     if faseOp is null or faseOp not in (P_FASE,G_FASE,E_FASE) then
+      	raise exception ' Il bilancio deve essere in fase % o % o %.',P_FASE,G_FASE,E_FASE;
      end if;
 
      strMessaggio:='Verifica coerenza tipo di apertura programmi-fase di bilancio di corrente.';
-	 if tipoApertura!=faseOp then
+    --	 if tipoApertura!=faseOp then  25.05.2023 Sofia Jira SIAC-8633
+    -- 25.05.2023 Sofia Jira SIAC-8633
+	 if ( ( tipoApertura=P_FASE and tipoApertura!=faseOp ) or (tipoApertura=G_FASE and faseOp not in (G_FASE,E_FASE)) ) then 
      	raise exception ' Tipo di apertura % non consentita in fase di bilancio %.', tipoApertura,faseOp;
      end if;
 
@@ -138,7 +172,8 @@ $body$
 	      annobilancio,
           tipoApertura,
           loginoperazione,
-          dataelaborazione
+          dataelaborazione,
+          ribalta_coll_mov -- 17.05.2023 Sofia SIAC-8633          
          );
          if strRec.codiceRisultato!=0 then
             strMessaggio:=strRec.messaggioRisultato;
@@ -201,8 +236,10 @@ $body$
       end if;
 
      end if;
+     
 	 if  codiceRisultato=0 then
 	  	 messaggioRisultato := strMessaggioFinale||' Operazione terminata correttamente';
+	  	fasebilelabidret:=coalesce(faseBilElabId,0);
 	 else
   	  	 messaggioRisultato := strMessaggioFinale||strMessaggio;
      end if;
@@ -231,3 +268,17 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+
+alter FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi
+(
+integer, 
+integer, 
+varchar, 
+varchar, 
+timestamp without time zone, 
+boolean, 
+OUT integer,
+OUT integer, 
+OUT  varchar
+) owner to siac;

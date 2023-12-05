@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_allinea_res_liq
+﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_allinea_res_liq
 (
   annobilancio           integer,
   enteproprietarioid     integer,
@@ -206,7 +206,9 @@ BEGIN
 	  (
 	   select liq.liq_anno::integer   anno_liq,
        		  liq.liq_numero::integer numero_liq,
-	          liq.liq_importo         importo_res,
+--	          liq.liq_importo         importo_res,
+--              SIAC-7364 28.01.2020 Sofia
+	          fase.liq_importo         importo_res,
 	          fase.fl_elab
 	   from fase_bil_t_gest_apertura_liq fase, siac_t_liquidazione liq
 	   where fase.fase_bil_elab_id=faseBilElabId

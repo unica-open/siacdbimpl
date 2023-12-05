@@ -22,7 +22,8 @@ RETURNS TABLE (
   importo_avanzo_anno2 numeric,
   importo_avanzo_anno_succ numeric,
   elem_id integer,
-  anno_esercizio varchar
+  anno_esercizio varchar,
+  spese_impegnate_da_prev numeric
 ) AS
 $body$
 DECLARE
@@ -35,7 +36,7 @@ anno_esercizio varchar;
 anno_esercizio_prec varchar;
 annoimpimpegni_int integer;
 annoprospetto_int integer;
-annoprospetto_prec_int varchar;
+annoprospetto_prec_int integer;
 
 BEGIN
 
@@ -113,6 +114,7 @@ end if;*/
  
   anno_esercizio := ((p_anno::integer)-1)::varchar;   
 
+
   select a.bil_id 
   into bilancio_id 
   from siac_t_bil a,siac_t_periodo b
@@ -122,7 +124,7 @@ end if;*/
   
   annoprospetto_int := p_anno_prospetto::integer;
   
-  annoprospetto_prec_int := ((p_anno_prospetto::integer)-1)::varchar;
+  annoprospetto_prec_int := ((p_anno_prospetto::integer)-1);
 
 -- anno_esercizio_prec := ((anno_esercizio::integer)-1)::varchar;
 anno_esercizio_prec := ((p_anno::integer)-1)::varchar;
@@ -136,6 +138,10 @@ and b.anno = anno_esercizio_prec;
 
 -- annoImpImpegni_int := anno_esercizio::integer; 
 -- annoImpImpegni_int := p_anno::integer; -- SIAC-6063
+raise notice 'anno_esercizio = % - anno_esercizio_prec = %', anno_esercizio, anno_esercizio_prec;
+raise notice 'bilancio_id = % - bilancio_id_prec = %', bilancio_id, bilancio_id_prec;
+raise notice 'annoprospetto_int = %', annoprospetto_int;
+raise notice 'annoprospetto_prec_int = %', annoprospetto_prec_int;
 
 return query
 select 
@@ -219,7 +225,7 @@ and	capitolo.elem_id = r_cat_capitolo.elem_id
 and	r_cat_capitolo.elem_cat_id = cat_del_capitolo.elem_cat_id	
 and	capitolo.bil_id = bilancio_id_prec							
 and	tipo_elemento.elem_tipo_code = 'CAP-UG'
-and	capitolo_imp_periodo.anno = annoprospetto_prec_int		  
+and	capitolo_imp_periodo.anno = annoprospetto_prec_int::varchar		  
 --and	capitolo_imp_periodo.anno = anno_esercizio_prec	
 and	stato_capitolo.elem_stato_code = 'VA'								
 and	cat_del_capitolo.elem_cat_code in ('FPV','FPVC')
@@ -250,7 +256,8 @@ COALESCE(capitoli_importo.importi_capitoli,0)::numeric,
 0::numeric importo_avanzo_anno2,
 0::numeric importo_avanzo_anno_succ,
 capitoli_anno_prec.elem_id::integer,
-anno_esercizio::varchar
+anno_esercizio::varchar,
+0::numeric spese_impegnate_da_prev
 from struttura
 left join capitoli_anno_prec on struttura.programma_id = capitoli_anno_prec.programma_id
                    and struttura.macroag_id = capitoli_anno_prec.macroaggregato_id
@@ -385,8 +392,121 @@ and    ts_impegni_legati.validita_fine is null
 and    ts_stato.data_cancellazione is null-- SIAC-5778
 and    stato.data_cancellazione is null-- SIAC-5778 
 group by ts_impegni_legati.movgest_ts_b_id, movimento.movgest_anno 
-)
-select impegni.movgest_ts_b_id,
+),
+impegni_verif_previsione as(
+    select distinct accert.*, imp.*, ts_impegni_legati.movgest_ts_b_id
+    from siac_r_movgest_ts ts_impegni_legati    	
+         join (	--accertamenti
+         		select ts_mov_acc.movgest_ts_id,
+                        mov_acc.movgest_anno anno_acc, 
+                        mov_acc.movgest_numero numero_acc,
+                        ts_mov_det_acc.movgest_ts_det_importo importo_acc
+                    from siac_t_movgest mov_acc,
+                         siac_t_movgest_ts ts_mov_acc,					
+                         siac_t_movgest_ts_det ts_mov_det_acc,
+                         siac_r_movgest_ts_stato r_stato_acc,
+                         siac_d_movgest_stato stato_acc
+                    where mov_acc.movgest_id=ts_mov_acc.movgest_id
+                        and ts_mov_acc.movgest_ts_id=ts_mov_det_acc.movgest_ts_id
+                        and ts_mov_acc.movgest_ts_id=r_stato_acc.movgest_ts_id
+                        and r_stato_acc.movgest_stato_id=stato_acc.movgest_stato_id
+                        and mov_acc.ente_proprietario_id= p_ente_prop_id
+                        and mov_acc.movgest_anno = annoprospetto_prec_int--annoprospetto_int --accertamenti sempre dell'anno prospetto
+                        --and mov_acc.movgest_anno = annoprospetto_int --accertamenti sempre dell'anno prospetto
+                        and stato_acc.movgest_stato_code in ('D','N')
+                        and r_stato_acc.data_cancellazione IS NULL
+                        and mov_acc.data_cancellazione IS NULL
+                        and ts_mov_acc.data_cancellazione IS NULL) accert
+            on accert.movgest_ts_id =  ts_impegni_legati.movgest_ts_a_id
+          join (--impegni
+          		select ts_mov_imp.movgest_ts_id,
+                        mov_imp.movgest_anno anno_imp, 
+                        mov_imp.movgest_numero numero_imp,
+                        r_imp_bil_elem.elem_id,
+                        ts_mov_det_imp.movgest_ts_det_importo importo_imp
+                    from siac_t_movgest mov_imp,
+                         siac_t_movgest_ts ts_mov_imp,					
+                         siac_t_movgest_ts_det ts_mov_det_imp,
+                         siac_r_movgest_ts_stato r_stato_imp,
+                         siac_d_movgest_stato stato_imp,
+                         siac_r_movgest_bil_elem r_imp_bil_elem
+                    where mov_imp.movgest_id=ts_mov_imp.movgest_id
+                        and ts_mov_imp.movgest_ts_id=ts_mov_det_imp.movgest_ts_id
+                        and ts_mov_imp.movgest_ts_id=r_stato_imp.movgest_ts_id
+                        and r_stato_imp.movgest_stato_id=stato_imp.movgest_stato_id
+                        and r_imp_bil_elem.movgest_id=mov_imp.movgest_id
+                        and mov_imp.ente_proprietario_id= p_ente_prop_id
+                        and mov_imp.bil_id = bilancio_id  --anno precedente di gestione
+                        and mov_imp.movgest_anno >= annoprospetto_prec_int+1-- annoprospetto_int + 1 --impegni a partire dell'anno prospetto + 1
+                        --and mov_imp.movgest_anno >=  annoprospetto_int + 1 --impegni a partire dell'anno prospetto + 1
+                        and stato_imp.movgest_stato_code in ('D','N')
+                        and r_stato_imp.data_cancellazione IS NULL
+                        and mov_imp.data_cancellazione IS NULL
+                        and ts_mov_imp.data_cancellazione IS NULL
+                        and r_imp_bil_elem.data_cancellazione IS NULL) imp              
+            on imp.movgest_ts_id =  ts_impegni_legati.movgest_ts_b_id
+          left join (--legame con i progetti 
+          		select r_mov_progr.movgest_ts_id, progetto.programma_id
+                  from siac_t_programma progetto, siac_t_cronop crono, 
+                      siac_t_bil bil, siac_t_periodo anno_bil,
+                      siac_r_cronop_stato r_cronop_stato , siac_d_cronop_stato cronop_stato,
+                      siac_r_programma_stato r_progetto_stato, siac_d_programma_stato progetto_stato,
+                     siac_r_movgest_ts_programma r_mov_progr             
+                  where progetto.programma_id=crono.programma_id
+                      and crono.bil_id = bil.bil_id
+                      and bil.periodo_id=anno_bil.periodo_id
+                      and r_cronop_stato.cronop_stato_id=cronop_stato.cronop_stato_id
+                      and r_cronop_stato.cronop_id=crono.cronop_id
+                      and r_progetto_stato.programma_id=progetto.programma_id
+                      and r_progetto_stato.programma_stato_id=progetto_stato.programma_stato_id     
+                      and r_mov_progr.programma_id=progetto.programma_id                      
+                      and progetto.ente_proprietario_id= p_ente_prop_id
+                      and anno_bil.anno=p_anno -- anno bilancio
+                      and crono.usato_per_fpv::boolean = true--conflagfpv                                                  
+                      and cronop_stato.cronop_stato_code='VA'              
+                      and progetto_stato.programma_stato_code='VA'
+                      and r_progetto_stato.data_cancellazione is null
+                      and r_cronop_stato.data_cancellazione is null
+                      and crono.data_cancellazione is null
+                      and progetto.data_cancellazione is null
+                      and bil.data_cancellazione is null
+                      and r_mov_progr.data_cancellazione is null) progetti
+             on ts_impegni_legati.movgest_ts_b_id = progetti.movgest_ts_id
+    where ts_impegni_legati.ente_proprietario_id=p_ente_prop_id     
+        and ts_impegni_legati.avav_id is null
+        and ts_impegni_legati.data_cancellazione is null  
+        	--progetti.programma_id IS NULL cioe' non sono compresi negli impegni legati ai progetti estratti
+            --nelle query precedenti. In pratica non devo contarli 2 volte.
+        and progetti.programma_id IS NULL ),
+/* SIAC-8866 04/07/2023.
+    	Devo verificare che l'impegno non sia legato ad un progetto per non contarlo 2 volte.
+*/     
+elenco_progetti_imp as (select r_mov_progr.movgest_ts_id, progetto.programma_id, progetto.programma_code
+                  from siac_t_programma progetto, siac_t_cronop crono, 
+                      siac_t_bil bil, siac_t_periodo anno_bil,
+                      siac_r_cronop_stato r_cronop_stato , siac_d_cronop_stato cronop_stato,
+                      siac_r_programma_stato r_progetto_stato, siac_d_programma_stato progetto_stato,
+                     siac_r_movgest_ts_programma r_mov_progr             
+                  where progetto.programma_id=crono.programma_id
+                      and crono.bil_id = bil.bil_id
+                      and bil.periodo_id=anno_bil.periodo_id
+                      and r_cronop_stato.cronop_stato_id=cronop_stato.cronop_stato_id
+                      and r_cronop_stato.cronop_id=crono.cronop_id
+                      and r_progetto_stato.programma_id=progetto.programma_id
+                      and r_progetto_stato.programma_stato_id=progetto_stato.programma_stato_id     
+                      and r_mov_progr.programma_id=progetto.programma_id                      
+                      and progetto.ente_proprietario_id= p_ente_prop_id
+                      and anno_bil.anno=anno_esercizio_prec -- anno bilancio precedente
+                      and crono.usato_per_fpv::boolean = true--conflagfpv                                                  
+                      and cronop_stato.cronop_stato_code='VA'              
+                      and progetto_stato.programma_stato_code='VA'
+                      and r_progetto_stato.data_cancellazione is null
+                      and r_cronop_stato.data_cancellazione is null
+                      and crono.data_cancellazione is null
+                      and progetto.data_cancellazione is null
+                      and bil.data_cancellazione is null
+                      and r_mov_progr.data_cancellazione is null)         
+select impegni.movgest_ts_b_id, COALESCE(elenco_progetti_imp.programma_code,'') progetto,
        case 
         when impegni.anno_impegno = annoprospetto_int and imp_impegni_accertamenti.anno_accertamento <= annoprospetto_int-1 then
              sum(imp_impegni_accertamenti.movgest_ts_importo)
@@ -418,11 +538,23 @@ select impegni.movgest_ts_b_id,
        case 
         when impegni.anno_impegno > annoprospetto_int+2 then
              sum(imp_impegni_avanzo.movgest_ts_importo)            
-       end importo_avanzo_anno_succ                      
+       end importo_avanzo_anno_succ,
+       case 
+       	when impegni.anno_impegno = annoprospetto_int then --and imp_impegni_accertamenti.anno_accertamento <= annoprospetto_int-1 then
+       		sum(impegni_verif_previsione.importo_imp) 
+        end spese_impegnate_da_prev                            
 from   impegni
 left   join imp_impegni_accertamenti on impegni.movgest_ts_b_id = imp_impegni_accertamenti.movgest_ts_b_id
 left   join imp_impegni_avanzo on impegni.movgest_ts_b_id = imp_impegni_avanzo.movgest_ts_b_id
-group by impegni.movgest_ts_b_id, impegni.anno_impegno, imp_impegni_accertamenti.anno_accertamento
+left   join impegni_verif_previsione on impegni.movgest_ts_b_id = impegni_verif_previsione.movgest_ts_b_id and
+		annoprospetto_int > p_anno::integer 
+left join elenco_progetti_imp on elenco_progetti_imp.movgest_ts_id = impegni.movgest_ts_b_id        
+--left   join impegni_verif_previsione on 1000 = impegni_verif_previsione.movgest_ts_b_id
+-- SIAC-8866 04/07/2023: solo se l'impegno non è collegato al progetto.
+where  ((COALESCE(elenco_progetti_imp.programma_code,'') = '' ) OR
+		(COALESCE(elenco_progetti_imp.programma_code,'') <> '' AND impegni_verif_previsione.movgest_ts_b_id IS NULL))
+group by impegni.movgest_ts_b_id, impegni.anno_impegno, imp_impegni_accertamenti.anno_accertamento ,
+	COALESCE(elenco_progetti_imp.programma_code,'')
 ),
 capitoli_impegni as (
 select capitolo.elem_id, ts_movimento.movgest_ts_id
@@ -457,9 +589,10 @@ sum(importo_impegni.spese_impegnate_anno_succ) spese_impegnate_anno_succ,
 sum(importo_impegni.importo_avanzo) importo_avanzo,
 sum(importo_impegni.importo_avanzo_anno1) importo_avanzo_anno1,
 sum(importo_impegni.importo_avanzo_anno2) importo_avanzo_anno2,
-sum(importo_impegni.importo_avanzo_anno_succ) importo_avanzo_anno_succ
+sum(importo_impegni.importo_avanzo_anno_succ) importo_avanzo_anno_succ,
+sum(importo_impegni.spese_impegnate_da_prev) spese_impegnate_da_prev
 from capitoli_impegni
-left join importo_impegni on capitoli_impegni.movgest_ts_id = importo_impegni.movgest_ts_b_id
+	left join importo_impegni on capitoli_impegni.movgest_ts_id = importo_impegni.movgest_ts_b_id
 group by capitoli_impegni.elem_id
 )
 select 
@@ -483,7 +616,8 @@ COALESCE(dati_impegni.importo_avanzo_anno_succ,0)::numeric importo_avanzo_anno_s
 0::numeric importo_avanzo_anno2,
 0::numeric importo_avanzo_anno_succ,
 capitoli.elem_id::integer,
-anno_esercizio::varchar
+anno_esercizio::varchar,
+coalesce(dati_impegni.spese_impegnate_da_prev,0) spese_impegnate_da_prev
 from struttura
 left join capitoli on  struttura.programma_id = capitoli.programma_id
                    and struttura.macroag_id = capitoli.macroaggregato_id
@@ -508,4 +642,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR011_allegato_fpv_previsione_con_dati_gestione" (p_ente_prop_id integer, p_anno varchar, p_anno_prospetto varchar)
+  OWNER TO siac;

@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 -- PACKAGE MIGRAZIONE AIPO
 CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SIAC IS
 
@@ -116,7 +122,7 @@ begin
     --         decode(nvl(cdr.direzione,'000'),'000','00',nvl(cdr.settore,'00')), -- 26.10.2015 Sofia
                decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'STD',capEcc.Classe_Capitolo),
                decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'S',capEcc.flag_impegnabile),
-	           -- DAVIDE - 23.09.015 : stanziamento_iniziale và inizializzato con st_anno_prec
+	           -- DAVIDE - 23.09.015 : stanziamento_iniziale vï¿½ inizializzato con st_anno_prec
                --cAnno.St_Prev, cAnno.st_prev_res,cAnno.st_prev_cassa,
                cAnno.St_Anno_Prec, cAnno.st_Anno_Prec_res,cAnno.st_Anno_Prec_cassa,
                cAnno.St_Prev, cAnno.st_prev_res,cAnno.st_prev_cassa,
@@ -471,7 +477,7 @@ begin
 --           decode(nvl(cdr.direzione,'000'),'000','00',nvl(cdr.settore,'00')), 26.10.2015 Sofia
            decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'STD',capEcc.Classe_Capitolo),
            decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'S',capEcc.flag_impegnabile),
-	-- DAVIDE - 23.09.015 : stanziamento_iniziale và inizializzato con st_anno_prec
+	-- DAVIDE - 23.09.015 : stanziamento_iniziale vï¿½ inizializzato con st_anno_prec
     --cAnno.St_Prev, cAnno.st_prev_res,cAnno.st_prev_cassa,
            cAnno.St_Anno_Prec, cAnno.st_Anno_Prec_res,cAnno.st_Anno_Prec_cassa,
            cAnno.st_prev, cAnno.st_prev_res,cAnno.st_prev_cassa,
@@ -1612,7 +1618,7 @@ END leggi_provvedimento_liq;
         -- controllo sulla presenza dei parametri in input
         if (p_ente_proprietario_id is null or p_anno_esercizio is null) then
             v_codRes := -1;
-            v_msgRes := 'Uno o più parametri in input non sono stati valorizzati correttamente';
+            v_msgRes := 'Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
         end if;
 
         -- pulizia delle tabelle migr_
@@ -1739,8 +1745,8 @@ END leggi_provvedimento_liq;
        
        h_pdc_finanziario MIGR_IMPEGNO.pdc_finanziario%type := null;
        
-       segnalare integer := 0; -- True (1): il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- Flase (0): il record è inserito nella sola tabella migr_*
+       segnalare integer := 0; -- True (1): il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- Flase (0): il record ï¿½ inserito nella sola tabella migr_*
 begin
        p_imp_scartati:=0;
        p_imp_inseriti:=0;
@@ -1894,7 +1900,7 @@ begin
                        h_tipo_provvedimento:=h_tipo_provvedimento||'||K';
                    end if;  
                    
-                   -- 29.7.2015 Dani Lo stato del subimp con provvedimento è DEFINITO.
+                   -- 29.7.2015 Dani Lo stato del subimp con provvedimento ï¿½ DEFINITO.
                    h_stato_impegno := STATO_D;
                    if codRes=0 and h_stato_provvedimento is null then
                       h_stato_provvedimento:=h_stato_impegno;
@@ -2038,8 +2044,8 @@ end migrazione_subimpegni;
        cImpInseriti number:=0;
        cImpScartati number:=0;
        numImpegno number:=0;
-       segnalare integer := 0; -- True (1): il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- Flase (0): il record è inserito nella sola tabella migr_*
+       segnalare integer := 0; -- True (1): il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- Flase (0): il record ï¿½ inserito nella sola tabella migr_*
 begin
        p_imp_scartati:=0;
        p_imp_inseriti:=0;
@@ -2569,8 +2575,8 @@ end migrazione_impegni;
        cImpScartati number:=0;
        numImpegno number:=0;
        h_pdc_finanziario migr_capitolo_entrata.PDC_FIN_QUINTO%TYPE;
-       segnalare integer := 0; -- True(1): il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False(0): il record è inserito nella sola tabella migr_*
+       segnalare integer := 0; -- True(1): il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False(0): il record ï¿½ inserito nella sola tabella migr_*
 begin
        p_imp_scartati:=0;
        p_imp_inseriti:=0;
@@ -2985,8 +2991,8 @@ end migrazione_accertamenti;
        numImpegno number:=0;
        h_pdc_finanziario MIGR_ACCERTAMENTO.pdc_finanziario%type := null;
        
-       segnalare integer := 0; -- True(1): il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- Flase(0): il record è inserito nella sola tabella migr_*
+       segnalare integer := 0; -- True(1): il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- Flase(0): il record ï¿½ inserito nella sola tabella migr_*
 begin
        p_imp_scartati:=0;
        p_imp_inseriti:=0;
@@ -3164,7 +3170,7 @@ begin
                        h_tipo_provvedimento:=h_tipo_provvedimento||'||K';
                     end if;  
 
-                    -- 29.7.2015 Dani Lo stato del subacc con provvedimento è DEFINITO.
+                    -- 29.7.2015 Dani Lo stato del subacc con provvedimento ï¿½ DEFINITO.
                     h_stato_impegno := STATO_D;
                     if codRes=0 and h_stato_provvedimento is null then
                       h_stato_provvedimento:=h_stato_impegno;
@@ -3285,7 +3291,7 @@ procedure migrazione_liquidazione(pEnte number,
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_liquidazione.Uno o più parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
+            pMsgRes := 'proc migrazione_liquidazione.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
             return;
         end if;
 
@@ -3317,7 +3323,7 @@ procedure migrazione_liquidazione(pEnte number,
                                , decode (l.staoper,'D',STATO_LIQUIDAZIONE_V,l.staoper) staoper
                                , l.annoprov
                                , l.nprov
-                               , l.codprov -- indica se è un atto AL o meno
+                               , l.codprov -- indica se ï¿½ un atto AL o meno
                                , l.direzione
                                , imp.nimp
                                , imp.annoimp
@@ -3557,7 +3563,7 @@ procedure migrazione_liquidazione(pEnte number,
                       -- DAVIDE : gestione ente proprietario nelle tabelle di migrazione
 					  and ms.ente_proprietario_id=mdp.ente_proprietario_id
 					  and ms.ente_proprietario_id=pEnte)
-       -- e che non sia già stato inserito come scarto per altro motivo
+       -- e che non sia giï¿½ stato inserito come scarto per altro motivo
        and not exists (select 1 from migr_liquidazione_scarto s where s.numero_liquidazione=l.nliq and s.anno_esercizio=l.anno_esercizio
 	                   -- DAVIDE : gestione ente proprietario nelle tabelle di migrazione
                        and s.ente_proprietario_id=pEnte);
@@ -3583,7 +3589,7 @@ procedure migrazione_liquidazione(pEnte number,
               -- DAVIDE : gestione ente proprietario nelle tabelle di migrazione
 			  and mi.ente_proprietario_id=pEnte
              )
-       -- e che non sia già stato inserito come scarto per altro motivo
+       -- e che non sia giï¿½ stato inserito come scarto per altro motivo
        and not exists (select 1 from migr_liquidazione_scarto s where s.numero_liquidazione=l.nliq and s.anno_esercizio=l.anno_esercizio);
     -- contiamo gli scarti ...
     select count (*) into cLiqScartati from migr_liquidazione_scarto where ente_proprietario_id = pEnte;
@@ -3873,7 +3879,7 @@ commit;
                   raise ERROR_DOCUMENTO;
               end;
               msgRes := 'Verifica soggetto valido.';
-              -- verifica della validità del soggetto. Ulteriore dettaglio per lo scarto.
+              -- verifica della validitï¿½ del soggetto. Ulteriore dettaglio per lo scarto.
               if h_sogg_migrato = 0 and codRes!=-1 then
                 begin
                   select nvl(count(*),0) into h_num
@@ -4102,8 +4108,8 @@ commit;
 
         recSegnalato number := 0;
 --        recMigrato number := 0;
---        recPresente number := 0; -- >0 -> il record cercato è èresente alla fonte per anno esercizio <> anno esercizio di migrazione
-                                 -- =0 -> il record cercato non è presente alla fonte per anno esercizio <> anno esercizio di migrazione
+--        recPresente number := 0; -- >0 -> il record cercato ï¿½ ï¿½resente alla fonte per anno esercizio <> anno esercizio di migrazione
+                                 -- =0 -> il record cercato non ï¿½ presente alla fonte per anno esercizio <> anno esercizio di migrazione
         segnalare boolean := false; -- se True il rec viene inserito anche nella tabella di scarto
 
 		-- DAVIDE - Conversione Importi quote
@@ -4125,7 +4131,7 @@ commit;
 insert into migr_elaborazione (migr_elab_id,migr_tipo,messaggio_esito,ente_proprietario_id)
 values (migr_migr_elab_id_seq.nextval,'migrazione_docquo_spesa',msgRes||'end.',pEnte);
 commit;
--- VERI scarti. La quota NON pagata è legata ad un impegno/subimpegno che dovrebbe essere stato migrato
+-- VERI scarti. La quota NON pagata ï¿½ legata ad un impegno/subimpegno che dovrebbe essere stato migrato
 -- dal momento che esiste alla fonte per anno esercizio oggetto della migrazione
         msgRes := 'Scarto quote non pagate per impegno non migrato.';
 insert into migr_elaborazione (migr_elab_id,migr_tipo,messaggio_esito,ente_proprietario_id)
@@ -4198,7 +4204,7 @@ commit;
 insert into migr_elaborazione (migr_elab_id,migr_tipo,messaggio_esito,ente_proprietario_id)
 values (migr_migr_elab_id_seq.nextval,'migrazione_docquo_spesa',msgRes||'end.',pEnte);
 commit;
--- VERI scarti. La quota NON pagata è legata ad una liquidazione che dovrebbe essere stata migrata
+-- VERI scarti. La quota NON pagata ï¿½ legata ad una liquidazione che dovrebbe essere stata migrata
 -- dal momento che esiste alla fonte per anno esercizio oggetto della migrazione.
         msgRes := 'Scarto quote non pagate per liquidazione non migrata.';
         insert into migr_elaborazione (migr_elab_id,migr_tipo,messaggio_esito,ente_proprietario_id)
@@ -4240,7 +4246,7 @@ commit;
         (select migr_docquo_spe_scarto_id_seq.nextval
          , seg.tipofatt, seg.annofatt, seg.nfatt,seg.codben,seg.frazione,seg.motivo_scarto, seg.tipo_scarto,pEnte
         from
-        (Select distinct -- il distinct è necessario perchè è possibile avere diversi impegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
+        (Select distinct -- il distinct ï¿½ necessario perchï¿½ ï¿½ possibile avere diversi impegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
             q.tipofatt,q.annofatt, q.nfatt, q.codben, q.frazione
              ,'Impegno '||q.annoimac||'/'||q.nimac||'/'||q.nsubimac||' non migrato, presente alla fonte per anno <> '||pAnnoEsercizio as motivo_scarto
              ,'IMP' tipo_scarto
@@ -4284,7 +4290,7 @@ commit;
         (select migr_docquo_spe_scarto_id_seq.nextval
          , seg.tipofatt, seg.annofatt, seg.nfatt,seg.codben,seg.frazione,seg.motivo_scarto, seg.tipo_scarto,pEnte
         from
-        (Select distinct -- il distinct è necessario perchè è possibile avere diversi subimpegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
+        (Select distinct -- il distinct ï¿½ necessario perchï¿½ ï¿½ possibile avere diversi subimpegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
            q.tipofatt,q.annofatt, q.nfatt, q.codben, q.frazione
            ,'Subimpegno '||q.annoimac||'/'||q.nimac||'/'||q.nsubimac||' non migrato, presente alla fonte per anno <> '||pAnnoEsercizio as motivo_scarto
            ,'SIM' tipo_scarto
@@ -4329,7 +4335,7 @@ commit;
         (select migr_docquo_spe_scarto_id_seq.nextval
          , seg.tipofatt, seg.annofatt, seg.nfatt,seg.codben,seg.frazione,seg.motivo_scarto, seg.tipo_scarto,pEnte
         from
-         (Select distinct -- il distinct è necessario perchè è possibile avere diverse liquidazioni 'uguali'(stesso nr) su diversi annni tutti <> pAnnoEsercizio
+         (Select distinct -- il distinct ï¿½ necessario perchï¿½ ï¿½ possibile avere diverse liquidazioni 'uguali'(stesso nr) su diversi annni tutti <> pAnnoEsercizio
            q.tipofatt,q.annofatt, q.nfatt, q.codben, q.frazione
            ,'Liquidazione '||q.nliq||' non migrata, presente alla fonte per anno <> '||pAnnoEsercizio as motivo_scarto
            ,'LIQ' tipo_scarto
@@ -4396,7 +4402,7 @@ commit;
         (select migr_docquo_spe_scarto_id_seq.nextval
          , seg.tipofatt, seg.annofatt, seg.nfatt,seg.codben,seg.frazione,seg.motivo_scarto, seg.tipo_scarto,pEnte
         from
-        (Select distinct -- il distinct è necessario perchè è possibile avere diversi impegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
+        (Select distinct -- il distinct ï¿½ necessario perchï¿½ ï¿½ possibile avere diversi impegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
             q.tipofatt,q.annofatt, q.nfatt, q.codben, q.frazione
              ,'Impegno '||q.annoimac||'/'||q.nimac||'/'||q.nsubimac||' non migrato, presente alla fonte per anno <> '||pAnnoEsercizio as motivo_scarto
              ,'IM2' tipo_scarto
@@ -4452,7 +4458,7 @@ commit;
         (select migr_docquo_spe_scarto_id_seq.nextval
          , seg.tipofatt, seg.annofatt, seg.nfatt,seg.codben,seg.frazione,seg.motivo_scarto, seg.tipo_scarto,pEnte
         from
-        (Select distinct -- il distinct è necessario perchè è possibile avere diversi subimpegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
+        (Select distinct -- il distinct ï¿½ necessario perchï¿½ ï¿½ possibile avere diversi subimpegni 'uguali' su diversi annni tutti <> pAnnoEsercizio
            q.tipofatt,q.annofatt, q.nfatt, q.codben, q.frazione
            ,'Subimpegno '||q.annoimac||'/'||q.nimac||'/'||q.nsubimac||' non migrato, presente alla fonte per anno <> '||pAnnoEsercizio as motivo_scarto
            ,'SI2' tipo_scarto
@@ -4496,7 +4502,7 @@ commit;
 
 
 
--- Segnalazioni per quota NON pagata legata ad una liquidazione non migrata perchè anno esercizio <> anno esercizio migrato
+-- Segnalazioni per quota NON pagata legata ad una liquidazione non migrata perchï¿½ anno esercizio <> anno esercizio migrato
         msgRes := 'Segnalazione quote non pagate per liquidazione non migrata presente alla fonte per anno <> anno di migrazione.';
 
 
@@ -4509,7 +4515,7 @@ commit;
         (select migr_docquo_spe_scarto_id_seq.nextval
          , seg.tipofatt, seg.annofatt, seg.nfatt,seg.codben,seg.frazione,seg.motivo_scarto, seg.tipo_scarto,pEnte
         from
-         (Select distinct -- il distinct è necessario perchè è possibile avere diverse liquidazioni 'uguali'(stesso nr) su diversi annni tutti <> pAnnoEsercizio
+         (Select distinct -- il distinct ï¿½ necessario perchï¿½ ï¿½ possibile avere diverse liquidazioni 'uguali'(stesso nr) su diversi annni tutti <> pAnnoEsercizio
            q.tipofatt,q.annofatt, q.nfatt, q.codben, q.frazione
            ,'Liquidazione '||q.nliq||' non migrata, presente alla fonte per anno <> '||pAnnoEsercizio as motivo_scarto
            ,'LI2' tipo_scarto
@@ -4572,7 +4578,7 @@ commit;
              , l.codprov  -- dato del provvedimento legato alla liquidazione
              , l.direzione
              , l.codben codben_liq
-             , l.progben  -- modalità di pagamento legata alla liquidazione
+             , l.progben  -- modalitï¿½ di pagamento legata alla liquidazione
              , nvl(q.rilev_iva, 'N')rilev_iva
              , f.data_scadenza
              , f.causale_sospensione
@@ -4654,8 +4660,8 @@ commit;
 
                 -- quota NON PAGATA
                   if migrCursor.pagato = 'N' then
-                    -- cerco l'impegno/sub sulla tabella di migrazione se non c'è cerco l'impegno nella tabella fonte per anno <> anno esercizio di migrazione
-                    -- (ci fosse per anno_esercizio=anno esercizio di migrazione non sarebbe presente nel cursore perchè caricato precedentemente come scarto.
+                    -- cerco l'impegno/sub sulla tabella di migrazione se non c'ï¿½ cerco l'impegno nella tabella fonte per anno <> anno esercizio di migrazione
+                    -- (ci fosse per anno_esercizio=anno esercizio di migrazione non sarebbe presente nel cursore perchï¿½ caricato precedentemente come scarto.
 
                     if migrCursor.Nimac!=0 then
 
@@ -4689,11 +4695,11 @@ commit;
                         h_nsubimac := migrCursor.Nsubimac;
                         h_annoimac := migrCursor.Annoimac;
 
-                        -- Il record segnalato per mancanza di impegno/sub viene migrato con i dati a 0 anche per liquidazione e modalità di pagamento
+                        -- Il record segnalato per mancanza di impegno/sub viene migrato con i dati a 0 anche per liquidazione e modalitï¿½ di pagamento
                         h_nliq := migrCursor.nliq;
                         h_progben := migrCursor.progben;
 
-                      /*else  -- l'impegno/sub non è tra quelli migrati su contabilia.
+                      /*else  -- l'impegno/sub non ï¿½ tra quelli migrati su contabilia.
 
                         if migrCursor.Nsubimac=0 then
                           msgRes := 'Ricerca impegno per anno esercizio <> '||pAnnoEsercizio;
@@ -4718,7 +4724,7 @@ commit;
 
                         end if;
                         if recPresente > 0 then
-                          --  la quota è migrata senza i dati dell'impegno/subimpegno
+                          --  la quota ï¿½ migrata senza i dati dell'impegno/subimpegno
                           segnalare := true;
                           msgMotivoScarto :=
                              'Impegno '||migrCursor.annoimac||'/'||migrCursor.nimac||'/'||migrCursor.nsubimac||' non migrato, presente alla fonte per anno <> '||pAnnoEsercizio;
@@ -4780,8 +4786,8 @@ commit;
                       if h_nliq != 0 then
                         -- quota liquidata e liquidazione migrata.
 
-                      -- impostare la MDP solo se la quota è liquidata ma non pagata (pagato='N'), con la MDP della liquidazione stessa
-                      -- se la MDP collegata ( derivata dalla liquidazione ) riferisce ad una sede secondaria, collegarla anche alla quota, sempre la quota non è pagata (pagato='N')
+                      -- impostare la MDP solo se la quota ï¿½ liquidata ma non pagata (pagato='N'), con la MDP della liquidazione stessa
+                      -- se la MDP collegata ( derivata dalla liquidazione ) riferisce ad una sede secondaria, collegarla anche alla quota, sempre la quota non ï¿½ pagata (pagato='N')
                       -- recuperare  il provvedimento legato alla liquidazione. Se non esiste il provvedimento leggerlo dall'impegno
                         msgRes := 'Verifica MDP migrata.';
                         begin
@@ -4842,11 +4848,11 @@ commit;
                       end if;
                     end if;
                  elsif migrCursor.pagato = 'S' then
-  --se la quota è pagata impostare prima
+  --se la quota ï¿½ pagata impostare prima
   --gli estremi di pagamento
   -- se nordin!=0 impostare tutta la catena di movimenti da impegno e mandato
   -- se nordin=0 impostare fatquo.causale_pagam e fatquo.data_pagam
-  -- se nordin=0 e non c'è causale_pagam impostare una causale fittizia ""QUOTA PAGATA ESTRREMI DI PAGAMENTO MANCANTI"""
+  -- se nordin=0 e non c'ï¿½ causale_pagam impostare una causale fittizia ""QUOTA PAGATA ESTRREMI DI PAGAMENTO MANCANTI"""
                     if h_nordin != 0 then
                        if migrCursor.nsubimac = 0 then
                          h_note:=' PAGAMENTO N.MAND '||h_nordin||' N.LIQ '||migrCursor.nliq||' IMPEGNO '||
@@ -5234,7 +5240,7 @@ commit;
             if migrCursor.Tipofatt='F' and migrCursor.importo <0 then
                 msgRes          := msgRes|| 'Importo negativo per tipo fattura.';
                 msgMotivoScarto := msgRes;
-                codRes := -2; -- Il record sarà inserito come scarto, l'elaborazione continua.
+                codRes := -2; -- Il record sarï¿½ inserito come scarto, l'elaborazione continua.
                 tipoScarto:='FN';-- fattura negativa
             end if;
 
@@ -5267,7 +5273,7 @@ commit;
                   raise ERROR_DOCUMENTO;
               end;
               msgRes := 'Verifica soggetto valido.';
-              -- verifica della validità del soggetto. Ulteriore dettaglio per lo scarto.
+              -- verifica della validitï¿½ del soggetto. Ulteriore dettaglio per lo scarto.
               if h_sogg_migrato = 0 and codRes!=-1 then
                 begin
                   select nvl(count(*),0) into h_num
@@ -5966,7 +5972,7 @@ commit;
 
                   else
                     --fatquo.note
-                    --se la quota è pagata impostare prima gli estremi di pagamento
+                    --se la quota ï¿½ pagata impostare prima gli estremi di pagamento
                     -- se nordin!=0 impostare tutta la catena di movimenti da accertamento  a riscossione(nordin)
                     -- se nordin = 0 concatenare dicitura: "QUOTA INCASSATA ESTREMI DI INCASSO MANCANTI"
 
@@ -6634,7 +6640,7 @@ procedure migrazione_relaz_documenti(pEnte number,
 
         -- Inserimento Relazione Soggetto / Allegato Atto
         -- Le Liquidazioni che riferiscono ad un atto di liquidazione hanno il medesimo soggetto. Verificare che questo si verifichi anche sui dati
-        -- delle liquidazioni migrate. L'atto di liquidazione semplice (non in elenco) è legato ad un SOLO soggetto (distinct anche sul codice_soggetto)
+        -- delle liquidazioni migrate. L'atto di liquidazione semplice (non in elenco) ï¿½ legato ad un SOLO soggetto (distinct anche sul codice_soggetto)
 
         msgRes := 'Inserimento tabella migrazione relazione atto_allegato / soggetto.';
         insert into migr_elaborazione (migr_elab_id,messaggio_esito,ente_proprietario_id)
@@ -6781,9 +6787,9 @@ commit;
 
            -- Aggiornare lo stato degli allegati atto che non hanno elenchi di tipo 2 ma solo di tipo 1
            -- Dipende dallo stato degli elenchi associati all'allegato.
-           -- D ¿ Da completare, se esistono elenchi di documenti collegati in stato  B (elenco che raggruppa liquidazioni senza fattura, tipo_elenco = 2)
-           -- C ¿ Completato, se tutti gli elenchi di documenti collegati sono in stato C (elenco che raggruppa liquidazioni associati a fattura, tipo 1)
-           -- Lo stato di partenza è D
+           -- D ï¿½ Da completare, se esistono elenchi di documenti collegati in stato  B (elenco che raggruppa liquidazioni senza fattura, tipo_elenco = 2)
+           -- C ï¿½ Completato, se tutti gli elenchi di documenti collegati sono in stato C (elenco che raggruppa liquidazioni associati a fattura, tipo 1)
+           -- Lo stato di partenza ï¿½ D
            /* 18.09.2015 update non necessario, l'atto e gli elenchi sono creati in stato C - completato
            msgRes := 'Aggiornamento stato COMPLETATO per Allegato atto.';
            insert into migr_elaborazione (migr_elab_id,migr_tipo,messaggio_esito,ente_proprietario_id)
@@ -7024,7 +7030,7 @@ commit;
              , liq.numero_subimpegno
              , liq.anno_provvedimento
              , liq.numero_provvedimento
-             , liq.tipo_provvedimento -- già concatenato con ||K
+             , liq.tipo_provvedimento -- giï¿½ concatenato con ||K
              , liq.sac_provvedimento -- gia concatenato con ||
              , liq.oggetto_provvedimento
              , liq.note_provvedimento
@@ -7050,7 +7056,7 @@ commit;
              , liq.numero_liquidazione
              , 0 as numero_mandato
              , el.anno_elenco as anno_elenco
-             , 0 as numero_elenco -- il numero elenco è rimasto a 0
+             , 0 as numero_elenco -- il numero elenco ï¿½ rimasto a 0
              , pLoginOperazione as utente_creazione
              , pLoginOperazione as utente_modifica
              , pEnte
@@ -7251,7 +7257,7 @@ commit;
                 where liq.tipo_provvedimento=PROVV_ATTO_LIQUIDAZIONE_SIAC||'||K'
                 and att.annoprov = liq.anno_provvedimento
                 and att.nprov = liq.numero_provvedimento
-                -- in fase di migrazione alla direzione viene concatenato || e il tipo AL è tradotto in AA||K
+                -- in fase di migrazione alla direzione viene concatenato || e il tipo AL ï¿½ tradotto in AA||K
                 and att.direzione||'||'=liq.sac_provvedimento
                 and liq.ente_proprietario_id = pEnte)
           and nelenco > 0);*/
@@ -7396,7 +7402,7 @@ commit;
                                where liq.tipo_provvedimento=PROVV_ATTO_LIQUIDAZIONE_SIAC||'||K'
                                and att.annoprov = liq.anno_provvedimento
                                and att.nprov = liq.numero_provvedimento
-                               -- in fase di migrazione alla direzione viene concatenato ||K e il tipo AL è tradotto in AA||K
+                               -- in fase di migrazione alla direzione viene concatenato ||K e il tipo AL ï¿½ tradotto in AA||K
                                and att.direzione||'||K'=liq.sac_provvedimento
                                and liq.ente_proprietario_id = pente)
                   and att.annoprov = attoDaElenco_temp.anno_provvedimento
@@ -7454,8 +7460,8 @@ commit;
            , migrAA.Anno_Provvedimento
            , migrAA.Numero_Provvedimento_calcolato
            , migrAA.Sac_Provvedimento
---           , migrAA.causale è la causale del primo atto di liquidazione che è stato usato per caricare l'atto alleggato
-           , al.causale_pagam -- è la causale del singolo atto di liquidazione che compone l'elenco 
+--           , migrAA.causale ï¿½ la causale del primo atto di liquidazione che ï¿½ stato usato per caricare l'atto alleggato
+           , al.causale_pagam -- ï¿½ la causale del singolo atto di liquidazione che compone l'elenco 
            , migrLiq.Anno_Esercizio
            , migrLiq.Numero_Liquidazione
            , migrLiq.Importo
@@ -7466,7 +7472,7 @@ commit;
            , migrLiq.numero_subimpegno
            , migrLiq.anno_provvedimento
            , migrLiq.numero_provvedimento
-           , migrLiq.tipo_provvedimento -- già concatenato con ||K
+           , migrLiq.tipo_provvedimento -- giï¿½ concatenato con ||K
            , migrLiq.sac_provvedimento -- gia concatenato con ||
 --           , migrLiq.oggetto_provvedimento
 --           , migrLiq.note_provvedimento
@@ -7894,7 +7900,7 @@ commit;
              , aaL.numero_liquidazione
              , 0 as numero_mandato
              , 0 as anno_elenco -- poi vediamo
-             , 0 as numero_elenco -- il numero elenco è rimasto a 0
+             , 0 as numero_elenco -- il numero elenco ï¿½ rimasto a 0
              , pLoginOperazione as utente_creazione
              , pLoginOperazione as utente_modifica
              , pEnte
@@ -7970,7 +7976,7 @@ commit;
           -- atto allegato
           update migr_atto_allegato a
                  set a.tipo_provvedimento=a.tipo_provvedimento||'||K'
-                 , a.sac_provvedimento=a.sac_provvedimento||'||K' -- la direzione per tipo ALG è in chiave
+                 , a.sac_provvedimento=a.sac_provvedimento||'||K' -- la direzione per tipo ALG ï¿½ in chiave
           where ente_proprietario_id = pEnte
           and fl_migrato='N'
           and fl_daelenco = 'S';
@@ -7978,7 +7984,7 @@ commit;
           -- elenchi
           update migr_elenco_doc_allegati el
            set el.tipo_provvedimento=el.tipo_provvedimento||'||K'
-             , el.sac_provvedimento=el.sac_provvedimento||'||K' -- la direzione per tipo ALG è in chiave
+             , el.sac_provvedimento=el.sac_provvedimento||'||K' -- la direzione per tipo ALG ï¿½ in chiave
           where el.ente_proprietario_id=pEnte
           and el.atto_allegato_id in (select a.atto_allegato_id from  migr_atto_allegato a where a.fl_daelenco='S')
           and el.fl_migrato='N';
@@ -7986,7 +7992,7 @@ commit;
           -- quote
           update migr_docquo_spesa q
            set q.tipo_provvedimento=q.tipo_provvedimento||'||K'
-             , q.sac_provvedimento=q.sac_provvedimento||'||K' -- la direzione per tipo ALG è in chiave
+             , q.sac_provvedimento=q.sac_provvedimento||'||K' -- la direzione per tipo ALG ï¿½ in chiave
           where ente_proprietario_id = pEnte
           and docspesa_id in 
               (select docspesa_id from migr_doc_spesa where fl_fittizio = 'S')
@@ -8249,7 +8255,7 @@ commit;
         and   f.nfatt=m.numero
         and   f.codben=m.codice_soggetto
         and   f.staoper='S' -- stato valido
-        and   f.nprogsos!=0 -- iva ad esigibilità differita
+        and   f.nprogsos!=0 -- iva ad esigibilitï¿½ differita
         and   f.nsez=s.nsez
         and   s.tiporeg = 'AS' -- se nprogsos != 0 tiporeg = AS
         and   s.anno_esercizio = to_char(f.datareg,'yyyy')
@@ -8300,8 +8306,8 @@ commit;
                   raise ERROR_DOCUMENTO;
               end;
               msgRes := 'Verifica soggetto valido.';
-              -- verifica della validità del soggetto. Ulteriore dettaglio per lo scarto.
-              -- se il soggetto non è stato migrato.
+              -- verifica della validitï¿½ del soggetto. Ulteriore dettaglio per lo scarto.
+              -- se il soggetto non ï¿½ stato migrato.
               if h_sogg_migrato = 0 then
                 begin
                   select nvl(count(*),0) into h_num
@@ -8609,7 +8615,7 @@ commit;
               end if;
            end if;*/
 
-           -- se il documento è in lire le aliquote sono definite in lire           
+           -- se il documento ï¿½ in lire le aliquote sono definite in lire           
               h_imponibile_pagato :=h_imponibile_pagato / RAPPORTO_EURO_LIRA;
               h_imposta_pagata :=h_imposta_pagata / RAPPORTO_EURO_LIRA;
            
@@ -8829,7 +8835,7 @@ procedure migrazione_relaz_documenti_iva(pEnte number,
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_provvedimento.Uno o più parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
+            pMsgRes := 'proc migrazione_provvedimento.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
             return;
         end if;
 
@@ -8860,10 +8866,10 @@ procedure migrazione_relaz_documenti_iva(pEnte number,
                   select 
                          TO_CHAR (a.data_atto, 'yyyy') anno_provvedimento
                          , a.numero_definitivo numero_provvedimento
-                         , NULL sac_provvedimento -- non è impostata
-                         , b.codprov||'||K' as tipo_provvedimento -- è in chiave
+                         , NULL sac_provvedimento -- non ï¿½ impostata
+                         , b.codprov||'||K' as tipo_provvedimento -- ï¿½ in chiave
                          , SUBSTR (a.oggetto, 1, 500) oggetto_provvedimento
-                         , 'D' stato_provvedimento  -- è sempre Definitivo
+                         , 'D' stato_provvedimento  -- ï¿½ sempre Definitivo
                     from
                     atti_enti a, tabprovved_enti b
                     where a.t_tipologia_atto_id=b.t_tipologia_atto_id
@@ -8955,10 +8961,10 @@ procedure migrazione_relaz_documenti_iva(pEnte number,
                 select 
                        TO_CHAR (a.data_atto, 'yyyy') anno_provvedimento
                        , a.numero_definitivo numero_provvedimento
-                       , NULL sac_provvedimento -- non è impostata
-                       , b.codprov||'||K' as tipo_provvedimento -- è in chiave
+                       , NULL sac_provvedimento -- non ï¿½ impostata
+                       , b.codprov||'||K' as tipo_provvedimento -- ï¿½ in chiave
                        , SUBSTR (a.oggetto, 1, 500) oggetto_provvedimento
-                       , STATO_D stato_provvedimento  -- è sempre Definitivo
+                       , STATO_D stato_provvedimento  -- ï¿½ sempre Definitivo
                 from
                 atti_enti a, tabprovved_enti b
                 where a.t_tipologia_atto_id=b.t_tipologia_atto_id
@@ -9047,7 +9053,7 @@ procedure migrazione_relaz_documenti_iva(pEnte number,
         -- controllo sulla presenza dei parametri in input
         if (p_ente_proprietario_id is null or p_anno_esercizio is null) then
             v_codRes := -1;
-            v_msgRes := 'Uno o più parametri in input non sono stati valorizzati correttamente';
+            v_msgRes := 'Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
         end if;
 
         -- pulizia delle tabelle migr_

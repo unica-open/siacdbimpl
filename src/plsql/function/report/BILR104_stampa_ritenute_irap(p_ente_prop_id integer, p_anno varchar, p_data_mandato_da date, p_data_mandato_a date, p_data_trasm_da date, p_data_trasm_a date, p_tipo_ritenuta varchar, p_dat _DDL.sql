@@ -62,7 +62,8 @@ RETURNS TABLE (
   attivita_inizio date,
   attivita_fine date,
   attivita_code varchar,
-  attivita_desc varchar
+  attivita_desc varchar,
+  conto_tesoreria varchar
 ) AS
 $body$
 DECLARE
@@ -163,8 +164,8 @@ desc_ritenuta_irpeg='';
 importo_ente_irpeg=0;
 numeroParametriData=0;
 
-
 display_error='';
+conto_tesoreria:='';
 
 /* 01/08/2018 SIAC-6306.
 	Funzione creata per la gestione dell'aliquota IRAP.
@@ -233,7 +234,9 @@ miaQuery:='WITH irap as
         t_bil_elem.elem_code cod_cap, t_bil_elem.elem_code2 cod_art,
         t_bil_elem.elem_id, d_ord_stato.ord_stato_code, 
         SUM(t_ord_ts_det.ord_ts_det_importo) IMPORTO_TOTALE,
-        t_movgest.movgest_anno anno_impegno
+        t_movgest.movgest_anno anno_impegno, 
+      	--13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+      		COALESCE(d_contotes.contotes_code,'''') conto_tesoreria
         FROM  	siac_t_ente_proprietario ep,
                 siac_t_bil t_bil,
                 siac_t_periodo t_periodo,
@@ -247,7 +250,11 @@ miaQuery:='WITH irap as
                     and r_ord_quietanza.data_cancellazione IS NULL
                     -- 10/10/2017: aggiunto test sulla data di fine validita'' 
                     -- per prendere la quietanza corretta.
-                    and r_ord_quietanza.validita_fine is null ),  
+                    and r_ord_quietanza.validita_fine is null )
+                    --13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+               LEFT JOIN siac_d_contotesoreria d_contotes 
+                on (d_contotes.contotes_id = t_ordinativo.contotes_id 
+                	and d_contotes.data_cancellazione is null),  
                 siac_t_ordinativo_ts t_ord_ts,
                 siac_r_liquidazione_ord r_liq_ord,
                 siac_r_liquidazione_movgest r_liq_movgest,
@@ -334,8 +341,8 @@ miaQuery:='WITH irap as
               t_soggetto.soggetto_code, t_soggetto.soggetto_desc,  
               t_soggetto.partita_iva,t_soggetto.codice_fiscale,                  
               t_bil_elem.elem_code , t_bil_elem.elem_code2 ,
-              t_bil_elem.elem_id, d_ord_stato.ord_stato_code, t_movgest.movgest_anno
-               )  
+              t_bil_elem.elem_id, d_ord_stato.ord_stato_code, t_movgest.movgest_anno,
+              conto_tesoreria )  
     select  *
       from  mandati
            join irap on mandati.ord_id = irap.ord_id   
@@ -461,6 +468,9 @@ loop
   raise notice 'IMPON =%, RITEN = %, ENTE =%, NETTO= %', importo_imponibile_irap, importo_ritenuta_irap,importo_ente_irap,importo_ente_irap; 
   idFatturaOld=elencoMandati.doc_id;
             
+        --13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+  conto_tesoreria:=elencoMandati.conto_tesoreria;
+      
   return next;
   raise notice '';
       
@@ -513,7 +523,8 @@ loop
   attivita_fine:=NULL;
   attivita_code:='';
   attivita_desc:='';
-      
+  conto_tesoreria:='';
+  
 end loop;        
    
 

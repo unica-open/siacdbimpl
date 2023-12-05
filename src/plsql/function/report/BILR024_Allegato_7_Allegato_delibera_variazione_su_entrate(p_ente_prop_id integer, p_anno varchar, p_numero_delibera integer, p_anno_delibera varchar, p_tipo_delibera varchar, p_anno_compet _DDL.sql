@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION siac."BILR024_Allegato_7_Allegato_delibera_variazione
   p_anno_delibera varchar,
   p_tipo_delibera varchar,
   p_anno_competenza varchar,
-  p_ele_variazioni varchar
+  p_ele_variazioni varchar,
+  p_organo_provv varchar
 )
 RETURNS TABLE (
   bil_anno varchar,
@@ -146,12 +147,21 @@ if p_anno_delibera IS NOT NULL AND p_anno_delibera <> '' THEN
 end if;
 if p_tipo_delibera IS NOT NULL AND p_tipo_delibera <> '' THEN
 	contaParametriParz := contaParametriParz +1;
-end if;
+end if;    
 
-if contaParametriParz = 1 OR contaParametriParz = 2 then
+--SIAC-6864 09/04/2020.
+--Aggiunto in input il parametro p_organo_provv.
+--p_organo_provv puo' essere specificato da solo.
+if  contaParametriParz = 1 
+    OR contaParametriParz = 2 then
+--SIAC-7767 20/10/2021
+-- il parametro "organo che ha emesso il provvedimento" diventa facoltativo anche
+-- se sono stati specificati i dati del provvedimento.    
+  --  OR (contaParametriParz = 3 and (p_organo_provv IS NULL OR
+--				p_organo_provv = ''))     then
 	display_error:= 'ERRORE NEI PARAMETRI: Specificare tutti i dati relativi al parametro ''Provvedimento di variazione''';
     return next;
-    return;
+    return; 
 elsif contaParametriParz = 3 THEN -- parametro corretto
 	contaParametri := contaParametri + 1;
 end if;
@@ -269,7 +279,10 @@ strQuery:=strQuery||'
               and     atto.attoamm_numero=  '||p_numero_delibera||'
               and     atto.attoamm_anno  =  '''||p_anno_delibera||'''                 
               and     tipo_atto.attoamm_tipo_code  = '''||p_tipo_delibera||'''
-              and     stato_atto.attoamm_stato_code   =   ''DEFINITIVO'') ';
+              and     stato_atto.attoamm_stato_code   =   ''DEFINITIVO'') 
+              	--SIAC-7729: mancava il legame con l''anno competenza.
+              and periodo_importo_variazione.periodo_id = dvar.periodo_id
+     		  and periodo_importo_variazione.anno =  '''||p_anno_competenza||'''';
 else        -- specificato l'elenco delle variazione.          
       	strQuery:=strQuery||'     
                 select max(var_stato.variazione_stato_id)

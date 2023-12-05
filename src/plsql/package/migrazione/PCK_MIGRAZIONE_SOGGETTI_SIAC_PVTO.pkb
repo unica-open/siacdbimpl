@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC AS
 function fnc_migrazione_mod_accredito(pEnte number,pMsgRes out varchar2)
     return number is
@@ -65,7 +71,7 @@ function fnc_migrazione_mod_accredito(pEnte number,pMsgRes out varchar2)
                                       CODACCRE_PA,
                                       CODACCRE_DM,
                                       CODACCRE_MO
-				-- DAVIDE - 10.02.016 - spostate modalità accredito da CO a GE					  
+				-- DAVIDE - 10.02.016 - spostate modalitï¿½ accredito da CO a GE					  
 							, CODACCRE_AB, CODACCRE_AC, CODACCRE_AP) then
 									  ) then
         tipoAccreditoSiac := SIAC_TIPOACCRE_GE;
@@ -424,8 +430,8 @@ procedure migrazione_soggetto(pEnte   number,pCodRes out number,pMsgRes out varc
                    2,decode(f.partita_iva,NULL,'PG','PGI'),
                    3,decode(f.partita_iva,NULL,'PG','PGI'),
                    5,'PGI',F.NAT_GIURIDICA) 
-        , NULL --as  forma_giuridica --è uguale al campo  tipo_soggetto ?
-                                          -- nota valenzano: che cosa si intende? (srl-spa¿.)
+        , NULL --as  forma_giuridica --ï¿½ uguale al campo  tipo_soggetto ?
+                                          -- nota valenzano: che cosa si intende? (srl-spaï¿½.)
                                            -- ELENCATI I DATI SU EXCEL
         , nvl(trim(f.nome1||' '||f.nome2),'RAGIONE SOCIALE MANCANTE') --as ragione_sociale
 -- DAVIDE - 29.11.2016 - natura giuridica 2 con presenza della p.iva, passa la p.iva altrimenti passa cf - mail Sofia del 29.11.2016
@@ -477,7 +483,7 @@ procedure migrazione_soggetto(pEnte   number,pCodRes out number,pMsgRes out varc
                                              -- PER ORA ESCLUDIAMO LE ATI CHE NON SAPPIAMO COME GESTIRE (5)
         and F.NAT_GIURIDICA not in ( 4) -- DAVIDE - 29.11.2016 - le ATI possiamo gestirle ora
 --        and F.INDIRIZZO IS NOT NULL -- CONDIZIONE DA ELIMINARE, IL CAMPO DEVE ESSERE SEMPRE VALORIZZATO
-                                      -- 09.10.2015 condizione cancellata, il dato ancora non è stato bonificato, il soggetto senza
+                                      -- 09.10.2015 condizione cancellata, il dato ancora non ï¿½ stato bonificato, il soggetto senza
                                       -- il soggetto senza inidirizzo viene comunque migrato.
         );
         
@@ -1057,7 +1063,7 @@ procedure migrazione_soggetto_sede_sec(pEnte number,pCodRes out number,pMsgRes o
      end migrazione_agg_via_sede_sec;
     
   begin
-    -- verificare casi  il soggtto a cui si fa rimferimento è stato migrato?
+    -- verificare casi  il soggtto a cui si fa rimferimento ï¿½ stato migrato?
     -- devo mantenere l'informazione del codice soggetto sede
     
     msgRes:='Migrazione soggetto SEDE.Pulizia migr_sede_secondaria.';
@@ -1075,7 +1081,7 @@ procedure migrazione_soggetto_sede_sec(pEnte number,pCodRes out number,pMsgRes o
         ,ms.soggetto_id
         , F.CODICE
         ,f.nome1||' '||f.nome2
-        ,decode (f.mail, NULL, NULL, 'SS||email||'||f.mail||'||N')  -- Con SS l'indirizzo email verrà associato al sogetto sede lato postgres
+        ,decode (f.mail, NULL, NULL, 'SS||email||'||f.mail||'||N')  -- Con SS l'indirizzo email verrï¿½ associato al sogetto sede lato postgres
         , f.note 
         , tipoIndirizzo -- impostato a MIGRAZIONE
         ,'N'
@@ -1088,14 +1094,14 @@ procedure migrazione_soggetto_sede_sec(pEnte number,pCodRes out number,pMsgRes o
         ,'N'
         , tipoRelazione -- impostato a SEDE_SECONDARIA
         , pEnte
-        ,'0'-- valorizzare solo se la sede deriva da una modalità di pagamento, non è questo il caso
+        ,'0'-- valorizzare solo se la sede deriva da una modalitï¿½ di pagamento, non ï¿½ questo il caso
          from migr_soggetto ms, fornitore f
             where ms.ente_proprietario_id = pEnte
             and F.CODICE_RIF = ms.codice_soggetto
             and F.NAT_GIURIDICA = 4 -- sede secondaria
             and f.stato='S'
 --            and F.INDIRIZZO IS NOT NULL -- CONDIZIONE DA ELIMINARE, IL CAMPO DEVE ESSERE SEMPRE VALORIZZATO
-                                      -- 09.10.2015 condizione cancellata, il dato ancora non è stato bonificato, il soggetto senza
+                                      -- 09.10.2015 condizione cancellata, il dato ancora non ï¿½ stato bonificato, il soggetto senza
                                       -- il soggetto senza inidirizzo viene comunque migrato.            
             );
      

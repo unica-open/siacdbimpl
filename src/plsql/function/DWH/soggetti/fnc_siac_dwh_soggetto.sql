@@ -137,6 +137,9 @@ a.ente_proprietario_id=p_ente_proprietario_id and
 a.fnc_elaborazione_inizio >= (now() - interval '13 hours')::timestamp -- non deve esistere  una elaborazione uguale nelle 13 ore che precedono la chimata
 and a.fnc_name='fnc_siac_dwh_soggetto';
 
+
+-- 13.03.2020 Sofia jira 	SIAC-7513 
+fnc_eseguita:=0;
 if fnc_eseguita> 0 then
 
 return;

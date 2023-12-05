@@ -4,11 +4,32 @@
 */
 
 
+DROP FUNCTION IF EXISTS siac.fnc_mif_isDocumentoCommerciale_splus
+( 
+ docId integer,
+ fprTipoCode varchar,
+ fatGruppoCode varchar,
+ ncdGruppoCode varchar
+ );
 
-CREATE OR REPLACE FUNCTION fnc_mif_isDocumentoCommerciale_splus( docId integer,
-                                                                 fprTipoCode varchar,
-                                                                 fatGruppoCode varchar,
-                                                                 ncdGruppoCode varchar)
+DROP FUNCTION IF EXISTS siac.fnc_mif_isDocumentoCommerciale_splus
+( 
+ docId integer,
+ fprTipoCode varchar,
+ fatGruppoCode varchar,
+ ncdGruppoCode varchar,
+ nteTipoCode varchar
+ );
+
+
+CREATE OR REPLACE FUNCTION siac.fnc_mif_isDocumentoCommerciale_splus
+( 
+docId integer,
+fprTipoCode varchar,
+fatGruppoCode varchar,
+ncdGruppoCode varchar,
+nteTipoCode varchar
+)
 RETURNS boolean AS
 $body$
 DECLARE
@@ -31,7 +52,8 @@ BEGIN
 
  if docGruppoTipoId is null
     and docTipoCode is not null
-    and docTipoCode=fprTipoCode then
+--    and docTipoCode=fprTipoCode then -- 29.03.2o23 Sofia Jira SIAC-8880
+       and docTipoCode in (fprTipoCode,nteTipoCode) then    
     isCommerciale:=true;
  end if;
 
@@ -72,3 +94,6 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+
+alter FUNCTION siac.fnc_mif_isDocumentoCommerciale_splus (  integer, varchar, varchar, varchar,varchar) owner to siac;

@@ -1,6 +1,12 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE PCK_MIGRAZIONE_SOGGETTI_SIAC AS
   -- costanti
-  -- modalità di accredito note RegP
+  -- modalitï¿½ di accredito note RegP
   CODACCRE_CB CONSTANT VARCHAR2(2) := 'CB'; --  'bonifico bancario CB'
   CODACCRE_BP CONSTANT VARCHAR2(2) := 'BP'; --  'bonifico postale CB'
 

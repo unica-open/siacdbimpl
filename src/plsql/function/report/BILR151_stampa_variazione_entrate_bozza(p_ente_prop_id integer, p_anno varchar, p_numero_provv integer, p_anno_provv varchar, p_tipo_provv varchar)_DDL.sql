@@ -1,10 +1,52 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION "BILR151_stampa_variazione_entrate_bozza"(IN p_ente_prop_id integer, IN p_anno character varying, IN p_numero_provv integer, IN p_anno_provv character varying, IN p_tipo_provv character varying)
-  RETURNS TABLE(bil_anno character varying, titoloe_tipo_code character varying, titoloe_tipo_desc character varying, titoloe_code character varying, titoloe_desc character varying, tipologia_tipo_code character varying, tipologia_tipo_desc character varying, tipologia_code character varying, tipologia_desc character varying, categoria_tipo_code character varying, categoria_tipo_desc character varying, categoria_code character varying, categoria_desc character varying, bil_ele_code character varying, bil_ele_desc character varying, bil_ele_code2 character varying, bil_ele_desc2 character varying, bil_ele_id integer, bil_ele_id_padre integer, stanziamento numeric, cassa numeric, residuo numeric, variazione_aumento_stanziato numeric, variazione_diminuzione_stanziato numeric, variazione_aumento_cassa numeric, variazione_diminuzione_cassa numeric, variazione_aumento_residuo numeric, variazione_diminuzione_residuo numeric, anno_riferimento character varying, direz_code character varying, direz_descr character varying, sett_code character varying, sett_descr character varying, pdce_finanz_code character varying, pdce_finanz_descr character varying) AS
-$BODY$
+CREATE OR REPLACE FUNCTION siac."BILR151_stampa_variazione_entrate_bozza" (
+  p_ente_prop_id integer,
+  p_anno varchar,
+  p_numero_provv integer,
+  p_anno_provv varchar,
+  p_tipo_provv varchar
+)
+RETURNS TABLE (
+  bil_anno varchar,
+  titoloe_tipo_code varchar,
+  titoloe_tipo_desc varchar,
+  titoloe_code varchar,
+  titoloe_desc varchar,
+  tipologia_tipo_code varchar,
+  tipologia_tipo_desc varchar,
+  tipologia_code varchar,
+  tipologia_desc varchar,
+  categoria_tipo_code varchar,
+  categoria_tipo_desc varchar,
+  categoria_code varchar,
+  categoria_desc varchar,
+  bil_ele_code varchar,
+  bil_ele_desc varchar,
+  bil_ele_code2 varchar,
+  bil_ele_desc2 varchar,
+  bil_ele_id integer,
+  bil_ele_id_padre integer,
+  stanziamento numeric,
+  cassa numeric,
+  residuo numeric,
+  variazione_aumento_stanziato numeric,
+  variazione_diminuzione_stanziato numeric,
+  variazione_aumento_cassa numeric,
+  variazione_diminuzione_cassa numeric,
+  variazione_aumento_residuo numeric,
+  variazione_diminuzione_residuo numeric,
+  anno_riferimento varchar,
+  direz_code varchar,
+  direz_descr varchar,
+  sett_code varchar,
+  sett_descr varchar,
+  pdce_finanz_code varchar,
+  pdce_finanz_descr varchar
+) AS
+$body$
 DECLARE
 
 classifBilRec record;
@@ -405,7 +447,9 @@ and 	tipologia_stato_var.variazione_stato_tipo_id		=	r_variazione_stato.variazio
             -- G = GIUNTA
             -- C = CONSIGLIO
             -- P = PRE-DEFINITIVA
-and		tipologia_stato_var.variazione_stato_tipo_code		in	('B','G', 'C', 'P')
+            -- BD = BOZZA DECENTRATA
+--10/10/2022 SIAC-8827  Aggiunto lo stato BD.            
+and		tipologia_stato_var.variazione_stato_tipo_code		in	('B','G', 'C', 'P', 'BD')
 and		r_variazione_stato.variazione_stato_id				=	dettaglio_variazione.variazione_stato_id
 and		dettaglio_variazione.elem_id						=	capitolo.elem_id
 and		capitolo.elem_tipo_id								=	tipo_capitolo.elem_tipo_id
@@ -804,9 +848,13 @@ exception
  		RAISE EXCEPTION '% Errore : %-%.',RTN_MESSAGGIO,SQLSTATE,substring(SQLERRM from 1 for 500);
         return;
 END;
-$BODY$
+$body$
 LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR151_stampa_variazione_entrate_bozza" (p_ente_prop_id integer, p_anno varchar, p_numero_provv integer, p_anno_provv varchar, p_tipo_provv varchar)
+  OWNER TO siac;

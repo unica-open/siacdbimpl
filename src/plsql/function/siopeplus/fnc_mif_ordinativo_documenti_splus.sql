@@ -2,26 +2,8 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿/*drop function fnc_mif_ordinativo_documenti_splus( ordinativoId integer,
- 													           numeroDocumenti integer,
-                                                               tipiDocumento   varchar,
-                                                               docAnalogico    varchar,
-                                                               attrCodeDataScad varchar,
-                                                               titoloCap        varchar,
-                                                   	           enteProprietarioId integer,
-                                                               dataElaborazione timestamp,
-                                                               dataFineVal timestamp)*/
-/*drop function if exists fnc_mif_ordinativo_documenti_splus( ordinativoId integer,
- 													           numeroDocumenti integer,
-                                                               tipiDocumento   varchar,
-                                                               docAnalogico    varchar,
-                                                               attrCodeDataScad varchar,
-                                                               titoloCap        varchar,
-                                                   	           enteProprietarioId integer,
-                                                               dataElaborazione timestamp,
-                                                               dataFineVal timestamp);*/
 
-/*drop function if exists fnc_mif_ordinativo_documenti_splus( ordinativoId integer,
+drop FUNCTION if exists siac.fnc_mif_ordinativo_documenti_splus( ordinativoId integer,
  													           numeroDocumenti integer,
                                                                tipiDocumento   varchar,
                                                                docAnalogico    varchar,
@@ -30,10 +12,9 @@
                                                                codicePccUfficio varchar,
                                                    	           enteProprietarioId integer,
                                                                dataElaborazione timestamp,
-                                                               dataFineVal timestamp);*/
-
-
-CREATE OR REPLACE FUNCTION fnc_mif_ordinativo_documenti_splus( ordinativoId integer,
+                                                               dataFineVal timestamp);
+                                                               
+CREATE OR REPLACE FUNCTION siac.fnc_mif_ordinativo_documenti_splus( ordinativoId integer,
  													           numeroDocumenti integer,
                                                                tipiDocumento   varchar,
                                                                docAnalogico    varchar,
@@ -80,6 +61,9 @@ tipoDocFPR   varchar(10):=null;
 tipoGruppoDocFAT   varchar(10):=null;
 tipoGruppoDocNCD   varchar(10):=null;
 
+-- 29.02.2023 Sofia Jira SIAC-8880
+tipoDocNTE   varchar(10):=null;
+
 docPrincId integer:=null;
 countNcdCalc integer:=0;
 importoNcd numeric:=0;
@@ -124,6 +108,8 @@ BEGIN
  tipoGruppoDocNCD:=trim (both ' ' from split_part(tipiDocumento,'|',2));
  tipoGruppoDocNCD:=trim (both ' ' from split_part(tipoGruppoDocNCD,',',2));
 
+ -- 29.03.2023 Sofia Jira SIAC-8880
+ tipoDocNTE:=trim (both ' ' from split_part(tipiDocumento,'|',3));
 
 
  escludiNCD:=trim (both ' ' from split_part(titoloCap,'|',2));
@@ -137,9 +123,10 @@ BEGIN
 
 
 
- --raise notice 'tipoDocFPR =%',tipoDocFPR;
- --raise notice 'tipoGruppoDocFAT =%',tipoGruppoDocFAT;
- --raise notice 'tipoGruppoDocNCD =%',tipoGruppoDocNCD;
+ raise notice 'tipoDocFPR =%',tipoDocFPR;
+ raise notice 'tipoGruppoDocFAT =%',tipoGruppoDocFAT;
+ raise notice 'tipoGruppoDocNCD =%',tipoGruppoDocNCD;
+ raise notice 'tipoDocNTE =%',tipoDocNTE;
 
  /* 15.01.2018 Sofia JIRA SIAC-5765 */
 
@@ -272,7 +259,8 @@ BEGIN
   and   subdoc.subdoc_id=subdocts.subdoc_id
   and   doc.doc_id=subdoc.doc_id
   and   tipo.doc_tipo_id=doc.doc_tipo_id
-  and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true
+--  and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=TRUE -- 29.03.2023 Sofia Jira SIAC-8880
+  and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD,tipoDocNTE)=true -- 29.03.2023 Sofia Jira SIAC-8880
   and   tipo.doc_tipo_code!=DOC_TIPO_ALG
   and   rsog.doc_id=doc.doc_id
   and   sog.soggetto_id=rsog.soggetto_id
@@ -325,13 +313,15 @@ BEGIN
     and   subdoc.subdoc_id=subdocts.subdoc_id
     and   doc.doc_id=subdoc.doc_id
     and   tipo.doc_tipo_id=doc.doc_tipo_id
-    and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true
+--    and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true  -- 29.03.2023 Sofia Jira SIAC-8880
+    and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD,tipoDocNTE)=true     -- 29.03.2023 Sofia Jira SIAC-8880
     and   tipo.doc_tipo_code!=DOC_TIPO_ALG
     and   rdoc.doc_id_da=doc.doc_id
     and   docncd.doc_id=rdoc.doc_id_a
     and   tipoRel.relaz_tipo_id=rdoc.relaz_tipo_id
     and   tipoRel.relaz_tipo_code=tipoGruppoDocNCD
-    and   fnc_mif_isDocumentoCommerciale_splus(docNcd.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true
+--    and   fnc_mif_isDocumentoCommerciale_splus(docNcd.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true -- 29.03.2023 Sofia Jira SIAC-8880
+    and   fnc_mif_isDocumentoCommerciale_splus(docNcd.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD,tipoDocNTE)=true     -- 29.03.2023 Sofia Jira SIAC-8880    
 --    and   subNcd.doc_id=docNcd.doc_id -- 08.05.2018 Sofia siac-6137
     and   tipoNcd.doc_tipo_id=docNcd.doc_tipo_id
     and   rsog.doc_id=docNcd.doc_id
@@ -370,13 +360,15 @@ BEGIN
     and   subdoc.subdoc_id=subdocts.subdoc_id
     and   doc.doc_id=subdoc.doc_id
     and   tipo.doc_tipo_id=doc.doc_tipo_id
-    and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true
+--    and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true -- 29.03.2023 Sofia Jira SIAC-8880
+    and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD,tipoDocNTE)=true    -- 29.03.2023 Sofia Jira SIAC-8880
     and   tipo.doc_tipo_code!=DOC_TIPO_ALG
     and   rdoc.doc_id_da=doc.doc_id
     and   docncd.doc_id=rdoc.doc_id_a
     and   tipoRel.relaz_tipo_id=rdoc.relaz_tipo_id
     and   tipoRel.relaz_tipo_code=tipoGruppoDocNCD
-    and   fnc_mif_isDocumentoCommerciale_splus(docNcd.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true
+--    and   fnc_mif_isDocumentoCommerciale_splus(docNcd.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD)=true  -- 29.03.2023 Sofia Jira SIAC-8880
+    and   fnc_mif_isDocumentoCommerciale_splus(docNcd.doc_id,tipoDocFPR,tipoGruppoDocFAT,tipoGruppoDocNCD,tipoDocNTE)=true     -- 29.03.2023 Sofia Jira SIAC-8880
 --    and   subNcd.doc_id=docNcd.doc_id -- 08.05.2018 Sofia siac-6137
     and   tipoNcd.doc_tipo_id=docNcd.doc_tipo_id
     and   ordts.data_cancellazione is null and ordts.validita_fine is null
@@ -657,3 +649,6 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+
+alter FUNCTION siac.fnc_mif_ordinativo_documenti_splus (  integer,  integer, varchar, varchar, varchar,varchar,varchar,integer,timestamp,timestamp) owner to siac;                                                              

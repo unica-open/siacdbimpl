@@ -2,7 +2,17 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_ordinativo_incasso (
+
+drop  FUNCTION if exists siac.fnc_siac_dwh_ordinativo_incasso 
+(
+  p_anno_bilancio varchar,
+  p_ente_proprietario_id integer,
+  p_data timestamp
+);
+								  
+ 
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_ordinativo_incasso 
+(
   p_anno_bilancio varchar,
   p_ente_proprietario_id integer,
   p_data timestamp
@@ -203,6 +213,9 @@ INSERT INTO siac.siac_dwh_ordinativo_incasso
   , cod_tipo_causale -- SIAC-5897
   , desc_tipo_causale
   , ord_da_trasmettere -- 20.06.2018 Sofia siac-6175
+    --  23.01.2023 Sofia Jira 	SIAC-8762
+  ,  cod_conto_tes_vincolato
+  ,  descri_conto_tes_vincolato
   )
 select tb.ente_proprietario_id, tb.ente_denominazione, tb.anno, tb.fase_operativa_code,tb.fase_operativa_desc,
 tb.ord_anno, tb.ord_numero,tb.ord_desc, tb.ord_stato_code,tb.ord_stato_desc,
@@ -273,6 +286,9 @@ tb.caus_id -- SIAC-5522
 ,tb.caus_tipo_code
 ,tb.caus_tipo_desc
 ,tb.ord_da_trasmettere -- 20.06.2018 Sofia siac-6175
+--  23.01.2023 Sofia Jira 	SIAC-8762
+,tb.contotes_code_vinc
+,tb.contotes_desc_vinc
 from (
 with ord_pag as (
 SELECT d.ente_proprietario_id, d.ente_denominazione, c.anno, i.fase_operativa_code, i.fase_operativa_desc,
@@ -947,6 +963,16 @@ AND   p_data BETWEEN a.validita_inizio AND COALESCE(a.validita_fine, p_data))
       and    r.caus_id = c.caus_id
       and    r.caus_tipo_id = ct.caus_tipo_id
       and    r.ente_proprietario_id = p_ente_proprietario_id)
+ -- 23.01.2023 Sofia Jira SIAC-8762
+,contotes_vincolato as  
+(select  r.ord_id, conto.contotes_code, conto.contotes_desc,conto.contotes_id 
+from siac_d_contotesoreria conto ,siac_r_ordinativo_contotes_nodisp  r
+where conto.ente_proprietario_id=p_ente_proprietario_id
+and     r.contotes_id=conto.contotes_id 
+and     conto.data_cancellazione is null
+and     r.data_cancellazione  is null 
+and     r.validita_fine  is null 
+)
 select ord_pag.*,
 cofog.codice_cofog_gruppo,
 cofog.descrizione_cofog_gruppo,
@@ -985,6 +1011,9 @@ bilelem.*,
 mif.mif_ord_class_codice_cge, mif.descr_siope
 --SIAC-5897
 , causale.caus_code,causale.caus_desc,causale.caus_tipo_code, causale.caus_tipo_desc
+-- 23.01.2023 Sofia Jira 	SIAC-8762
+,contotes_vincolato.contotes_code contotes_code_vinc
+,contotes_vincolato.contotes_desc contotes_desc_vinc
 from ord_pag
 left join bollo
 on ord_pag.codbollo_id=bollo.codbollo_id
@@ -1044,6 +1073,8 @@ on ord_pag.ord_id=firma.ord_id
 left join mif on ord_pag.ord_id = mif.mif_ord_ord_id
 -- JIRA 5897
 left join causale on ord_pag.caus_id = causale.caus_id
+-- 23.01.2023 Sofia Jira  SIAC-8762
+left join contotes_vincolato on (ord_pag.ord_id=contotes_vincolato.ord_id)
 ) as tb;
 
 
@@ -1978,3 +2009,6 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
 COST 100 ROWS 1000;
+		
+
+alter function  siac.fnc_siac_dwh_ordinativo_incasso (  varchar, integer, timestamp) owner to siac;

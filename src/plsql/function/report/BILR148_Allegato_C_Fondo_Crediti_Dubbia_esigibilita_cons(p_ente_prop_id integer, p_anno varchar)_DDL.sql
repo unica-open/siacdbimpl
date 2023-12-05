@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR148_Allegato_C_Fondo_Crediti_Dubbia_esigibilita_cons" (
@@ -34,7 +34,13 @@ RETURNS TABLE (
   flag_cassa integer,
   accertamenti_succ numeric,
   crediti_stralciati numeric,
-  fondo_dubbia_esig numeric
+  fondo_dubbia_esig numeric,
+  afde_bil_crediti_stralciati numeric,
+  afde_bil_crediti_stralciati_fcde numeric,
+  afde_bil_accertamenti_anni_successivi numeric,
+  afde_bil_accertamenti_anni_successivi_fcde numeric,
+  colonna_e numeric,
+  perc_media_app numeric
 ) AS
 $body$
 DECLARE
@@ -44,16 +50,31 @@ bilancio_id integer;
 annoCapImp_int integer;
 tipomedia varchar;
 RTN_MESSAGGIO text;
+afde_bilancioId integer;
+var_afde_bil_crediti_stralciati numeric;
+var_afde_bil_crediti_stralciati_fcde numeric;
+var_afde_bil_accertamenti_anni_successivi numeric;
+var_afde_bil_accertamenti_anni_successivi_fcde numeric;
+  
 BEGIN
 RTN_MESSAGGIO:='select 1';
 
 annoCapImp_int:= p_anno::integer; 
 
-select a.bil_id into bilancio_id from siac_t_bil a,siac_t_periodo b
-where a.ente_proprietario_id=p_ente_prop_id and 
-b.periodo_id=a.periodo_id
+select a.bil_id 
+	into bilancio_id 
+from siac_t_bil a,siac_t_periodo b
+where a.ente_proprietario_id=p_ente_prop_id 
+	and b.periodo_id=a.periodo_id
 and b.anno=p_anno;
 
+raise notice 'bilancio_id = %', bilancio_id;
+
+/*
+	SIAC-8154 13/07/2021
+    La tipologia di media non e' piu' un attributo ma e' un valore presente su
+    siac_t_acc_fondi_dubbia_esig.
+    
 select attr_bilancio.testo
 into tipomedia from siac_t_bil bilancio, siac_t_periodo anno_eserc, 
 siac_r_bil_attr attr_bilancio, siac_t_attr attr
@@ -70,156 +91,161 @@ if tipomedia is null then
    tipomedia = 'SEMPLICE';
 end if;
 
+*/
+
+--SIAC-8154 21/07/2021
+--devo leggere afde_bil_id che serve per l'accesso alla tabella 
+--siac.siac_t_acc_fondi_dubbia_esig 
+select 	fondi_bil.afde_bil_id, 
+	COALESCE(fondi_bil.afde_bil_crediti_stralciati,0),
+	COALESCE(fondi_bil.afde_bil_crediti_stralciati_fcde,0),
+    COALESCE(fondi_bil.afde_bil_accertamenti_anni_successivi,0),
+    COALESCE(fondi_bil.afde_bil_accertamenti_anni_successivi_fcde,0)    
+	into afde_bilancioId, var_afde_bil_crediti_stralciati,
+    var_afde_bil_crediti_stralciati_fcde, var_afde_bil_accertamenti_anni_successivi,
+    var_afde_bil_accertamenti_anni_successivi_fcde    
+from siac_t_acc_fondi_dubbia_esig_bil fondi_bil,
+	siac_d_acc_fondi_dubbia_esig_tipo tipo,
+    siac_d_acc_fondi_dubbia_esig_stato stato,
+    siac_t_bil bil,
+    siac_t_periodo per
+where fondi_bil.afde_tipo_id =tipo.afde_tipo_id
+	and fondi_bil.afde_stato_id = stato.afde_stato_id
+	and fondi_bil.bil_id=bil.bil_id
+    and bil.periodo_id=per.periodo_id
+	and fondi_bil.ente_proprietario_id = p_ente_prop_id
+	and per.anno= p_anno
+    and tipo.afde_tipo_code ='RENDICONTO' 
+    and stato.afde_stato_code = 'DEFINITIVA'
+    and fondi_bil.data_cancellazione IS NULL
+    and tipo.data_cancellazione IS NULL
+    and stato.data_cancellazione IS NULL;
+    
+--    var_afde_bil_crediti_stralciati:=100;
+--    var_afde_bil_crediti_stralciati_fcde:=200;
+--    var_afde_bil_accertamenti_anni_successivi:=300;
+--    var_afde_bil_accertamenti_anni_successivi_fcde:=400;
+    
+raise notice 'afde_bilancioId = %', afde_bilancioId;
+
 return query
 select zz.* from (
 with clas as (
-with titent as 
-(select 
-e.classif_tipo_desc titent_tipo_desc,
-a.classif_id titent_id,
-a.classif_code titent_code,
-a.classif_desc titent_desc,
-a.validita_inizio titent_validita_inizio,
-a.validita_fine titent_validita_fine,
-a.ente_proprietario_id
-from siac_t_class a, siac_r_class_fam_tree b, siac_t_class_fam_tree c, siac_d_class_fam d,siac_d_class_tipo e
-where 
-a.ente_proprietario_id=p_ente_prop_id
-and a.classif_id=b.classif_id
-and b.classif_fam_tree_id=c.classif_fam_tree_id
-and c.classif_fam_id=d.classif_fam_id
-and d.classif_fam_code = '00003'
-and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') between b.validita_inizio and COALESCE(b.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and b.classif_id_padre is null
-and a.data_cancellazione is null
-and b.data_cancellazione is null
-and c.data_cancellazione is null
-and d.data_cancellazione is null
-and e.classif_tipo_id=a.classif_tipo_id
-),
-tipologia as
-(
-select 
-e.classif_tipo_desc tipologia_tipo_desc,
-b.classif_id_padre titent_id,
-a.classif_id tipologia_id,
-a.classif_code tipologia_code,
-a.classif_desc tipologia_desc,
-a.validita_inizio tipologia_validita_inizio,
-a.validita_fine tipologia_validita_fine,
-a.ente_proprietario_id
-from siac_t_class a, siac_r_class_fam_tree b, siac_t_class_fam_tree c, siac_d_class_fam d,siac_d_class_tipo e
-where 
-a.ente_proprietario_id=p_ente_prop_id
-and a.classif_id=b.classif_id
-and b.classif_fam_tree_id=c.classif_fam_tree_id
-and c.classif_fam_id=d.classif_fam_id
-and d.classif_fam_code = '00003'
-and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
-between b.validita_inizio and COALESCE(b.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and b.classif_id_padre is not null
-and b.livello=2
-and a.data_cancellazione is null
-and b.data_cancellazione is null
-and c.data_cancellazione is null
-and d.data_cancellazione is null
-and e.classif_tipo_id=a.classif_tipo_id
-),
-categoria as (
-select 
-e.classif_tipo_desc categoria_tipo_desc,
-b.classif_id_padre tipologia_id,
-a.classif_id categoria_id,
-a.classif_code categoria_code,
-a.classif_desc categoria_desc,
-a.validita_inizio categoria_validita_inizio,
-a.validita_fine categoria_validita_fine,
-a.ente_proprietario_id
-from siac_t_class a, siac_r_class_fam_tree b, siac_t_class_fam_tree c, siac_d_class_fam d,siac_d_class_tipo e
-where 
-a.ente_proprietario_id=p_ente_prop_id
-and a.classif_id=b.classif_id
-and b.classif_fam_tree_id=c.classif_fam_tree_id
-and c.classif_fam_id=d.classif_fam_id
-and d.classif_fam_code = '00003'
-and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
-between b.validita_inizio and COALESCE(b.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and b.classif_id_padre is not null
-and b.livello=3
-and a.data_cancellazione is null
-and b.data_cancellazione is null
-and c.data_cancellazione is null
-and d.data_cancellazione is null
-and e.classif_tipo_id=a.classif_tipo_id
-)
-select 
-titent.titent_tipo_desc,
-titent.titent_id,
-titent.titent_code,
-titent.titent_desc,
-titent.titent_validita_inizio,
-titent.titent_validita_fine,
-tipologia.tipologia_tipo_desc,
-tipologia.tipologia_id,
-tipologia.tipologia_code,
-tipologia.tipologia_desc,
-tipologia.tipologia_validita_inizio,
-tipologia.tipologia_validita_fine,
-categoria.categoria_tipo_desc,
-categoria.categoria_id,
-categoria.categoria_code,
-categoria.categoria_desc,
-categoria.categoria_validita_inizio,
-categoria.categoria_validita_fine,
-categoria.ente_proprietario_id
-from titent,tipologia,categoria
-where titent.titent_id=tipologia.titent_id
-and tipologia.tipologia_id=categoria.tipologia_id
+	select classif_tipo_desc1 titent_tipo_desc, titolo_code titent_code,
+    	 titolo_desc titent_desc, titolo_validita_inizio titent_validita_inizio,
+         titolo_validita_fine titent_validita_fine, 
+         classif_tipo_desc2 tipologia_tipo_desc,
+         tipologia_id, strutt.tipologia_code tipologia_code, 
+         strutt.tipologia_desc tipologia_desc,
+         tipologia_validita_inizio, tipologia_validita_fine,
+         classif_tipo_desc3 categoria_tipo_desc,
+         categoria_id, strutt.categoria_code categoria_code, 
+         strutt.categoria_desc categoria_desc,
+         categoria_validita_inizio, categoria_validita_fine,
+         ente_proprietario_id
+    from "fnc_bilr_struttura_cap_bilancio_entrate"(p_ente_prop_id, 
+    											   p_anno,'') strutt 
 ),
 capall as (
 with
 cap as (
-select
-a.elem_id,
-a.elem_code,
-a.elem_desc,
-a.elem_code2,
-a.elem_desc2,
-a.elem_id_padre,
-a.elem_code3,
-d.classif_id
-from siac_t_bil_elem a,	
-     siac_d_bil_elem_tipo b,
-     siac_r_bil_elem_class c,
- 	 siac_t_class d,	
-     siac_d_class_tipo e,
-	 siac_r_bil_elem_categoria f,	
-     siac_d_bil_elem_categoria g, 
-     siac_r_bil_elem_stato h, 
-     siac_d_bil_elem_stato i 
-where a.ente_proprietario_id = p_ente_prop_id
-and   a.bil_id               = bilancio_id
-and   a.elem_tipo_id		 = b.elem_tipo_id 
-and   b.elem_tipo_code 	     = 'CAP-EG'
-and   c.elem_id              = a.elem_id
-and   d.classif_id           = c.classif_id
-and   e.classif_tipo_id      = d.classif_tipo_id
-and   e.classif_tipo_code	 = 'CATEGORIA'
-and   g.elem_cat_id          = f.elem_cat_id
-and   f.elem_id              = a.elem_id
-and	  g.elem_cat_code	     = 'STD'
-and   h.elem_id              = a.elem_id
-and   i.elem_stato_id        = h.elem_stato_id
-and	  i.elem_stato_code	     = 'VA'
-and   a.data_cancellazione   is null
-and	  b.data_cancellazione   is null
-and	  c.data_cancellazione	 is null
-and	  d.data_cancellazione	 is null
-and	  e.data_cancellazione 	 is null
-and	  f.data_cancellazione 	 is null
-and	  g.data_cancellazione	 is null
-and	  h.data_cancellazione   is null
-and	  i.data_cancellazione   is null
+select bil_elem.elem_id,bil_elem.elem_code,bil_elem.elem_desc,
+  bil_elem.elem_code2,bil_elem.elem_desc2,bil_elem.elem_id_padre,
+  bil_elem.elem_code3,class.classif_id , 
+  fcde.acc_fde_denominatore,fcde.acc_fde_denominatore_1,
+  fcde.acc_fde_denominatore_2,
+  fcde.acc_fde_denominatore_3,fcde.acc_fde_denominatore_4,
+  fcde.acc_fde_numeratore,fcde.acc_fde_numeratore_1,
+  fcde.acc_fde_numeratore_2,
+  fcde.acc_fde_numeratore_3,fcde.acc_fde_numeratore_4,
+  COALESCE(fcde.perc_media_applicata, 0) perc_media_applicata,
+  fcde.elem_id elem_id_fcde,
+  --23/08/2022 SIAC-8788.
+  -- per il calcolo della colonna E leggo il dato salvato su DB.
+  fcde.acc_fde_accantonamento_anno
+  /*case when tipo_media.afde_tipo_media_code ='SEMP_RAP' then
+        COALESCE(fcde.acc_fde_media_semplice_rapporti, 0)          
+    else case when tipo_media.afde_tipo_media_code ='SEMP_TOT' then
+      COALESCE(fcde.acc_fde_media_semplice_totali, 0)        
+    else case when tipo_media.afde_tipo_media_code ='POND_RAP' then
+        COALESCE(fcde.acc_fde_media_ponderata_rapporti, 0)
+    else case when tipo_media.afde_tipo_media_code ='POND_TOT' then
+        COALESCE(fcde.acc_fde_media_ponderata_totali,0)     
+    else case when tipo_media.afde_tipo_media_code ='UTENTE' then
+        COALESCE(fcde.acc_fde_media_utente, 0)      
+    end end end end end perc_media_applicata*/
+from siac_t_bil_elem bil_elem
+--SIAC-8154 07/10/2021.
+--aggiunto legame con la tabella dell'fcde perche' si devono
+--estrarre solo i capitoli coinvolti.
+--SIAC-8575 27/01/2022.
+--e' stato richiesto di prendere tutti i capitoli e non solo quelli FCDE,
+--per cui il legame con la tabella siac_t_acc_fondi_dubbia_esig viene
+--fatto il left join.
+	left join (select tab_fcde.elem_id,
+    				  tab_fcde.acc_fde_denominatore,
+    				  tab_fcde.acc_fde_denominatore_1,
+                      tab_fcde.acc_fde_denominatore_2,
+                      tab_fcde.acc_fde_denominatore_3,
+                      tab_fcde.acc_fde_denominatore_4,
+                      tab_fcde.acc_fde_numeratore,
+                      tab_fcde.acc_fde_numeratore_1,
+                      tab_fcde.acc_fde_numeratore_2,
+                      tab_fcde.acc_fde_numeratore_3,
+                      tab_fcde.acc_fde_numeratore_4,
+                      --23/08/2022 SIAC-8788.
+  					  -- per il calcolo della colonna E leggo il dato salvato su DB.
+                      tab_fcde.acc_fde_accantonamento_anno,
+                      tipo_media.afde_tipo_media_code,
+              case when tipo_media.afde_tipo_media_code ='SEMP_RAP' then
+        		COALESCE(tab_fcde.acc_fde_media_semplice_rapporti, 0)          
+              else case when tipo_media.afde_tipo_media_code ='SEMP_TOT' then
+                COALESCE(tab_fcde.acc_fde_media_semplice_totali, 0)        
+              else case when tipo_media.afde_tipo_media_code ='POND_RAP' then
+                  COALESCE(tab_fcde.acc_fde_media_ponderata_rapporti, 0)
+              else case when tipo_media.afde_tipo_media_code ='POND_TOT' then
+                  COALESCE(tab_fcde.acc_fde_media_ponderata_totali,0)     
+              else case when tipo_media.afde_tipo_media_code ='UTENTE' then
+                  COALESCE(tab_fcde.acc_fde_media_utente, 0)      
+              end end end end end perc_media_applicata
+         		from siac_t_acc_fondi_dubbia_esig tab_fcde
+            		left join siac_d_acc_fondi_dubbia_esig_tipo_media tipo_media
+                	on tipo_media.afde_tipo_media_id=tab_fcde.afde_tipo_media_id
+                where tab_fcde.ente_proprietario_id = p_ente_prop_id
+                	and tab_fcde.afde_bil_id =  afde_bilancioId
+                    and tab_fcde.data_cancellazione is null) fcde
+      on fcde.elem_id = bil_elem.elem_id,
+     siac_d_bil_elem_tipo bil_elem_tipo,
+     siac_r_bil_elem_class r_bil_elem_class,
+ 	 siac_t_class class,	
+     siac_d_class_tipo d_class_tipo,
+	 siac_r_bil_elem_categoria r_bil_elem_categ,	
+     siac_d_bil_elem_categoria d_bil_elem_categ, 
+     siac_r_bil_elem_stato r_bil_elem_stato, 
+     siac_d_bil_elem_stato d_bil_elem_stato 
+where bil_elem.elem_tipo_id		 = bil_elem_tipo.elem_tipo_id 
+and   r_bil_elem_class.elem_id   = bil_elem.elem_id
+and   class.classif_id           = r_bil_elem_class.classif_id
+and   d_class_tipo.classif_tipo_id      = class.classif_tipo_id
+and   d_bil_elem_categ.elem_cat_id          = r_bil_elem_categ.elem_cat_id
+and   r_bil_elem_categ.elem_id              = bil_elem.elem_id
+and   r_bil_elem_stato.elem_id              = bil_elem.elem_id
+and   d_bil_elem_stato.elem_stato_id        = r_bil_elem_stato.elem_stato_id
+and   bil_elem.ente_proprietario_id = p_ente_prop_id
+and   bil_elem.bil_id               = bilancio_id
+and   bil_elem_tipo.elem_tipo_code 	     = 'CAP-EG'
+and   d_class_tipo.classif_tipo_code	 = 'CATEGORIA'
+and	  d_bil_elem_categ.elem_cat_code	     = 'STD'
+and	  d_bil_elem_stato.elem_stato_code	     = 'VA'
+and   bil_elem.data_cancellazione   is null
+and	  bil_elem_tipo.data_cancellazione   is null
+and	  r_bil_elem_class.data_cancellazione	 is null
+and	  class.data_cancellazione	 is null
+and	  d_class_tipo.data_cancellazione 	 is null
+and	  r_bil_elem_categ.data_cancellazione 	 is null
+and	  d_bil_elem_categ.data_cancellazione	 is null
+and	  r_bil_elem_stato.data_cancellazione   is null
+and	  d_bil_elem_stato.data_cancellazione   is null
 ), 
 resatt as ( -- Residui Attivi 
 select capitolo.elem_id,
@@ -276,9 +302,7 @@ select 		r_capitolo_ordinativo.elem_id,
              ELSE
                 'RISCOMP'
              END tipo_importo                    
-from  --siac_t_bil 						bilancio,
-      --siac_t_periodo 					anno_eserc, 
-      siac_r_ordinativo_bil_elem		r_capitolo_ordinativo,
+from  siac_r_ordinativo_bil_elem		r_capitolo_ordinativo,
       siac_t_ordinativo				    ordinativo,
       siac_d_ordinativo_tipo			tipo_ordinativo,
       siac_r_ordinativo_stato			r_stato_ordinativo,
@@ -289,57 +313,46 @@ from  --siac_t_bil 						bilancio,
       siac_t_movgest     				movimento,
       siac_t_movgest_ts    			    ts_movimento, 
       siac_r_ordinativo_ts_movgest_ts	r_ordinativo_movgest
-where 	--anno_eserc.anno					= 	p_anno											
---and	bilancio.periodo_id					=	anno_eserc.periodo_id
---and	bilancio.ente_proprietario_id	    =	p_ente_prop_id
-ordinativo_det.ente_proprietario_id	    =	p_ente_prop_id
-and	r_capitolo_ordinativo.ord_id		=	ordinativo.ord_id
-and	ordinativo.ord_tipo_id				=	tipo_ordinativo.ord_tipo_id
-and	tipo_ordinativo.ord_tipo_code		= 	'I'	-- Incasso
-and	ordinativo.ord_id					=	r_stato_ordinativo.ord_id
-and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id
-------------------------------------------------------------------------------------------		
-----------------------    LO STATO DEVE ESSERE MODIFICATO IN Q  --- QUIETANZATO    ------		
-and	stato_ordinativo.ord_stato_code			<> 'A' -- Annullato
------------------------------------------------------------------------------------------------
---and	ordinativo.bil_id					=	bilancio.bil_id
-and	ordinativo.bil_id					=	bilancio_id
-and	ordinativo.ord_id					=	ordinativo_det.ord_id
-and	ordinativo_det.ord_ts_id			=	ordinativo_imp.ord_ts_id
-and	ordinativo_imp.ord_ts_det_tipo_id	=	ordinativo_imp_tipo.ord_ts_det_tipo_id
-and	ordinativo_imp_tipo.ord_ts_det_tipo_code	=	'A' 	-- Importo attuale
----------------------------------------------------------------------------------------------------------------------
-and	r_ordinativo_movgest.ord_ts_id		=	ordinativo_det.ord_ts_id
-and	r_ordinativo_movgest.movgest_ts_id	=	ts_movimento.movgest_ts_id
-and	ts_movimento.movgest_id				=	movimento.movgest_id
-and	movimento.movgest_anno				<=	annoCapImp_int	
---and movimento.bil_id					=	bilancio.bil_id	
-and movimento.bil_id					=	bilancio_id	
---------------------------------------------------------------------------------------------------------------------		
---and	bilancio.data_cancellazione 				is null
---and	anno_eserc.data_cancellazione 				is null
-and	r_capitolo_ordinativo.data_cancellazione	is null
-and	ordinativo.data_cancellazione				is null
-and	tipo_ordinativo.data_cancellazione			is null
-and	r_stato_ordinativo.data_cancellazione		is null
-and	stato_ordinativo.data_cancellazione			is null
-and ordinativo_det.data_cancellazione			is null
-and ordinativo_imp.data_cancellazione			is null
-and ordinativo_imp_tipo.data_cancellazione		is null
-and	movimento.data_cancellazione				is null
-and	ts_movimento.data_cancellazione				is null
-and	r_ordinativo_movgest.data_cancellazione		is null
-and now() between r_capitolo_ordinativo.validita_inizio and COALESCE(r_capitolo_ordinativo.validita_fine,now())
-and now() between r_stato_ordinativo.validita_inizio and COALESCE(r_stato_ordinativo.validita_fine,now())
-and now() between r_ordinativo_movgest.validita_inizio and COALESCE(r_ordinativo_movgest.validita_fine,now())
+where r_capitolo_ordinativo.ord_id		=	ordinativo.ord_id
+    and	ordinativo.ord_tipo_id				=	tipo_ordinativo.ord_tipo_id
+    and	ordinativo.ord_id					=	r_stato_ordinativo.ord_id
+    and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id
+    and	ordinativo.ord_id					=	ordinativo_det.ord_id
+    and	ordinativo_det.ord_ts_id			=	ordinativo_imp.ord_ts_id
+    and	ordinativo_imp.ord_ts_det_tipo_id	=	ordinativo_imp_tipo.ord_ts_det_tipo_id
+    and	r_ordinativo_movgest.ord_ts_id		=	ordinativo_det.ord_ts_id
+    and	r_ordinativo_movgest.movgest_ts_id	=	ts_movimento.movgest_ts_id
+    and	ts_movimento.movgest_id				=	movimento.movgest_id
+    and ordinativo_det.ente_proprietario_id	    =	p_ente_prop_id
+    and	tipo_ordinativo.ord_tipo_code		= 	'I'	-- Incasso
+    ------------------------------------------------------------------------------------------		
+    ----------------------    LO STATO DEVE ESSERE MODIFICATO IN Q  --- QUIETANZATO    ------		
+    and	stato_ordinativo.ord_stato_code			<> 'A' -- Annullato
+    -----------------------------------------------------------------------------------------------
+    and	ordinativo.bil_id					=	bilancio_id
+    and movimento.bil_id					=	bilancio_id	
+    and	ordinativo_imp_tipo.ord_ts_det_tipo_code	=	'A' 	-- Importo attuale
+    and	movimento.movgest_anno				<=	annoCapImp_int	
+    and	r_capitolo_ordinativo.data_cancellazione	is null
+    and	ordinativo.data_cancellazione				is null
+    and	tipo_ordinativo.data_cancellazione			is null
+    and	r_stato_ordinativo.data_cancellazione		is null
+    and	stato_ordinativo.data_cancellazione			is null
+    and ordinativo_det.data_cancellazione			is null
+    and ordinativo_imp.data_cancellazione			is null
+    and ordinativo_imp_tipo.data_cancellazione		is null
+    and	movimento.data_cancellazione				is null
+    and	ts_movimento.data_cancellazione				is null
+    and	r_ordinativo_movgest.data_cancellazione		is null
+    and now() between r_capitolo_ordinativo.validita_inizio and COALESCE(r_capitolo_ordinativo.validita_fine,now())
+    and now() between r_stato_ordinativo.validita_inizio and COALESCE(r_stato_ordinativo.validita_fine,now())
+	and now() between r_ordinativo_movgest.validita_inizio and COALESCE(r_ordinativo_movgest.validita_fine,now())
 group by tipo_importo, r_capitolo_ordinativo.elem_id
 ),
 resriacc as ( -- Riaccertamenti residui
 select capitolo.elem_id,
        sum (t_movgest_ts_det_mod.movgest_ts_det_importo) riaccertamenti_residui
-from --siac_t_bil      bilancio, 
-     --siac_t_periodo     anno_eserc, 
-     siac_t_bil_elem     capitolo , 
+from siac_t_bil_elem     capitolo , 
      siac_r_movgest_bil_elem   r_mov_capitolo, 
      siac_d_bil_elem_tipo    t_capitolo, 
      siac_t_movgest     movimento, 
@@ -354,55 +367,58 @@ from --siac_t_bil      bilancio,
      siac_r_modifica_stato r_mod_stato,
      siac_d_modifica_stato d_mod_stato,
      siac_t_movgest_ts_det_mod t_movgest_ts_det_mod
-     where --bilancio.periodo_id    		 	= 	anno_eserc.periodo_id 
-     --and anno_eserc.anno       			=   p_anno
-     --and bilancio.bil_id      				=	capitolo.bil_id
-     capitolo.bil_id      				=	bilancio_id
-     and capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
-     and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
-     and movimento.movgest_anno 	< 	annoCapImp_int
-     --and movimento.bil_id					=	bilancio.bil_id
-     and movimento.bil_id					=	bilancio_id
-     and r_mov_capitolo.elem_id    		=	capitolo.elem_id
-     and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
-     and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
-     and tipo_mov.movgest_tipo_code    	= 'A' 
-     and movimento.movgest_id      		= 	ts_movimento.movgest_id 
-     and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
-     and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
-     and tipo_stato.movgest_stato_code   in ('D','N')
-     and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
-     and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
-     and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
-     and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
-     and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' -- Importo attuale 
-     and t_movgest_ts_det_mod.movgest_ts_id=ts_movimento.movgest_ts_id      
-     and t_movgest_ts_det_mod.mod_stato_r_id=r_mod_stato.mod_stato_r_id
-     and d_mod_stato.mod_stato_id=r_mod_stato.mod_stato_id  
-     and d_mod_stato.mod_stato_code='V'
-     and r_mod_stato.mod_id=t_modifica.mod_id
-     and now() between r_mov_capitolo.validita_inizio and COALESCE(r_mov_capitolo.validita_fine,now())
-     and now() between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,now())
-     and now() between r_mod_stato.validita_inizio and COALESCE(r_mod_stato.validita_fine,now())
-     --and anno_eserc.data_cancellazione    	is null 
-     --and bilancio.data_cancellazione     	is null 
-     and capitolo.data_cancellazione     	is null 
-     and r_mov_capitolo.data_cancellazione is null 
-     and t_capitolo.data_cancellazione    	is null 
-     and movimento.data_cancellazione     	is null 
-     and tipo_mov.data_cancellazione     	is null 
-     and r_movimento_stato.data_cancellazione   is null 
-     and ts_movimento.data_cancellazione   is null 
-     and tipo_stato.data_cancellazione    	is null 
-     and dt_movimento.data_cancellazione   is null 
-     and ts_mov_tipo.data_cancellazione    is null 
-     and dt_mov_tipo.data_cancellazione    is null
-     and t_movgest_ts_det_mod.data_cancellazione    is null
-     and r_mod_stato.data_cancellazione    is null
-     and t_modifica.data_cancellazione    is null
-     and capitolo.ente_proprietario_id   = p_ente_prop_id
+     where capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
+       and r_mov_capitolo.elem_id    		=	capitolo.elem_id
+       and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
+       and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
+       and movimento.movgest_id      		= 	ts_movimento.movgest_id 
+       and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
+       and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
+       and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
+       and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
+       and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
+       and t_movgest_ts_det_mod.movgest_ts_id=ts_movimento.movgest_ts_id      
+       and t_movgest_ts_det_mod.mod_stato_r_id=r_mod_stato.mod_stato_r_id
+       and d_mod_stato.mod_stato_id=r_mod_stato.mod_stato_id 
+       and r_mod_stato.mod_id=t_modifica.mod_id              
+       and capitolo.ente_proprietario_id   = p_ente_prop_id           
+       and capitolo.bil_id      				=	bilancio_id
+       and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+       and movimento.movgest_anno 	< 	annoCapImp_int
+       and movimento.bil_id					=	bilancio_id
+       and tipo_mov.movgest_tipo_code    	= 'A' 
+       and tipo_stato.movgest_stato_code   in ('D','N')
+       and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
+       and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' -- Importo attuale 
+       and d_mod_stato.mod_stato_code='V'    
+       and now() between r_mov_capitolo.validita_inizio and COALESCE(r_mov_capitolo.validita_fine,now())
+       and now() between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,now())
+       and now() between r_mod_stato.validita_inizio and COALESCE(r_mod_stato.validita_fine,now())
+       and capitolo.data_cancellazione     	is null 
+       and r_mov_capitolo.data_cancellazione is null 
+       and t_capitolo.data_cancellazione    	is null 
+       and movimento.data_cancellazione     	is null 
+       and tipo_mov.data_cancellazione     	is null 
+       and r_movimento_stato.data_cancellazione   is null 
+       and ts_movimento.data_cancellazione   is null 
+       and tipo_stato.data_cancellazione    	is null 
+       and dt_movimento.data_cancellazione   is null 
+       and ts_mov_tipo.data_cancellazione    is null 
+       and dt_mov_tipo.data_cancellazione    is null
+       and t_movgest_ts_det_mod.data_cancellazione    is null
+       and r_mod_stato.data_cancellazione    is null
+       and t_modifica.data_cancellazione    is null     
      group by capitolo.elem_id	
 ),
+/*
+	SIAC-8154 13/07/2021
+	Cambia la gestione dei dati per l'importo minimo del fondo:
+	- la relazione con i capitoli e' diretta sulla tabella 
+      siac_t_acc_fondi_dubbia_esig.
+    - la tipologia di media non e' pi� un attributo ma e' anch'essa sulla
+      tabella siac_t_acc_fondi_dubbia_esig con i relativi importi. 
+*/      
+/*
 minfondo as ( -- Importo minimo del fondo
 SELECT
  rbilelem.elem_id, 
@@ -426,6 +442,29 @@ SELECT
  WHERE rbilelem.acc_fde_id = datifcd.acc_fde_id 
  AND   datifcd.ente_proprietario_id = p_ente_prop_id 
  AND   rbilelem.data_cancellazione is null
+), */
+minfondo as ( -- Importo minimo del fondo
+SELECT
+ datifcd.elem_id,   
+ case when tipo_media.afde_tipo_media_code ='SEMP_RAP' then
+    	COALESCE(acc_fde_media_semplice_rapporti, 0)          
+    else case when tipo_media.afde_tipo_media_code ='SEMP_TOT' then
+      COALESCE(acc_fde_media_semplice_totali, 0)        
+    else case when tipo_media.afde_tipo_media_code ='POND_RAP' then
+    	COALESCE(acc_fde_media_ponderata_rapporti, 0)
+    else case when tipo_media.afde_tipo_media_code ='POND_TOT' then
+    	COALESCE(acc_fde_media_ponderata_totali,0)     
+    else case when tipo_media.afde_tipo_media_code ='UTENTE' then
+    	COALESCE(acc_fde_media_utente, 0)      
+    end end end end end perc_media,        
+ 1 flag_fondo -- SIAC-5854
+ FROM siac_t_acc_fondi_dubbia_esig datifcd, 
+    siac_d_acc_fondi_dubbia_esig_tipo_media tipo_media
+ WHERE tipo_media.afde_tipo_media_id=datifcd.afde_tipo_media_id
+   AND datifcd.ente_proprietario_id = p_ente_prop_id 
+   and datifcd.afde_bil_id  = afde_bilancioId
+   AND datifcd.data_cancellazione is null
+   AND tipo_media.data_cancellazione is null
 ),
 accertcassa as ( -- Accertato per cassa -- SIAC-5854
 SELECT rbea.elem_id, 0 flag_cassa
@@ -441,9 +480,7 @@ acc_succ as ( -- Accertamenti imputati agli esercizi successivi a quello cui il 
 select capitolo.elem_id,
        --sum (t_movgest_ts_det_mod.movgest_ts_det_importo) accertamenti_succ
        sum (dt_movimento.movgest_ts_det_importo) accertamenti_succ
-from --siac_t_bil      bilancio, 
-     --siac_t_periodo     anno_eserc, 
-     siac_t_bil_elem     capitolo , 
+from siac_t_bil_elem     capitolo , 
      siac_r_movgest_bil_elem   r_mov_capitolo, 
      siac_d_bil_elem_tipo    t_capitolo, 
      siac_t_movgest     movimento, 
@@ -453,49 +490,27 @@ from --siac_t_bil      bilancio,
      siac_d_movgest_stato    tipo_stato, 
      siac_t_movgest_ts_det   dt_movimento, 
      siac_d_movgest_ts_tipo   ts_mov_tipo, 
-     siac_d_movgest_ts_det_tipo  dt_mov_tipo 
-     --,siac_t_modifica t_modifica,
-     --siac_r_modifica_stato r_mod_stato,
-     --siac_d_modifica_stato d_mod_stato,
-     --siac_t_movgest_ts_det_mod t_movgest_ts_det_mod--,
-     --siac_r_movgest_ts_attr r_movgest_ts_attr,
-     --siac_t_attr t_attr 
-     where --bilancio.periodo_id    		 	= 	anno_eserc.periodo_id 
-     --and anno_eserc.anno       			=   p_anno
-     --and bilancio.bil_id      				=	capitolo.bil_id
-     capitolo.bil_id      				=	bilancio_id
-     and capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
-     and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
-     and movimento.movgest_anno 	> 	annoCapImp_int
-     --and movimento.bil_id					=	bilancio.bil_id
-     and movimento.bil_id					=	bilancio_id
+     siac_d_movgest_ts_det_tipo  dt_mov_tipo     
+     where capitolo.bil_id      				=	bilancio_id
+     and capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id     
      and r_mov_capitolo.elem_id    		=	capitolo.elem_id
      and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
-     and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
-     and tipo_mov.movgest_tipo_code    	= 'A' 
+     and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id
      and movimento.movgest_id      		= 	ts_movimento.movgest_id 
      and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
-     and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
-     and tipo_stato.movgest_stato_code   in ('D','N')
-     and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
-     and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
+     and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id
+     and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id
      and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
      and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
-     and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' -- Importo attuale 
-     --and t_movgest_ts_det_mod.movgest_ts_id=ts_movimento.movgest_ts_id      
-     --and t_movgest_ts_det_mod.mod_stato_r_id=r_mod_stato.mod_stato_r_id
-     --and d_mod_stato.mod_stato_id=r_mod_stato.mod_stato_id  
-     --and d_mod_stato.mod_stato_code='V'
-     --and r_mod_stato.mod_id=t_modifica.mod_id
-     --and r_movgest_ts_attr.movgest_ts_id = ts_movimento.movgest_ts_id
-     --and r_movgest_ts_attr.attr_id = t_attr.attr_id
-     --and t_attr.attr_code = 'annoOriginePlur'
-     --and r_movgest_ts_attr.testo <= p_anno
+     and capitolo.ente_proprietario_id   = p_ente_prop_id
+     and movimento.bil_id					=	bilancio_id
+     and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+     and movimento.movgest_anno 	> 	annoCapImp_int      
+     and tipo_mov.movgest_tipo_code    	= 'A'       
+     and tipo_stato.movgest_stato_code   in ('D','N')      
+     and ts_mov_tipo.movgest_ts_tipo_code  = 'T'          
      and now() between r_mov_capitolo.validita_inizio and COALESCE(r_mov_capitolo.validita_fine,now())
-     and now() between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,now())
-     --and now() between r_mod_stato.validita_inizio and COALESCE(r_mod_stato.validita_fine,now())
-     --and anno_eserc.data_cancellazione    	is null 
-     --and bilancio.data_cancellazione     	is null 
+     and now() between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,now()) 
      and capitolo.data_cancellazione     	is null 
      and r_mov_capitolo.data_cancellazione is null 
      and t_capitolo.data_cancellazione    	is null 
@@ -506,21 +521,14 @@ from --siac_t_bil      bilancio,
      and tipo_stato.data_cancellazione    	is null 
      and dt_movimento.data_cancellazione   is null 
      and ts_mov_tipo.data_cancellazione    is null 
-     and dt_mov_tipo.data_cancellazione    is null
-     --and t_movgest_ts_det_mod.data_cancellazione    is null
-     --and r_mod_stato.data_cancellazione    is null
-     --and t_modifica.data_cancellazione    is null
-     and capitolo.ente_proprietario_id   = p_ente_prop_id
+     and dt_mov_tipo.data_cancellazione    is null     
      group by capitolo.elem_id	
 ),
 cred_stra as ( -- Crediti stralciati
  select    
    capitolo.elem_id,
    abs(sum (t_movgest_ts_det_mod.movgest_ts_det_importo)) crediti_stralciati
-    from 
-      siac_t_bil      bilancio, 
-      siac_t_periodo     anno_eserc, 
-      siac_t_bil_elem     capitolo , 
+    from siac_t_bil_elem     capitolo , 
       siac_r_movgest_bil_elem   r_mov_capitolo, 
       siac_d_bil_elem_tipo    t_capitolo, 
       siac_t_movgest     movimento, 
@@ -536,32 +544,30 @@ cred_stra as ( -- Crediti stralciati
       siac_r_modifica_stato r_mod_stato,
       siac_d_modifica_stato d_mod_stato,
       siac_t_movgest_ts_det_mod t_movgest_ts_det_mod
-      where bilancio.periodo_id    		 	= 	anno_eserc.periodo_id 
-      and anno_eserc.anno       			=   p_anno
-      and bilancio.bil_id      				=	capitolo.bil_id
+      where r_mov_capitolo.elem_id    		=	capitolo.elem_id
+      and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id
       and capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
-      and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
-      and movimento.movgest_anno 	        <= 	annoCapImp_int
-      and movimento.bil_id					=	bilancio.bil_id
-      and r_mov_capitolo.elem_id    		=	capitolo.elem_id
-      and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
       and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
-      and tipo_mov.movgest_tipo_code    	= 'A' 
       and movimento.movgest_id      		= 	ts_movimento.movgest_id 
       and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
       and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
-      and tipo_stato.movgest_stato_code   in ('D','N') ------ P,A,N 
       and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
-      and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
       and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
-      and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
-      and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' ----- importo attuale 
+      and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id
       and t_movgest_ts_det_mod.movgest_ts_id=ts_movimento.movgest_ts_id      
       and t_movgest_ts_det_mod.mod_stato_r_id=r_mod_stato.mod_stato_r_id
       and d_mod_stato.mod_stato_id=r_mod_stato.mod_stato_id  
-      and d_mod_stato.mod_stato_code='V'
       and r_mod_stato.mod_id=t_modifica.mod_id
       and d_modif_tipo.mod_tipo_id = t_modifica.mod_tipo_id
+	  and movimento.ente_proprietario_id   = p_ente_prop_id 
+      and movimento.bil_id					=	bilancio_id
+      and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+      and movimento.movgest_anno 	        <= 	annoCapImp_int      
+      and tipo_mov.movgest_tipo_code    	= 'A' 
+      and tipo_stato.movgest_stato_code   in ('D','N') ------ P,A,N 
+      and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
+      and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' ----- importo attuale 
+      and d_mod_stato.mod_stato_code='V'
       /*and ((d_modif_tipo.mod_tipo_code in ('CROR','ECON') and p_anno <= '2016')
             or
            (d_modif_tipo.mod_tipo_code like 'FCDE%' and p_anno >= '2017')
@@ -571,8 +577,6 @@ cred_stra as ( -- Crediti stralciati
       and now() between r_mov_capitolo.validita_inizio and COALESCE(r_mov_capitolo.validita_fine,now())
  	  and now() between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,now())
 	  and now() between r_mod_stato.validita_inizio and COALESCE(r_mod_stato.validita_fine,now())
-      and anno_eserc.data_cancellazione    	is null 
-      and bilancio.data_cancellazione     	is null 
       and capitolo.data_cancellazione     	is null 
       and r_mov_capitolo.data_cancellazione is null 
       and t_capitolo.data_cancellazione    	is null 
@@ -586,10 +590,460 @@ cred_stra as ( -- Crediti stralciati
       and dt_mov_tipo.data_cancellazione    is null
       and t_movgest_ts_det_mod.data_cancellazione    is null
       and r_mod_stato.data_cancellazione    is null
-      and t_modifica.data_cancellazione    is null
-      and anno_eserc.ente_proprietario_id   = p_ente_prop_id
-group by capitolo.elem_id
-)
+      and t_modifica.data_cancellazione    is null      
+group by capitolo.elem_id),
+--SIAC-8154.
+--Le query seguenti sono quelle utilizzate per il calcolo dei residui.
+--SIAC-8707 06/05/2022.
+--L'importo residuo anno del bilancio e' preso da accertamenti - riscossioni
+--di competenza
+/*stanz_residuo_capitolo as(
+  select bil_elem.elem_id, 
+      sum(bil_elem_det.elem_det_importo) importo_residui   
+  from siac_t_bil_elem bil_elem,	
+--SIAC-8575 27/01/2022.
+--e' stato richiesto di prendere tutti i capitoli e non solo quelli FCDE
+--viene tolto il legame con la tabella siac_t_acc_fondi_dubbia_esig   
+     --  siac_t_acc_fondi_dubbia_esig fcde,
+       siac_d_bil_elem_tipo bil_elem_tipo,
+       siac_t_bil_elem_det bil_elem_det,
+       siac_d_bil_elem_det_tipo d_bil_elem_det_tipo,
+       siac_t_periodo per
+  where --bil_elem.elem_id = fcde.elem_id
+  bil_elem.elem_tipo_id = bil_elem_tipo.elem_tipo_id
+  and bil_elem.elem_id=bil_elem_det.elem_id
+  and bil_elem_det.elem_det_tipo_id=d_bil_elem_det_tipo.elem_det_tipo_id
+  and per.periodo_id=bil_elem_det.periodo_id
+  and bil_elem.ente_proprietario_id= p_ente_prop_id
+  --and fcde.afde_bil_id				=  afde_bilancioId
+  and bil_elem_tipo.elem_tipo_code 	     = 'CAP-EG'    
+  and d_bil_elem_det_tipo.elem_det_tipo_code='STR'
+  and per.anno			= p_anno
+  and bil_elem.data_cancellazione IS NULL
+ -- and fcde.data_cancellazione IS NULL
+  and bil_elem_tipo.data_cancellazione IS NULL
+  and bil_elem_det.data_cancellazione IS NULL
+  and d_bil_elem_det_tipo.data_cancellazione IS NULL  
+  and bil_elem_det.validita_inizio < CURRENT_TIMESTAMP
+  and (bil_elem_det.validita_fine IS NULL OR
+       bil_elem_det.validita_fine > CURRENT_TIMESTAMP)
+  group by bil_elem.elem_id),
+  */
+stanz_residuo_capitolo as(  
+  select capitolo.elem_id,
+sum (dt_movimento.movgest_ts_det_importo) importo_residui_acc
+    from siac_t_bil_elem     capitolo , 
+      siac_r_movgest_bil_elem   r_mov_capitolo, 
+      siac_d_bil_elem_tipo    t_capitolo, 
+      siac_t_movgest     movimento, 
+      siac_d_movgest_tipo    tipo_mov, 
+      siac_t_movgest_ts    ts_movimento, 
+      siac_r_movgest_ts_stato   r_movimento_stato, 
+      siac_d_movgest_stato    tipo_stato, 
+      siac_t_movgest_ts_det   dt_movimento, 
+      siac_d_movgest_ts_tipo   ts_mov_tipo, 
+      siac_d_movgest_ts_det_tipo  dt_mov_tipo 
+      where capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
+      and movimento.bil_id					=	capitolo.bil_id
+      and r_mov_capitolo.elem_id    		=	capitolo.elem_id
+      and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
+      and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
+      and movimento.movgest_id      		= 	ts_movimento.movgest_id 
+      and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
+      and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
+      and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id       
+      and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
+      and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id             
+      and capitolo.ente_proprietario_id   = p_ente_prop_id
+      and capitolo.bil_id = bilancio_id
+      and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+      and movimento.movgest_anno ::text  	= 	p_anno
+      and tipo_mov.movgest_tipo_code    	= 'A' --Accertamenti
+      and tipo_stato.movgest_stato_code   in ('D','N')      
+      and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' ----- importo attuale 
+      and ts_mov_tipo.movgest_ts_tipo_code  = 'T' 
+      and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
+ between r_mov_capitolo.validita_inizio and COALESCE(r_mov_capitolo.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
+    and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
+ between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
+   and capitolo.data_cancellazione     	is null 
+      and r_mov_capitolo.data_cancellazione is null 
+      and t_capitolo.data_cancellazione    	is null 
+      and movimento.data_cancellazione     	is null 
+      and tipo_mov.data_cancellazione     	is null 
+      and r_movimento_stato.data_cancellazione   is null 
+      and ts_movimento.data_cancellazione   is null 
+      and tipo_stato.data_cancellazione    	is null 
+      and dt_movimento.data_cancellazione   is null 
+      and ts_mov_tipo.data_cancellazione    is null 
+      and dt_mov_tipo.data_cancellazione    is null      
+group by capitolo.elem_id),
+riscossioni_competenza as(
+---riscossioni di competenza
+  select 		r_capitolo_ordinativo.elem_id,
+              sum(ordinativo_imp.ord_ts_det_importo) risc_competenza
+  from 		siac_r_ordinativo_bil_elem		r_capitolo_ordinativo,
+              siac_t_ordinativo				ordinativo,
+              siac_d_ordinativo_tipo			tipo_ordinativo,
+              siac_r_ordinativo_stato			r_stato_ordinativo,
+              siac_d_ordinativo_stato			stato_ordinativo,
+              siac_t_ordinativo_ts 			ordinativo_det,
+              siac_t_ordinativo_ts_det 		ordinativo_imp,
+              siac_d_ordinativo_ts_det_tipo 	ordinativo_imp_tipo,
+              siac_t_movgest     				movimento,
+              siac_t_movgest_ts    			ts_movimento, 
+              siac_r_ordinativo_ts_movgest_ts	r_ordinativo_movgest
+      where 	r_capitolo_ordinativo.ord_id		=	ordinativo.ord_id
+          and	ordinativo.ord_tipo_id				=	tipo_ordinativo.ord_tipo_id
+          and	ordinativo.ord_id					=	r_stato_ordinativo.ord_id
+          and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id        
+          and	ordinativo.ord_id					=	ordinativo_det.ord_id
+          and	ordinativo_det.ord_ts_id			=	ordinativo_imp.ord_ts_id
+          and	ordinativo_imp.ord_ts_det_tipo_id	=	ordinativo_imp_tipo.ord_ts_det_tipo_id
+          and	r_ordinativo_movgest.ord_ts_id		=	ordinativo_det.ord_ts_id
+          and	r_ordinativo_movgest.movgest_ts_id	=	ts_movimento.movgest_ts_id
+          and	ts_movimento.movgest_id				=	movimento.movgest_id
+          and movimento.bil_id					=	ordinativo.bil_id
+          and	ordinativo.ente_proprietario_id	=	p_ente_prop_id
+          and	ordinativo.bil_id					=	bilancio_id										        
+          and	tipo_ordinativo.ord_tipo_code		= 	'I'
+          and	stato_ordinativo.ord_stato_code			<> 'A'
+          and	movimento.movgest_anno				=	annoCapImp_int	
+          and	ordinativo_imp_tipo.ord_ts_det_tipo_code	=	'A' -- importo attuale        
+          and	r_capitolo_ordinativo.data_cancellazione	is null
+          and	ordinativo.data_cancellazione				is null
+          AND	tipo_ordinativo.data_cancellazione			is null
+          and	r_stato_ordinativo.data_cancellazione		is null
+          AND	stato_ordinativo.data_cancellazione			is null
+          AND ordinativo_det.data_cancellazione				is null
+          aND ordinativo_imp.data_cancellazione				is null
+          and ordinativo_imp_tipo.data_cancellazione		is null
+          and	movimento.data_cancellazione				is null
+          and	ts_movimento.data_cancellazione				is null
+          and	r_ordinativo_movgest.data_cancellazione		is null
+        and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
+  between r_capitolo_ordinativo.validita_inizio and COALESCE(r_capitolo_ordinativo.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
+    and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
+  between r_stato_ordinativo.validita_inizio and COALESCE(r_stato_ordinativo.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
+    and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
+  between r_ordinativo_movgest.validita_inizio and COALESCE(r_ordinativo_movgest.validita_fine,to_timestamp('31/12/'||'2021','dd/mm/yyyy'))
+       group by r_capitolo_ordinativo.elem_id
+),
+stanz_residuo_capitolo_mod as (
+  select bil_elem.elem_id, 
+  sum(bil_elem_det_var.elem_det_importo) importo_residui_mod    
+  from siac_t_bil_elem bil_elem,	
+--SIAC-8575 27/01/2022.
+--e' stato richiesto di prendere tutti i capitoli e non solo quelli FCDE
+--viene tolto il legame con la tabella siac_t_acc_fondi_dubbia_esig    
+       --siac_t_acc_fondi_dubbia_esig fcde,
+       siac_d_bil_elem_tipo bil_elem_tipo,
+       siac_t_bil_elem_det bil_elem_det,
+       siac_d_bil_elem_det_tipo d_bil_elem_det_tipo,
+       siac_t_periodo per,
+       siac_t_bil_elem_det_var bil_elem_det_var,
+       siac_r_variazione_stato r_var_stato,
+       siac_d_variazione_stato d_var_stato
+  where --bil_elem.elem_id = fcde.elem_id
+  bil_elem.elem_tipo_id = bil_elem_tipo.elem_tipo_id
+  and bil_elem.elem_id=bil_elem_det.elem_id
+  and bil_elem_det.elem_det_tipo_id=d_bil_elem_det_tipo.elem_det_tipo_id
+  and per.periodo_id=bil_elem_det.periodo_id
+  and bil_elem_det_var.elem_det_id=bil_elem_det.elem_det_id
+  and bil_elem_det_var.variazione_stato_id=r_var_stato.variazione_stato_id
+  and r_var_stato.variazione_stato_tipo_id=d_var_stato.variazione_stato_tipo_id
+  and bil_elem.ente_proprietario_id= p_ente_prop_id
+  --and fcde.afde_bil_id				=  afde_bilancioId
+  and bil_elem_tipo.elem_tipo_code 	     = 'CAP-EG'    
+  and d_bil_elem_det_tipo.elem_det_tipo_code='STR'
+  and per.anno 						= p_anno
+  and d_var_stato.variazione_stato_tipo_code not in ('A','D')
+  and bil_elem.data_cancellazione IS NULL
+  --and fcde.data_cancellazione IS NULL
+  and bil_elem_tipo.data_cancellazione IS NULL
+  and bil_elem_det.data_cancellazione IS NULL
+  and bil_elem_det_var.data_cancellazione IS NULL
+  and r_var_stato.data_cancellazione IS NULL
+  and d_var_stato.data_cancellazione IS NULL
+  and d_bil_elem_det_tipo.data_cancellazione IS NULL  
+  and bil_elem_det.validita_inizio < CURRENT_TIMESTAMP
+  and (bil_elem_det.validita_fine IS NULL OR
+       bil_elem_det.validita_fine > CURRENT_TIMESTAMP)
+  group by bil_elem.elem_id),
+--SIAC-8707 30/05/2022.  
+--Calcolo le colonne A e B come sono calcolate nel report BILR048.
+-- Colonna A = RESIDUI ATTIVI DA ESERCIZIO DI COMPETENZA (EC=A-RC)
+--Colonna B = RESIDUI ATTIVI DA ESERCIZI PRECEDENTI (EP = RS -RR+R)
+accertamenti_A as (      
+        select capitolo.elem_id,
+        sum (dt_movimento.movgest_ts_det_importo) imp_accertamenti_A
+            from siac_t_bil_elem     capitolo , 
+              siac_r_movgest_bil_elem   r_mov_capitolo, 
+              siac_d_bil_elem_tipo    t_capitolo, 
+              siac_t_movgest     movimento, 
+              siac_d_movgest_tipo    tipo_mov, 
+              siac_t_movgest_ts    ts_movimento, 
+              siac_r_movgest_ts_stato   r_movimento_stato, 
+              siac_d_movgest_stato    tipo_stato, 
+              siac_t_movgest_ts_det   dt_movimento, 
+              siac_d_movgest_ts_tipo   ts_mov_tipo, 
+              siac_d_movgest_ts_det_tipo  dt_mov_tipo 
+              where capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
+              and movimento.bil_id					=	capitolo.bil_id
+              and r_mov_capitolo.elem_id    		=	capitolo.elem_id
+              and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
+              and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
+              and movimento.movgest_id      		= 	ts_movimento.movgest_id 
+              and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
+              and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
+              and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
+              and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
+              and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
+              and capitolo.ente_proprietario_id   = p_ente_prop_id
+              and capitolo.bil_id				  = bilancio_id       
+              and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' ----- importo attuale       
+              and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+              and movimento.movgest_anno ::text  	= 	p_anno
+              and tipo_mov.movgest_tipo_code    	= 'A' 
+              and tipo_stato.movgest_stato_code   in ('D','N') ------ P,A,N 
+              and ts_mov_tipo.movgest_ts_tipo_code  = 'T' 
+              and now() 
+                between r_mov_capitolo.validita_inizio 
+                    and COALESCE(r_mov_capitolo.validita_fine,now())
+              and now() 
+                between r_movimento_stato.validita_inizio 
+                    and COALESCE(r_movimento_stato.validita_fine,now())  
+              and capitolo.data_cancellazione     	is null 
+              and r_mov_capitolo.data_cancellazione is null 
+              and t_capitolo.data_cancellazione    	is null 
+              and movimento.data_cancellazione     	is null 
+              and tipo_mov.data_cancellazione     	is null 
+              and r_movimento_stato.data_cancellazione   is null 
+              and ts_movimento.data_cancellazione   is null 
+              and tipo_stato.data_cancellazione    	is null 
+              and dt_movimento.data_cancellazione   is null 
+              and ts_mov_tipo.data_cancellazione    is null 
+              and dt_mov_tipo.data_cancellazione    is null      
+        group by capitolo.elem_id),
+risc_conto_comp_RC as(
+       select 		r_capitolo_ordinativo.elem_id,
+             sum(ordinativo_imp.ord_ts_det_importo) imp_risc_conto_comp_RC
+            from siac_r_ordinativo_bil_elem		r_capitolo_ordinativo,
+                 siac_t_ordinativo				ordinativo,
+                 siac_d_ordinativo_tipo			tipo_ordinativo,
+                 siac_r_ordinativo_stato			r_stato_ordinativo,
+                 siac_d_ordinativo_stato			stato_ordinativo,
+                 siac_t_ordinativo_ts 			ordinativo_det,
+                 siac_t_ordinativo_ts_det 		ordinativo_imp,
+                 siac_d_ordinativo_ts_det_tipo 	ordinativo_imp_tipo,
+                 siac_t_movgest     				movimento,
+                 siac_t_movgest_ts    			ts_movimento, 
+                 siac_r_ordinativo_ts_movgest_ts	r_ordinativo_movgest
+        where 	r_capitolo_ordinativo.ord_id		=	ordinativo.ord_id
+            and	ordinativo.ord_tipo_id				=	tipo_ordinativo.ord_tipo_id
+            and	ordinativo.ord_id					=	r_stato_ordinativo.ord_id
+            and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id
+            and	ordinativo.ord_id					=	ordinativo_det.ord_id
+            and	ordinativo_det.ord_ts_id			=	ordinativo_imp.ord_ts_id
+            and	ordinativo_imp.ord_ts_det_tipo_id	=	ordinativo_imp_tipo.ord_ts_det_tipo_id
+            and	r_ordinativo_movgest.ord_ts_id		=	ordinativo_det.ord_ts_id
+            and	r_ordinativo_movgest.movgest_ts_id	=	ts_movimento.movgest_ts_id
+            and	ts_movimento.movgest_id				=	movimento.movgest_id
+            and	movimento.ente_proprietario_id		=	p_ente_prop_id
+            and movimento.bil_id					=	bilancio_id	
+            and	ordinativo.bil_id					=	bilancio_id							   		           
+            and	tipo_ordinativo.ord_tipo_code		= 	'I'	--Ordnativo di incasso
+            and	stato_ordinativo.ord_stato_code		<> 'A'
+            and	ordinativo_imp_tipo.ord_ts_det_tipo_code	= 'A' -- importo attuala
+            and	movimento.movgest_anno				=	p_anno::integer	        	
+            and	r_capitolo_ordinativo.data_cancellazione	is null
+            and	ordinativo.data_cancellazione				is null
+            AND	tipo_ordinativo.data_cancellazione			is null
+            and	r_stato_ordinativo.data_cancellazione		is null
+            AND	stato_ordinativo.data_cancellazione			is null
+            AND ordinativo_det.data_cancellazione			is null
+            aND ordinativo_imp.data_cancellazione			is null
+            and ordinativo_imp_tipo.data_cancellazione		is null
+            and	movimento.data_cancellazione				is null
+            and	ts_movimento.data_cancellazione				is null
+            and	r_ordinativo_movgest.data_cancellazione		is null
+            and now() between r_capitolo_ordinativo.validita_inizio 
+                and COALESCE(r_capitolo_ordinativo.validita_fine,now())
+            and now() between r_stato_ordinativo.validita_inizio 
+                and COALESCE(r_stato_ordinativo.validita_fine,now())
+            and now() between r_ordinativo_movgest.validita_inizio
+             and COALESCE(r_ordinativo_movgest.validita_fine,now())  
+         group by r_capitolo_ordinativo.elem_id),
+	residui_attivi_RS AS(    
+      select capitolo.elem_id, 
+                sum (dt_movimento.movgest_ts_det_importo) imp_residui_attivi_RS
+            from 
+              siac_t_bil      bilancio, 
+              siac_t_periodo     anno_eserc, 
+              siac_t_bil_elem     capitolo , 
+              siac_r_movgest_bil_elem   r_mov_capitolo, 
+              siac_d_bil_elem_tipo    t_capitolo, 
+              siac_t_movgest     movimento, 
+              siac_d_movgest_tipo    tipo_mov, 
+              siac_t_movgest_ts    ts_movimento, 
+              siac_r_movgest_ts_stato   r_movimento_stato, 
+              siac_d_movgest_stato    tipo_stato, 
+              siac_t_movgest_ts_det   dt_movimento, 
+              siac_d_movgest_ts_tipo   ts_mov_tipo, 
+              siac_d_movgest_ts_det_tipo  dt_mov_tipo 
+              where bilancio.periodo_id    		 	= 	anno_eserc.periodo_id 
+              and bilancio.bil_id      				=	capitolo.bil_id
+              and capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
+              and movimento.bil_id					=	bilancio.bil_id
+              and r_mov_capitolo.elem_id    		=	capitolo.elem_id
+              and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
+              and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
+              and movimento.movgest_id      		= 	ts_movimento.movgest_id 
+              and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
+              and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
+              and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
+              and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
+              and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id
+              and anno_eserc.ente_proprietario_id   = p_ente_prop_id 
+              and anno_eserc.anno       			=   p_anno
+              and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+              and movimento.movgest_anno  	< 	p_anno::integer
+              and tipo_mov.movgest_tipo_code    	= 'A'
+              and tipo_stato.movgest_stato_code   in ('D','N')       
+              and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
+              and dt_mov_tipo.movgest_ts_det_tipo_code = 'I'-- 'A' 
+              and now() between r_mov_capitolo.validita_inizio 
+                and COALESCE(r_mov_capitolo.validita_fine,now())
+              and now() between r_movimento_stato.validita_inizio 
+                and COALESCE(r_movimento_stato.validita_fine,now())
+              and anno_eserc.data_cancellazione    	is null 
+              and bilancio.data_cancellazione     	is null 
+              and capitolo.data_cancellazione     	is null 
+              and r_mov_capitolo.data_cancellazione is null 
+              and t_capitolo.data_cancellazione    	is null 
+              and movimento.data_cancellazione     	is null 
+              and tipo_mov.data_cancellazione     	is null 
+              and r_movimento_stato.data_cancellazione   is null 
+              and ts_movimento.data_cancellazione   is null 
+              and tipo_stato.data_cancellazione    	is null 
+              and dt_movimento.data_cancellazione   is null 
+              and ts_mov_tipo.data_cancellazione    is null 
+              and dt_mov_tipo.data_cancellazione    is null              
+			group by capitolo.elem_id),
+  riscossioni_residui_RR as (  	
+      select 		r_capitolo_ordinativo.elem_id,
+                      sum(ordinativo_imp.ord_ts_det_importo) imp_riscossioni_residui_RR
+      from 		siac_r_ordinativo_bil_elem		r_capitolo_ordinativo,
+                  siac_t_ordinativo				ordinativo,
+                  siac_d_ordinativo_tipo			tipo_ordinativo,
+                  siac_r_ordinativo_stato			r_stato_ordinativo,
+                  siac_d_ordinativo_stato			stato_ordinativo,
+                  siac_t_ordinativo_ts 			ordinativo_det,
+                  siac_t_ordinativo_ts_det 		ordinativo_imp,
+                  siac_d_ordinativo_ts_det_tipo 	ordinativo_imp_tipo,
+                  siac_t_movgest     				movimento,
+                  siac_t_movgest_ts    			ts_movimento, 
+                  siac_r_ordinativo_ts_movgest_ts	r_ordinativo_movgest
+          where r_capitolo_ordinativo.ord_id		=	ordinativo.ord_id
+              and	ordinativo.ord_tipo_id				=	tipo_ordinativo.ord_tipo_id
+              and	ordinativo.ord_id					=	r_stato_ordinativo.ord_id
+              and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id        												    	        
+              and	ordinativo.ord_id					=	ordinativo_det.ord_id
+              and	ordinativo_det.ord_ts_id			=	ordinativo_imp.ord_ts_id
+              and	ordinativo_imp.ord_ts_det_tipo_id	=	ordinativo_imp_tipo.ord_ts_det_tipo_id
+              and	r_ordinativo_movgest.ord_ts_id		=	ordinativo_det.ord_ts_id
+              and	r_ordinativo_movgest.movgest_ts_id	=	ts_movimento.movgest_ts_id
+              and	ts_movimento.movgest_id				=	movimento.movgest_id
+              and movimento.bil_id					=	ordinativo.bil_id	
+              and	ordinativo.ente_proprietario_id	=	p_ente_prop_id
+              and	ordinativo.bil_id					=	bilancio_id
+              and	tipo_ordinativo.ord_tipo_code		= 	'I'		------ incasso
+              and	stato_ordinativo.ord_stato_code			<> 'A' 
+              and	ordinativo_imp_tipo.ord_ts_det_tipo_code	=	'A' -- importo attuala
+              and	movimento.movgest_anno				<	p_anno::integer	
+              and	r_capitolo_ordinativo.data_cancellazione	is null
+              and	ordinativo.data_cancellazione				is null
+              AND	tipo_ordinativo.data_cancellazione			is null
+              and	r_stato_ordinativo.data_cancellazione		is null
+              AND	stato_ordinativo.data_cancellazione			is null
+              AND ordinativo_det.data_cancellazione			is null
+              aND ordinativo_imp.data_cancellazione			is null
+              and ordinativo_imp_tipo.data_cancellazione		is null
+              and	movimento.data_cancellazione				is null
+              and	ts_movimento.data_cancellazione				is null
+              and	r_ordinativo_movgest.data_cancellazione		is null    
+              and now() between r_capitolo_ordinativo.validita_inizio 
+                  and COALESCE(r_capitolo_ordinativo.validita_fine,now())
+              and now()
+                  between r_stato_ordinativo.validita_inizio 
+                      and COALESCE(r_stato_ordinativo.validita_fine,now())
+              and now()
+                  between r_ordinativo_movgest.validita_inizio 
+                      and COALESCE(r_ordinativo_movgest.validita_fine,now())
+              group by r_capitolo_ordinativo.elem_id),
+ riaccertamenti_residui_R as (       	
+      select capitolo.elem_id,
+         sum (t_movgest_ts_det_mod.movgest_ts_det_importo) imp_riaccertamenti_residui_R
+          from siac_t_bil_elem     capitolo , 
+            siac_r_movgest_bil_elem   r_mov_capitolo, 
+            siac_d_bil_elem_tipo    t_capitolo, 
+            siac_t_movgest     movimento, 
+            siac_d_movgest_tipo    tipo_mov, 
+            siac_t_movgest_ts    ts_movimento, 
+            siac_r_movgest_ts_stato   r_movimento_stato, 
+            siac_d_movgest_stato    tipo_stato, 
+            siac_t_movgest_ts_det   dt_movimento, 
+            siac_d_movgest_ts_tipo   ts_mov_tipo, 
+            siac_d_movgest_ts_det_tipo  dt_mov_tipo ,
+            siac_t_modifica t_modifica,          
+            siac_r_modifica_stato r_mod_stato,
+            siac_d_modifica_stato d_mod_stato,
+            siac_t_movgest_ts_det_mod t_movgest_ts_det_mod
+            where capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
+            and movimento.bil_id					=	capitolo.bil_id
+            and r_mov_capitolo.elem_id    		=	capitolo.elem_id
+            and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
+            and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id 
+            and movimento.movgest_id      		= 	ts_movimento.movgest_id 
+            and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
+            and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id 
+            and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id 
+            and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
+            and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
+            and t_movgest_ts_det_mod.movgest_ts_id=ts_movimento.movgest_ts_id      
+            and t_movgest_ts_det_mod.mod_stato_r_id=r_mod_stato.mod_stato_r_id
+            and d_mod_stato.mod_stato_id=r_mod_stato.mod_stato_id 
+            and r_mod_stato.mod_id=t_modifica.mod_id  
+            and capitolo.ente_proprietario_id   = p_ente_prop_id
+            and capitolo.bil_id					= bilancio_id      
+            and t_capitolo.elem_tipo_code    	= 	'CAP-EG'
+            and movimento.movgest_anno  	< 	p_anno::integer
+            and tipo_mov.movgest_tipo_code    	= 'A' --Accertamenti 
+            and tipo_stato.movgest_stato_code   in ('D','N') ------ P,A,N 
+            and ts_mov_tipo.movgest_ts_tipo_code  = 'T'
+            and dt_mov_tipo.movgest_ts_det_tipo_code = 'A' -- importo attuale 
+            and d_mod_stato.mod_stato_code='V'           	
+            and now() 
+              between r_mov_capitolo.validita_inizio and COALESCE(r_mov_capitolo.validita_fine,now())
+            and now() 
+              between r_movimento_stato.validita_inizio and COALESCE(r_movimento_stato.validita_fine,now())
+            and now()
+              between r_mod_stato.validita_inizio and COALESCE(r_mod_stato.validita_fine,now())
+            and capitolo.data_cancellazione     	is null 
+            and r_mov_capitolo.data_cancellazione is null 
+            and t_capitolo.data_cancellazione    	is null 
+            and movimento.data_cancellazione     	is null 
+            and tipo_mov.data_cancellazione     	is null 
+            and r_movimento_stato.data_cancellazione   is null 
+            and ts_movimento.data_cancellazione   is null 
+            and tipo_stato.data_cancellazione    	is null 
+            and dt_movimento.data_cancellazione   is null 
+            and ts_mov_tipo.data_cancellazione    is null 
+            and dt_mov_tipo.data_cancellazione    is null
+            and t_movgest_ts_det_mod.data_cancellazione    is null
+            and r_mod_stato.data_cancellazione    is null
+            and t_modifica.data_cancellazione    is null      
+      group by capitolo.elem_id )       
 select 
 cap.elem_id bil_ele_id,
 cap.elem_code bil_ele_code,
@@ -600,9 +1054,16 @@ cap.elem_id_padre bil_ele_id_padre,
 cap.elem_code3 bil_ele_code3,
 cap.classif_id categoria_id,
 coalesce(resatt1.residui_accertamenti,0) residui_attivi,
+--SIAC-8154 07/10/2021.
+--i residui dell'anno precedente devono essere presi dalla tabella
+--dell'fcde.
+/*
 (coalesce(resatt1.residui_accertamenti,0) -
-coalesce(resrisc1.importo_residui,0) +
-coalesce(resriacc.riaccertamenti_residui,0)) residui_attivi_prec,
+	coalesce(resrisc1.importo_residui,0) +
+	coalesce(resriacc.riaccertamenti_residui,0)) residui_attivi_prec,*/
+(+COALESCE(cap.acc_fde_denominatore,0)+
+COALESCE(cap.acc_fde_denominatore_1,0)+COALESCE(cap.acc_fde_denominatore_2,0)+
+COALESCE(cap.acc_fde_denominatore_3,0)+COALESCE(cap.acc_fde_denominatore_4,0))residui_attivi_prec,           
 coalesce(minfondo.perc_media,0) perc_media,
 -- minfondo.flag_cassa, -- SIAC-5854
 coalesce(minfondo.flag_fondo,0) flag_fondo, -- SIAC-5854
@@ -611,27 +1072,58 @@ coalesce(acc_succ.accertamenti_succ,0) accertamenti_succ,
 coalesce(cred_stra.crediti_stralciati,0) crediti_stralciati,
 coalesce(resrisc2.importo_residui,0) residui_competenza,
 coalesce(resatt2.residui_accertamenti,0) accertamenti,
-(coalesce(resatt2.residui_accertamenti,0) -
- coalesce(resrisc2.importo_residui,0)) importo_finale
+--(coalesce(resatt2.residui_accertamenti,0) -
+-- coalesce(resrisc2.importo_residui,0)) importo_finale
+coalesce(stanz_residuo_capitolo.importo_residui_acc,0) importo_residui_acc,
+coalesce(riscossioni_competenza.risc_competenza,0) risc_competenza,
+COALESCE(stanz_residuo_capitolo_mod.importo_residui_mod,0) importo_residui_mod,
+cap.perc_media_applicata,
+cap.elem_id_fcde,
+  --23/08/2022 SIAC-8788.
+  -- per il calcolo della colonna E leggo il dato salvato su DB.
+cap.acc_fde_accantonamento_anno,
+COALESCE(accertamenti_A.imp_accertamenti_A,0) imp_accertamenti_A,
+COALESCE(risc_conto_comp_RC.imp_risc_conto_comp_RC,0) imp_risc_conto_comp_RC,
+COALESCE(residui_attivi_RS.imp_residui_attivi_RS,0) imp_residui_attivi_RS,
+COALESCE(riscossioni_residui_RR.imp_riscossioni_residui_RR,0) imp_riscossioni_residui_RR,
+COALESCE(riaccertamenti_residui_R.imp_riaccertamenti_residui_R,0) imp_riaccertamenti_residui_R
 from cap
 left join resatt resatt1
-on cap.elem_id=resatt1.elem_id and resatt1.tipo_importo = 'RESATT'
+	on cap.elem_id=resatt1.elem_id and resatt1.tipo_importo = 'RESATT'
 left join resatt resatt2
-on cap.elem_id=resatt2.elem_id and resatt2.tipo_importo = 'ACCERT'
+	on cap.elem_id=resatt2.elem_id and resatt2.tipo_importo = 'ACCERT'
 left join resrisc resrisc1
-on cap.elem_id=resrisc1.elem_id and resrisc1.tipo_importo = 'RISRES'
+	on cap.elem_id=resrisc1.elem_id and resrisc1.tipo_importo = 'RISRES'
 left join resrisc resrisc2
-on cap.elem_id=resrisc2.elem_id and resrisc2.tipo_importo = 'RISCOMP'
+	on cap.elem_id=resrisc2.elem_id and resrisc2.tipo_importo = 'RISCOMP'
 left join resriacc
-on cap.elem_id=resriacc.elem_id
+	on cap.elem_id=resriacc.elem_id
 left join minfondo
-on cap.elem_id=minfondo.elem_id
+	on cap.elem_id=minfondo.elem_id
 left join accertcassa
-on cap.elem_id=accertcassa.elem_id
+	on cap.elem_id=accertcassa.elem_id
 left join acc_succ
-on cap.elem_id=acc_succ.elem_id
+	on cap.elem_id=acc_succ.elem_id
 left join cred_stra
-on cap.elem_id=cred_stra.elem_id
+	on cap.elem_id=cred_stra.elem_id
+left join stanz_residuo_capitolo
+	on cap.elem_id=stanz_residuo_capitolo.elem_id
+left join stanz_residuo_capitolo_mod
+	on cap.elem_id=stanz_residuo_capitolo_mod.elem_id
+left join riscossioni_competenza
+	on cap.elem_id=riscossioni_competenza.elem_id  
+--SIAC-8707 30/05/2022. 
+--Aggiunti i join.      
+left join accertamenti_A 
+	on cap.elem_id=accertamenti_A.elem_id    
+left join risc_conto_comp_RC 
+	on cap.elem_id=risc_conto_comp_RC.elem_id  
+left join residui_attivi_RS 
+	on cap.elem_id=residui_attivi_RS.elem_id        
+left join riscossioni_residui_RR 
+	on cap.elem_id=riscossioni_residui_RR.elem_id   
+left join riaccertamenti_residui_R 
+	on cap.elem_id=riaccertamenti_residui_R.elem_id                            
 ),
 fondo_dubbia_esig as (
 select  importi.repimp_desc programma_code,
@@ -642,21 +1134,26 @@ from 	siac_t_report					report,
 		siac_t_bil 						bilancio,
 	 	siac_t_periodo 					anno_eserc,
         siac_t_periodo 					anno_comp
-where 	report.rep_codice				=	'BILR148'   				
-and     report.ente_proprietario_id		=	p_ente_prop_id				
-and		anno_eserc.anno					=	p_anno 						
-and     bilancio.periodo_id				=	anno_eserc.periodo_id 		
+where   bilancio.periodo_id				=	anno_eserc.periodo_id 		
 and     importi.bil_id					=	bilancio.bil_id 			
 and     r_report_importi.rep_id			=	report.rep_id				
 and     r_report_importi.repimp_id		=	importi.repimp_id			
 and     importi.periodo_id 				=	anno_comp.periodo_id
+   				
+and     report.ente_proprietario_id		=	p_ente_prop_id				
+and		anno_eserc.anno					=	p_anno 						
+and 	report.rep_codice				=	'BILR148'
+  --24/05/2021 SIAC-8212.
+  --Cambiato il codice che identifica le variabili per aggiungere una nota utile
+  --all'utente per la compilazione degli importi.
+  --and     importi.repimp_codice = 'Colonna E Allegato c) FCDE Rendiconto'
+and 	importi.repimp_codice like 'Colonna E Allegato c) FCDE Rendiconto%'
 and     report.data_cancellazione is null
 and     importi.data_cancellazione is null
 and     r_report_importi.data_cancellazione is null
 and     anno_eserc.data_cancellazione is null
 and     anno_comp.data_cancellazione is null
 and     importi.repimp_desc <> ''
-and     importi.repimp_codice = 'Colonna E Allegato c) FCDE Rendiconto'
 )
 select 
 p_anno::varchar bil_anno,
@@ -678,13 +1175,36 @@ capall.bil_ele_code2::varchar,
 capall.bil_ele_desc2::varchar,
 capall.bil_ele_id::integer,
 capall.bil_ele_id_padre::integer,
-COALESCE(capall.importo_finale::numeric,0) residui_attivi,
-COALESCE(capall.residui_attivi_prec::numeric,0) residui_attivi_prec,
-COALESCE(capall.importo_finale::numeric + capall.residui_attivi_prec::numeric,0) totale_residui_attivi,
+--COALESCE(capall.importo_residui::numeric,0) + 
+--	COALESCE(capall.importo_residui_mod::numeric,0) residui_attivi,
+--COALESCE(capall.importo_residui::numeric,0) -     
+--	COALESCE(capall.risc_competenza::numeric,0) residui_attivi,   
+--SIAC-8707 30/05/2022. 
+--Cambia il calcolo dei residui attivi
+--COALESCE(capall.residui_attivi,0) residui_attivi,
+(COALESCE(capall.imp_accertamenti_A, 0)  -
+	COALESCE(capall.imp_risc_conto_comp_RC, 0))::numeric residui_attivi,
+--SIAC-8707 30/05/2022. 
+--Cambia il calcolo dei residui attivi anno precedente    
+--COALESCE(capall.residui_attivi_prec::numeric,0) residui_attivi_prec,
+(COALESCE(capall.imp_residui_attivi_RS, 0) -
+ COALESCE(capall.imp_riscossioni_residui_RR, 0) +
+ COALESCE(capall.imp_riaccertamenti_residui_R, 0)) residui_attivi_prec,
+--SIAC-8707 30/05/2022. 
+--Cambia il calcolo dei residui attivi totali
+--COALESCE(capall.importo_residui_acc::numeric + capall.importo_residui_mod +
+ --capall.residui_attivi_prec::numeric,0) totale_residui_attivi,
+(COALESCE(capall.imp_accertamenti_A, 0)  -
+	COALESCE(capall.imp_risc_conto_comp_RC, 0)) +
+(COALESCE(capall.imp_residui_attivi_RS, 0) -
+ COALESCE(capall.imp_riscossioni_residui_RR, 0) +
+ COALESCE(capall.imp_riaccertamenti_residui_R, 0))totale_residui_attivi,     
 CASE
  --WHEN perc_media::numeric <> 0 THEN
  WHEN capall.flag_cassa::numeric = 1 AND capall.flag_fondo::numeric = 1 THEN
-  COALESCE(round((capall.importo_finale::numeric + capall.residui_attivi_prec::numeric) * (1 - perc_media::numeric/100),2),0)
+  COALESCE(round((capall.importo_residui_acc::numeric + 
+  capall.importo_residui_mod::numeric +
+  capall.residui_attivi_prec::numeric) * (1 - perc_media::numeric/100),2),0)
  ELSE
  0
 END 
@@ -694,10 +1214,29 @@ capall.bil_ele_code3::varchar,
 COALESCE(capall.flag_cassa::integer,1) flag_cassa, -- SAIC-5854       
 COALESCE(capall.accertamenti_succ::numeric,0) accertamenti_succ,
 COALESCE(capall.crediti_stralciati::numeric,0) crediti_stralciati,
-imp_fondo_dubbia_esig
+imp_fondo_dubbia_esig,
+var_afde_bil_crediti_stralciati,
+var_afde_bil_crediti_stralciati_fcde,
+var_afde_bil_accertamenti_anni_successivi,
+var_afde_bil_accertamenti_anni_successivi_fcde,
+--SIAC-8575 28/01/2022.
+--la colonna E FCDE e' calcolata solo per i capitoli coinvolti nell'FCDE.
+--23/08/2022 SIAC-8788.
+-- per il calcolo della colonna E leggo il dato salvato su DB.
+--Non serve piu' testare capall.elem_id_fcde is not null perche' il valore
+--acc_fde_accantonamento_anno esiste solo per i capitoli FCDE. 
+--Bisogna fare il round per non avere dei problemi con i decimali in Excel.
+--case when capall.elem_id_fcde is not null then
+/*  (COALESCE(capall.importo_residui_acc::numeric,0) + 
+      COALESCE(capall.importo_residui_mod::numeric,0)) * 
+      (100 - capall.perc_media_applicata) / 100 
+else 0 end colonna_e,*/
+	round(COALESCE(capall.acc_fde_accantonamento_anno,0), 2) colonna_e  ,        
+--else 0 end colonna_e, 
+capall.perc_media_applicata perc_media_app
 from clas 
-left join capall on clas.categoria_id = capall.categoria_id  
-left join fondo_dubbia_esig on fondo_dubbia_esig.programma_code = clas.tipologia_code   
+	left join capall on clas.categoria_id = capall.categoria_id  
+	left join fondo_dubbia_esig on fondo_dubbia_esig.programma_code = clas.tipologia_code   
 ) as zz;
 
 /*raise notice 'query: %',queryfin;
@@ -716,4 +1255,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR148_Allegato_C_Fondo_Crediti_Dubbia_esigibilita_cons" (p_ente_prop_id integer, p_anno varchar)
+  OWNER TO siac;

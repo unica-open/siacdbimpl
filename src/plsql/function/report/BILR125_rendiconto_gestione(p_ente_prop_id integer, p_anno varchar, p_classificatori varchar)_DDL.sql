@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR125_rendiconto_gestione" (
@@ -62,6 +62,15 @@ v_importo_anno_prec NUMERIC;
 
 BEGIN
 
+/*
+Valori parametro p_classificatori:
+
+- 1 - Conto Economico; BILR125;
+- 2 - Stato Patrimoniale - Attivo; BILR128;
+- 3 - Stato Patrimoniale - Passivo; BILR129;
+
+*/
+
 anno_prec := (p_anno::INTEGER-1)::VARCHAR;
 
 RTN_MESSAGGIO:='acquisizione user_table ''.';
@@ -113,7 +122,11 @@ v_anno_prec := p_anno::INTEGER-1;
 
 IF p_classificatori = '2' THEN
 
-WITH Importipn AS (
+--16/05/2023 siac-task-issue #99
+--La seguente query estraeva i dati sia dell'anno corrente che di quello precedente.
+--E' stata spezzata in 2 query, una per l'anno corrente l'altra per l'anno precedente per permettere la corretta gestione
+--della validita' della relazione tra conto economico e la relativa classificazione (siac_r_pdce_conto_class).
+WITH Importipn AS ( --Anno corrente
  SELECT 
         Importipn.pdce_conto_id,
         Importipn.anno,
@@ -165,7 +178,8 @@ WITH Importipn AS (
     AND    pdce_fam_tree.pdce_fam_id=pdce_fam.pdce_fam_id
     AND    causale_ep.causale_ep_id=mov_ep.causale_ep_id
     AND prima_nota.ente_proprietario_id=p_ente_prop_id  
-    AND anno_eserc.anno IN (p_anno,v_anno_prec)
+    --16/05/2023 siac-task-issue #99: solo anno corrente.
+    AND anno_eserc.anno IN (p_anno)--,v_anno_prec)
     AND pdce_conto.pdce_conto_id IN (select a.pdce_conto_id
                                      from  siac_r_pdce_conto_attr a, siac_t_attr c
                                      where a.attr_id = c.attr_id
@@ -173,7 +187,10 @@ WITH Importipn AS (
                                      and   a."boolean" = 'S'
                                      and   a.ente_proprietario_id = p_ente_prop_id)
     AND pnota_stato.pnota_stato_code='D'
-    AND pdce_fam.pdce_fam_code IN ('PP','OP')
+    --SIAC-8578 19/01/2022 i conti PP di ottavo livello devono essere esclusi.
+    --AND pdce_fam.pdce_fam_code IN ('PP','OP')
+    AND (pdce_fam.pdce_fam_code IN ('PP','OP') and 
+    	pdce_conto.livello <> 8)
     AND bilancio.data_cancellazione is NULL
     AND anno_eserc.data_cancellazione is NULL
     AND prima_nota.data_cancellazione is NULL
@@ -237,7 +254,8 @@ WITH Importipn AS (
     AND   a.ente_proprietario_id = t1.ente_proprietario_id
     AND   t1.data_cancellazione is null
     AND   ti1.data_cancellazione is null
-    AND   a.data_cancellazione is null
+    --16/05/2023 siac-task-issue #99: verifico solo la validita' e non la cancellazione.
+   -- AND   a.data_cancellazione is null
     AND   v_anno_int BETWEEN date_part('year',t1.validita_inizio) AND date_part('year',COALESCE(t1.validita_fine,now())) --SIAC-5487
     AND   v_anno_int BETWEEN date_part('year',a.validita_inizio) AND date_part('year',COALESCE(a.validita_fine,now())) -- SIAC-6156
     )
@@ -253,6 +271,150 @@ WITH Importipn AS (
     INNER JOIN codifica_bilancio ON Importipn.pdce_conto_id = codifica_bilancio.pdce_conto_id
     GROUP BY Importipn.anno, codifica_bilancio.ordine ;
 
+WITH Importipn AS ( --anno precedente.
+ SELECT 
+        Importipn.pdce_conto_id,
+        Importipn.anno,
+        CASE
+            WHEN Importipn.movep_det_segno = 'Dare' THEN
+                 Importipn.movep_det_importo
+            ELSE
+                 0     
+        END  importo_dare,  
+        CASE
+            WHEN Importipn.movep_det_segno = 'Avere' THEN
+                 Importipn.movep_det_importo
+            ELSE
+                 0     
+        END  importo_avere               
+  FROM (   
+   SELECT  anno_eserc.anno,
+            CASE 
+              WHEN pdce_conto.livello = 8 THEN
+                   (select a.pdce_conto_id_padre
+                   from   siac_t_pdce_conto a
+                   where  a.pdce_conto_id = pdce_conto.pdce_conto_id
+                   and    a.data_cancellazione is null)
+              ELSE
+               pdce_conto.pdce_conto_id
+            END pdce_conto_id,                    
+            mov_ep_det.movep_det_segno, 
+            mov_ep_det.movep_det_importo
+    FROM   siac_t_periodo	 		anno_eserc,	
+           siac_t_bil	 			bilancio,
+           siac_t_prima_nota        prima_nota,
+           siac_t_mov_ep_det	    mov_ep_det,
+           siac_r_prima_nota_stato  r_pnota_stato,
+           siac_d_prima_nota_stato  pnota_stato,
+           siac_t_pdce_conto	    pdce_conto,
+           siac_t_pdce_fam_tree     pdce_fam_tree,
+           siac_d_pdce_fam          pdce_fam,
+           siac_t_causale_ep	    causale_ep,
+           siac_t_mov_ep		    mov_ep
+    WHERE  bilancio.periodo_id=anno_eserc.periodo_id	
+    AND    prima_nota.bil_id=bilancio.bil_id
+    AND    prima_nota.ente_proprietario_id=anno_eserc.ente_proprietario_id
+    AND    prima_nota.pnota_id=mov_ep.regep_id
+    AND    mov_ep.movep_id=mov_ep_det.movep_id
+    AND    r_pnota_stato.pnota_id=prima_nota.pnota_id
+    AND    pnota_stato.pnota_stato_id=r_pnota_stato.pnota_stato_id
+    AND    pdce_conto.pdce_conto_id=mov_ep_det.pdce_conto_id
+    AND    pdce_conto.pdce_fam_tree_id=pdce_fam_tree.pdce_fam_tree_id
+    AND    pdce_fam_tree.pdce_fam_id=pdce_fam.pdce_fam_id
+    AND    causale_ep.causale_ep_id=mov_ep.causale_ep_id
+    AND prima_nota.ente_proprietario_id=p_ente_prop_id  
+    --16/05/2023 siac-task-issue #99: solo anno precedente.
+    AND anno_eserc.anno IN (v_anno_prec) 
+    AND pdce_conto.pdce_conto_id IN (select a.pdce_conto_id
+                                     from  siac_r_pdce_conto_attr a, siac_t_attr c
+                                     where a.attr_id = c.attr_id
+                                     and   c.attr_code = 'pdce_conto_segno_negativo'
+                                     and   a."boolean" = 'S'
+                                     and   a.ente_proprietario_id = p_ente_prop_id)
+    AND pnota_stato.pnota_stato_code='D'
+    --SIAC-8578 19/01/2022 i conti PP di ottavo livello devono essere esclusi.
+    --AND pdce_fam.pdce_fam_code IN ('PP','OP')
+    AND (pdce_fam.pdce_fam_code IN ('PP','OP') and 
+    	pdce_conto.livello <> 8)
+    AND bilancio.data_cancellazione is NULL
+    AND anno_eserc.data_cancellazione is NULL
+    AND prima_nota.data_cancellazione is NULL
+    AND mov_ep.data_cancellazione is NULL
+    AND mov_ep_det.data_cancellazione is NULL
+    AND r_pnota_stato.data_cancellazione is NULL
+    AND pnota_stato.data_cancellazione is NULL
+    AND pdce_conto.data_cancellazione is NULL
+    AND pdce_fam_tree.data_cancellazione is NULL
+    AND pdce_fam.data_cancellazione is NULL
+    AND causale_ep.data_cancellazione is NULL
+    ) Importipn
+    ),
+    codifica_bilancio as (
+    SELECT a.pdce_conto_id, tb.ordine
+    FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
+        classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, level, arrhierarchy) AS (
+        SELECT rt1.classif_classif_fam_tree_id,
+                                rt1.classif_fam_tree_id, rt1.classif_id,
+                                rt1.classif_id_padre, rt1.ente_proprietario_id,
+                                rt1.ordine, rt1.livello, 1,
+                                ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
+        FROM siac_r_class_fam_tree rt1, siac_t_class_fam_tree tt1,  siac_d_class_fam cf
+        WHERE cf.classif_fam_id = tt1.classif_fam_id 
+        AND   tt1.classif_fam_tree_id = rt1.classif_fam_tree_id 
+        AND   rt1.classif_id_padre IS NULL 
+        AND   cf.classif_fam_code::text = '00021'::text 
+        AND   tt1.ente_proprietario_id = rt1.ente_proprietario_id 
+        AND   rt1.data_cancellazione is null
+        AND   tt1.data_cancellazione is null
+        AND   cf.data_cancellazione is null
+        --AND   date_trunc('day'::text, now()) > rt1.validita_inizio 
+        --AND  (date_trunc('day'::text, now()) < rt1.validita_fine OR tt1.validita_fine IS NULL)
+        AND   cf.ente_proprietario_id = p_ente_prop_id
+        UNION ALL
+        SELECT tn.classif_classif_fam_tree_id,
+                                tn.classif_fam_tree_id, tn.classif_id,
+                                tn.classif_id_padre, tn.ente_proprietario_id,
+                                tn.ordine, tn.livello, tp.level + 1,
+                                tp.arrhierarchy || tn.classif_id
+        FROM rqname tp, siac_r_class_fam_tree tn
+        WHERE tp.classif_id = tn.classif_id_padre 
+        AND tn.ente_proprietario_id = tp.ente_proprietario_id
+        AND tn.ente_proprietario_id = p_ente_prop_id
+        AND  tn.data_cancellazione is null
+        )
+        SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
+                rqname.classif_id, rqname.classif_id_padre,
+                rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
+                rqname.level
+        FROM rqname
+        ORDER BY rqname.arrhierarchy
+        ) tb, siac_t_class t1,
+        siac_d_class_tipo ti1,
+        siac_r_pdce_conto_class a
+    WHERE t1.classif_id = tb.classif_id 
+    AND   ti1.classif_tipo_id = t1.classif_tipo_id 
+    AND   t1.ente_proprietario_id = tb.ente_proprietario_id 
+    AND   ti1.ente_proprietario_id = t1.ente_proprietario_id
+    AND   a.classif_id = t1.classif_id
+    AND   a.ente_proprietario_id = t1.ente_proprietario_id
+    AND   t1.data_cancellazione is null
+    AND   ti1.data_cancellazione is null
+    --16/05/2023 siac-task-issue #99: verifico solo la validita' e non la cancellazione.
+    --AND   a.data_cancellazione is null
+    AND   v_anno_prec_int BETWEEN date_part('year',t1.validita_inizio) AND date_part('year',COALESCE(t1.validita_fine,now())) --SIAC-5487
+    AND   v_anno_prec_int BETWEEN date_part('year',a.validita_inizio) AND date_part('year',COALESCE(a.validita_fine,now())) -- SIAC-6156
+    )
+    INSERT INTO rep_bilr125_dati_stato_passivo
+    SELECT  
+    Importipn.anno,
+    codifica_bilancio.ordine,
+    SUM(Importipn.importo_dare) importo_dare,
+    SUM(Importipn.importo_avere) importo_avere,         
+    SUM(Importipn.importo_avere - Importipn.importo_dare) importo_passivo,
+    user_table
+    FROM Importipn 
+    INNER JOIN codifica_bilancio ON Importipn.pdce_conto_id = codifica_bilancio.pdce_conto_id
+    GROUP BY Importipn.anno, codifica_bilancio.ordine ;
 END IF;
 
 
@@ -506,7 +668,12 @@ LOOP
       AND    codice_codifica_albero_passivo = classifGestione.codice_codifica_albero
       AND    utente = user_table;
           
+      	raise notice 'Codifica: % - importo_passivo 2022 = % - importo passivo 2021 = % - albero = %', 
+        	classifGestione.descrizione_codifica, importo_dati_passivo, importo_dati_passivo_prec, classifGestione.codice_codifica_albero;
+
     END IF;
+    
+
     
     v_imp_dare := 0;
     v_imp_avere := 0;
@@ -517,8 +684,15 @@ LOOP
     v_pdce_fam_code := '';
     v_pdce_fam_code_prec := '';
 
+--18/01/2022 SIAC-8196, SIAC-8557 e SIAC-8578.
+--Se il conto e' passivo e se il livello e' 8 nel report BILR128 (SP Attivo)
+--devo considerare il conto PP come fosse attivo (AP).
     FOR pdce IN
-	SELECT d.pdce_fam_code, e.movep_det_segno, i.anno, SUM(COALESCE(e.movep_det_importo,0)) AS importo
+    SELECT case when p_classificatori ='2' and d.pdce_fam_code ='PP' and
+    		b.livello = 8
+    	then 'AP'
+        else d.pdce_fam_code end codice_pdce_fam_code,
+    e.movep_det_segno, i.anno, SUM(COALESCE(e.movep_det_importo,0)) AS importo
     FROM  siac_r_pdce_conto_class a
     INNER JOIN siac_t_pdce_conto b ON a.pdce_conto_id = b.pdce_conto_id
     INNER JOIN siac_t_pdce_fam_tree c ON b.pdce_fam_tree_id = c.pdce_fam_tree_id
@@ -554,7 +728,7 @@ LOOP
           )  
     AND  v_anno_int BETWEEN date_part('year',a.validita_inizio)::integer
     AND coalesce (date_part('year',a.validita_fine)::integer ,v_anno_int) 
-    GROUP BY d.pdce_fam_code, e.movep_det_segno, i.anno
+    GROUP BY codice_pdce_fam_code, e.movep_det_segno, i.anno
         
     LOOP
         
@@ -575,13 +749,13 @@ LOOP
       END IF;               
     
       IF pdce.anno = p_anno THEN
-         v_pdce_fam_code := pdce.pdce_fam_code;
+         v_pdce_fam_code := pdce.codice_pdce_fam_code;
       ELSE
-         v_pdce_fam_code_prec := pdce.pdce_fam_code;
+         v_pdce_fam_code_prec := pdce.codice_pdce_fam_code;
       END IF;    
         
     ELSIF p_classificatori = '2' THEN  
-      IF pdce.pdce_fam_code = 'AP' THEN 
+      IF pdce.codice_pdce_fam_code = 'AP' THEN 
       
         IF pdce.movep_det_segno = 'Dare' THEN
            IF pdce.anno = p_anno THEN
@@ -598,9 +772,9 @@ LOOP
         END IF;       
       
         IF pdce.anno = p_anno THEN
-           v_pdce_fam_code := pdce.pdce_fam_code;
+           v_pdce_fam_code := pdce.codice_pdce_fam_code;
         ELSE
-           v_pdce_fam_code_prec := pdce.pdce_fam_code;
+           v_pdce_fam_code_prec := pdce.codice_pdce_fam_code;
         END IF;      
       
       END IF;        
@@ -644,12 +818,21 @@ LOOP
     E' chiamata una copia della procedura passando in input l'anno 
     precedente.
     In questo modo si e' sicuri che i dati dell'anno precedente sono
-    uguali a quelli ottenuti nel report con input anno precente. */    
+    uguali a quelli ottenuti nel report con input anno precente. */ 
+    
+/* siac-task-issue #89 04/05/2023.
+  La ricerca deve essere effettuata per ID del classificare e non per codice/descrizione perche' ci sono classificatori
+  che hanno codice e descrizione identici ma padri differenti.       
     select a.importo_codice_bilancio
     into v_importo_anno_prec
     from "BILR125_rendiconto_gestione_anno_prec"(p_ente_prop_id, anno_prec, 
     	p_classificatori, classifGestione.codice_codifica,
-        classifGestione.descrizione_codifica) a;
+        classifGestione.descrizione_codifica) a; */
+select a.importo_codice_bilancio
+    into v_importo_anno_prec
+    from "BILR125_rendiconto_gestione_anno_prec"(p_ente_prop_id, anno_prec, 
+    	p_classificatori, classifGestione.codice_codifica,
+        classifGestione.descrizione_codifica, classifGestione.classif_id) a;        
   --  where a.codice_codifica = classifGestione.codice_codifica
    -- and a.descrizione_codifica = classifGestione.descrizione_codifica
    -- and a.tipo_codifica = classifGestione.tipo_codifica
@@ -658,8 +841,8 @@ LOOP
            
 	v_importo_prec:=v_importo_anno_prec;
         
-    raise notice 'codice_codifica = %, descr_codifica = %, importo_prec = %', 
-    	classifGestione.codice_codifica, classifGestione.descrizione_codifica,
+    raise notice 'codice_codifica = %, classif_id = % - descr_codifica = %, importo_prec = %', 
+    	classifGestione.codice_codifica, classifGestione.classif_id, classifGestione.descrizione_codifica,
         v_importo_anno_prec; 
         
     tipo_codifica := classifGestione.tipo_codifica;
@@ -739,4 +922,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR125_rendiconto_gestione" (p_ente_prop_id integer, p_anno varchar, p_classificatori varchar)
+  OWNER TO siac;

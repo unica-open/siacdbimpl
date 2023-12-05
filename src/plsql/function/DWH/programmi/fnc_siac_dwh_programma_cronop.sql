@@ -2,7 +2,14 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION fnc_siac_dwh_programma_cronop
+drop FUNCTION if exists siac.fnc_siac_dwh_programma_cronop
+(
+  p_ente_proprietario_id integer,
+  p_anno_bilancio varchar,
+  p_data timestamp
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_programma_cronop
 (
   p_ente_proprietario_id integer,
   p_anno_bilancio varchar,
@@ -176,7 +183,9 @@ if fnc_eseguita<= 0 then
       programma_cronop_descr_entrata,
       -- siac-7320 sofia 17.01.2020
       programma_cronop_stato_code,
-      programma_cronop_stato_desc
+      programma_cronop_stato_desc,
+      -- siac-8603 Sofia 26.05.2022
+      programma_cronop_note
     )
     select
       ente.ente_proprietario_id,
@@ -264,7 +273,9 @@ if fnc_eseguita<= 0 then
         else ''::varchar end) programma_cronop_descr_entrata,
       -- siac-7320 sofia 17.01.2020
       query.programma_cronop_stato_code,
-      query.programma_cronop_stato_desc
+      query.programma_cronop_stato_desc,
+      -- siac-8603 Sofia 26.05.2022
+      query.programma_cronop_note
     from
     (
     with
@@ -621,7 +632,19 @@ if fnc_eseguita<= 0 then
            from cronop_atto
                  left join cronop_atto_cdr on (cronop_atto.attoamm_id=cronop_atto_cdr.attoamm_id)
                  left join cronop_atto_cdc on (cronop_atto.attoamm_id=cronop_atto_cdc.attoamm_id)
-          )
+          ),
+          -- siac-8603 Sofia 26.05.2022
+          cronop_note_attr AS 
+          (
+          select rattr.cronop_id, rattr.testo programma_cronop_note
+          from siac_r_cronop_attr rattr,siac_t_attr attr 
+          where attr.ente_proprietario_id =p_ente_proprietario_id 
+          and   attr.attr_code='Note'
+          and   rattr.attr_id=attr.attr_id 
+          and   coalesce(rattr.testo ,'')!=''
+          and   rattr.data_cancellazione  is null 
+          and   rattr.validita_fine  is null 
+	      ) 
           select ce.programma_id,
                  ce.programma_cronop_bil_anno,
                  ce.programma_cronop_tipo,
@@ -660,11 +683,15 @@ if fnc_eseguita<= 0 then
                  cronop_atto_amm.cronop_code_cdc_atto_amm,
                  cronop_atto_amm.cronop_desc_cdc_atto_amm,
                  ce.programma_cronop_stato_code, -- 14.01.2020 Sofia SIAC-7320
-                 ce.programma_cronop_stato_desc  -- 14.01.2020 Sofia SIAC-7320
+                 ce.programma_cronop_stato_desc,  -- 14.01.2020 Sofia SIAC-7320,
+                 -- 26.05.2022 Sofia Jira SIAC-8603
+                 cronop_note_attr.programma_cronop_note
           from ce
                left join classif_bil on (ce.cronop_elem_id=classif_bil.cronop_elem_id)
                -- 29.04.2019 Sofia jira siac-6255
-               left join cronop_atto_amm on (ce.cronop_id=cronop_atto_amm.cronop_id)
+               left join cronop_atto_amm  on (ce.cronop_id=cronop_atto_amm.cronop_id)
+               -- 26.05.2022 Sofia SIAC-8603
+               left join cronop_note_attr on (ce.cronop_id=cronop_note_attr.cronop_id)
 
      ),
      cronop_uscita as
@@ -852,7 +879,19 @@ if fnc_eseguita<= 0 then
        from cronop_atto
              left join cronop_atto_cdr on (cronop_atto.attoamm_id=cronop_atto_cdr.attoamm_id)
              left join cronop_atto_cdc on (cronop_atto.attoamm_id=cronop_atto_cdc.attoamm_id)
-     )
+     ),
+     -- siac-8603 Sofia 26.05.2022
+     cronop_note_attr AS 
+     (
+          select rattr.cronop_id, rattr.testo programma_cronop_note
+          from siac_r_cronop_attr rattr,siac_t_attr attr 
+          where attr.ente_proprietario_id =p_ente_proprietario_id 
+          and   attr.attr_code='Note'
+          and   rattr.attr_id=attr.attr_id 
+          and   coalesce(rattr.testo ,'')!=''
+          and   rattr.data_cancellazione  is null 
+          and   rattr.validita_fine  is null 
+	 ) 
      select ce.programma_id,
             ce.programma_cronop_bil_anno,
             ce.programma_cronop_tipo,
@@ -893,11 +932,15 @@ if fnc_eseguita<= 0 then
             cronop_atto_amm.cronop_code_cdc_atto_amm,
             cronop_atto_amm.cronop_desc_cdc_atto_amm,
             ce.programma_cronop_stato_code, -- 14.01.2020 Sofia SIAC-7320
-            ce.programma_cronop_stato_desc -- 14.01.2020 Sofia SIAC-7320
+            ce.programma_cronop_stato_desc, -- 14.01.2020 Sofia SIAC-7320
+            -- 26.05.2022 Sofia Jira SIAC-8603
+            cronop_note_attr.programma_cronop_note
      from ce
           left join classif_bil on (ce.cronop_elem_id=classif_bil.cronop_elem_id)
           -- 29.04.2019 Sofia jira siac-6255
           left join cronop_atto_amm on ( ce.cronop_id=cronop_atto_amm.cronop_id)
+          -- 26.05.2022 Sofia SIAC-8603
+          left join cronop_note_attr on (ce.cronop_id=cronop_note_attr.cronop_id)
      )
      select cronop_entrata.programma_id,
      	    cronop_entrata.programma_cronop_bil_anno,
@@ -937,7 +980,9 @@ if fnc_eseguita<= 0 then
             cronop_entrata.cronop_code_cdc_atto_amm,
             cronop_entrata.cronop_desc_cdc_atto_amm,
             cronop_entrata.programma_cronop_stato_code, -- 14.01.2020 Sofia SIAC-7320
-            cronop_entrata.programma_cronop_stato_desc -- 14.01.2020 Sofia SIAC-7320
+            cronop_entrata.programma_cronop_stato_desc, -- 14.01.2020 Sofia SIAC-7320
+            -- 26.05.2022 Sofia Jira SIAC-8603
+            cronop_entrata.programma_cronop_note
      from cronop_entrata
      union
      select cronop_uscita.programma_id,
@@ -978,7 +1023,9 @@ if fnc_eseguita<= 0 then
             cronop_uscita.cronop_code_cdc_atto_amm,
             cronop_uscita.cronop_desc_cdc_atto_amm,
             cronop_uscita.programma_cronop_stato_code, -- 14.01.2020 Sofia SIAC-7320
-            cronop_uscita.programma_cronop_stato_desc -- 14.01.2020 Sofia SIAC-7320
+            cronop_uscita.programma_cronop_stato_desc, -- 14.01.2020 Sofia SIAC-7320
+            -- 26.05.2022 Sofia Jira SIAC-8603
+            cronop_uscita.programma_cronop_note
      from cronop_uscita
     )
     select programma.*,
@@ -1045,7 +1092,9 @@ if fnc_eseguita<= 0 then
            cronop_progr.cronop_code_cdc_atto_amm,
            cronop_progr.cronop_desc_cdc_atto_amm,
            cronop_progr.programma_cronop_stato_code, -- 14.01.2020 Sofia SIAC-7320
-           cronop_progr.programma_cronop_stato_desc -- 14.01.2020 Sofia SIAC-7320
+           cronop_progr.programma_cronop_stato_desc, -- 14.01.2020 Sofia SIAC-7320
+           -- 26.05.2022 Sofia Jira SIAC-8603
+           cronop_progr.programma_cronop_note
     from cronop_progr,
          programma
           left join progr_ambito_class           on (programma.programma_id=progr_ambito_class.programma_id)
@@ -1103,3 +1152,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
 COST 100;
+
+ALTER FUNCTION siac.fnc_siac_dwh_programma_cronop(integer,varchar,timestamp) OWNER TO siac;

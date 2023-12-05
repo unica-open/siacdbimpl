@@ -2,7 +2,9 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE VIEW siac.siac_v_dwh_mod_impegno
+
+drop VIEW if exists siac.siac_v_dwh_mod_impegno;
+CREATE OR REPLACE VIEW siac.siac_v_dwh_mod_impegno
 (
     bil_anno,
     anno_impegno,
@@ -26,6 +28,7 @@
     desc_stato_modifica,
     flag_reimputazione,
     anno_reimputazione,
+    elab_ror_reanno, -- 19.02.2020 Sofia jira siac-7292
     validita_inizio,
     data_creazione -- 30.08.2018 Sofia jira-6292
     )
@@ -50,7 +53,9 @@ WITH zz AS(
          h.attoamm_id,
          f.mod_stato_desc,
          a.mtdm_reimputazione_flag,
-         a.mtdm_reimputazione_anno,
+         -- 19.02.2021 Sofia SIAC-8056
+         (case when a.mtdm_reimputazione_flag=true then a.mtdm_reimputazione_anno else null end) mtdm_reimputazione_anno,
+         d.elab_ror_reanno, -- 19.02.2020 Sofia jira siac-7292
          d.validita_inizio,
          d.data_creazione -- 30.08.2018 Sofia jira-6292
   FROM siac_t_movgest_ts_det_mod a
@@ -127,7 +132,9 @@ WITH zz AS(
              zz.mod_stato_desc AS desc_stato_modifica,
              zz.mtdm_reimputazione_flag AS flag_reimputazione,
              zz.mtdm_reimputazione_anno AS anno_reimputazione,
+             zz.elab_ror_reanno, -- 19.02.2020 Sofia jira siac-7292
              zz.validita_inizio,
              zz.data_creazione -- 30.08.2018 Sofia jira-6292
       FROM zz
-           LEFT JOIN aa ON zz.attoamm_id = aa.attoamm_id; 
+           LEFT JOIN aa ON zz.attoamm_id = aa.attoamm_id;
+alter VIEW siac.siac_v_dwh_mod_impegno owner to siac;

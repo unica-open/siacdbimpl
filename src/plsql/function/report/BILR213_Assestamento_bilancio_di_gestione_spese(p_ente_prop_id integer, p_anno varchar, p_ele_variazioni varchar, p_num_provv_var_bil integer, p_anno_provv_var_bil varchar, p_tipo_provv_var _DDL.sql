@@ -78,6 +78,13 @@ cercaVariaz boolean;
 
 BEGIN
 
+/*  SIAC-7790 23/06/2021.
+	Questa funzione e' utilizzata senza alcuna modifica anche dal report BILR254
+    oltre che dal report BILR213.
+    Il report BILR254 come dati e' identico al BILR213 ma e' differente il layout
+    che e' piu' sintetico.
+*/
+
 annoCapImp:= p_anno; 
 annoCapImp1:= ((p_anno::INTEGER)+1)::VARCHAR;   
 annoCapImp2:= ((p_anno::INTEGER)+2)::VARCHAR; 

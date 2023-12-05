@@ -2,7 +2,8 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_pagopa_t_elaborazione_riconc (
+drop FUNCTION if exists siac.fnc_pagopa_t_elaborazione_riconc
+(
   enteproprietarioid integer,
   loginoperazione varchar,
   dataelaborazione timestamp,
@@ -10,9 +11,10 @@
   out outpagopaelabprecid integer,
   out codicerisultato integer,
   out messaggiorisultato varchar
-)
-RETURNS record AS
-$body$
+);
+CREATE OR REPLACE FUNCTION siac.fnc_pagopa_t_elaborazione_riconc(enteproprietarioid integer, loginoperazione character varying, dataelaborazione timestamp without time zone, OUT outpagopaelabid integer, OUT outpagopaelabprecid integer, OUT codicerisultato integer, OUT messaggiorisultato character varying)
+ RETURNS record
+ AS $body$
 DECLARE
 
 	strMessaggio VARCHAR(2500):=''; -- 09.10.2019 Sofia
@@ -43,8 +45,11 @@ DECLARE
 
 	ESERCIZIO_PROVVISORIO_ST CONSTANT  varchar :='E'; -- esercizio provvisorio
     ESERCIZIO_GESTIONE_ST    CONSTANT  varchar :='G'; -- esercizio gestione
+	-- 18.01.2021 Sofia jira SIAC-7962
+	ESERCIZIO_CONSUNTIVO_ST    CONSTANT  varchar :='O'; -- esercizio consuntivo
 
-
+	---- 28.10.2020 Sofia SIAC-7672
+    elabSvecchiaRec record;
 BEGIN
 
 	strMessaggioFinale:='Elaborazione PAGOPA.';
@@ -121,7 +126,10 @@ BEGIN
     and   bil.periodo_id=per.periodo_id
     and   r.bil_id=bil.bil_id
     and   fase.fase_operativa_id=r.fase_operativa_id
-    and   fase.fase_operativa_code in (ESERCIZIO_PROVVISORIO_ST,ESERCIZIO_GESTIONE_ST);
+     and   fase.fase_operativa_id=r.fase_operativa_id
+    -- 18.01.2021 Sofia jira SIAC-7962
+--    and   fase.fase_operativa_code in (ESERCIZIO_PROVVISORIO_ST,ESERCIZIO_GESTIONE_ST);
+    and   fase.fase_operativa_code in (ESERCIZIO_PROVVISORIO_ST,ESERCIZIO_GESTIONE_ST,ESERCIZIO_CONSUNTIVO_ST);
     if codResult is not null then
     	annoBilancio_ini:=annoBilancio-1;
     end if;
@@ -161,6 +169,47 @@ BEGIN
 
            return;
     end if;
+   
+   -- SIAC-8276 - inizio 
+   strMessaggio:='Verifica esistenza file duplicati.';
+   select count(*)  into codResult 
+   from siac_t_file_pagopa file,siac_d_file_pagopa_stato stato
+   where stato.ente_proprietario_id=enteProprietarioId
+   and   stato.file_pagopa_stato_code not in ( 'ANNULLATO','RIFIUTATO')
+   and   file.file_pagopa_stato_id=stato.file_pagopa_stato_id
+   and   file.file_pagopa_anno in (annoBilancio_ini,annoBilancio)
+   and file.data_cancellazione is null
+   group by file.file_pagopa_id_flusso
+   having count(*)>1;
+
+   if codResult is not null then
+           outPagoPaElabId:=-1;
+           outPagoPaElabPrecId:=-1;
+           messaggioRisultato:=upper(strMessaggioFinale||' File duplicati esistenti.');
+           codiceRisultato:=-1;
+           strMessaggioLog:='Uscita fnc_pagopa_t_elaborazione_riconc - '||messaggioRisultato;
+	       insert into pagopa_t_elaborazione_log
+           (
+     		pagopa_elab_id,
+		    pagopa_elab_log_operazione,
+		    ente_proprietario_id,
+		    login_operazione,
+            data_creazione
+	       )
+	       values
+	       (
+	        null,
+	        strMessaggioLog,
+	 	    enteProprietarioId,
+     	    loginOperazione,
+            clock_timestamp()
+    	   );
+
+           return;
+    end if;
+   
+   -- SIAC-8276 - fine
+   
 
    codResult:=null;
    strMessaggio:='Inizio elaborazioni anni.';
@@ -195,7 +244,7 @@ BEGIN
     order by 1
    )
    loop
-
+   -- codiceRisultato:=0;
     if annoRec.anno_elab>annoBilancio_ini then
     	filePagoPaElabPrecId:=filePagoPaElabId;
     end if;
@@ -219,7 +268,10 @@ BEGIN
      loginOperazione,
      clock_timestamp()
     );
-
+   
+   raise notice 'ERRORE ERRORE codiceRisultato=%',codiceRisultato::varchar;
+   raise notice 'ERRORE ERRORE annoRec.anno_elab=%',annoRec.anno_elab::varchar;
+   
     for  elabRec in
     (
       select pagopa.*
@@ -234,6 +286,8 @@ BEGIN
       order by pagopa.file_pagopa_id
     )
     loop
+    	raise notice 'ERRORE ERRORE elabRec.file_pagopa_id=%',elabRec.file_pagopa_id::varchar;
+       
        strMessaggio:='Elaborazione File PAGOPA ID='||elabRec.file_pagopa_id||' Identificativo='||coalesce(elabRec.file_pagopa_code,' ')
                       ||' annoBilancio='||annoRec.anno_elab::varchar||'.';
 
@@ -323,8 +377,50 @@ BEGIN
         end if;
     end if;
 
-   end loop;
+    -- 28.10.2020 Sofia SIAC-7672 - inizio
+--	if codiceRisultato=0 and coalesce(filePagoPaElabId,0)!=0 then
+--  16.04.2021 Sofia Jira 	SIAC-8163 - attivazione svecchiamento puntuale
+    if coalesce(filePagoPaElabId,0)!=0 then
+        select * into elabSvecchiaRec
+       	from fnc_pagopa_t_elaborazione_riconc_svecchia_err
+		(
+		  filePagoPaElabId,
+	      annoRec.anno_elab,
+  		  enteProprietarioId,
+		  loginOperazione,
+	      dataElaborazione
+        );
+        if elabSvecchiaRec.codiceRisultato!=0 then
+       	  codiceRisultato:=elabSvecchiaRec.codiceRisultato;
+          strMessaggio:=elabSvecchiaRec.messaggiorisultato;
+        end if;
+        raise notice 'codiceRisultato=%',codiceRisultato;
+        raise notice 'strMessaggio=%',strMessaggio;
+    end if;
+    -- 28.10.2020 Sofia SIAC-7672 - fine
 
+   end loop;
+   
+   -- 12.05.2023 Sofia SIAC-8842
+   if coalesce(filePagoPaElabId,0)!=0 then
+  	select * into elabSvecchiaRec
+  	from fnc_pagopa_t_elaborazione_riconc_svecchia_okerr
+	(
+		  filePagoPaElabId,
+	      annoBilancio,
+  		  enteProprietarioId,
+		  loginOperazione,
+	      dataElaborazione
+    );
+    if elabSvecchiaRec.codiceRisultato!=0 then
+       	  codiceRisultato:=elabSvecchiaRec.codiceRisultato;
+          strMessaggio:=elabSvecchiaRec.messaggiorisultato;
+     end if;
+     raise notice 'codiceRisultato=%',codiceRisultato;
+     raise notice 'strMessaggio=%',strMessaggio;
+   end if;
+    -- 12.05.2023 Sofia SIAC-8842
+  
    if codiceRisultato=0 then
 	    outPagoPaElabId:=filePagoPaElabId;
         outPagoPaElabPrecId:=filePagoPaElabPrecId;
@@ -386,7 +482,6 @@ exception
        	outPagoPaElabId:=-1;
        	outPagoPaElabPrecId:=-1;
         return;
-
 END;
 $body$
 LANGUAGE 'plpgsql'
@@ -394,3 +489,15 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter function
+siac.fnc_pagopa_t_elaborazione_riconc
+(
+ integer,
+ varchar,
+ timestamp,
+ out integer,
+ out integer,
+ out integer,
+ out varchar
+) OWNER to siac;

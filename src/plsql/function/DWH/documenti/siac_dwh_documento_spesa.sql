@@ -203,7 +203,13 @@ CREATE TABLE siac.siac_dwh_documento_spesa_gnew (
   cod_siope_tipo_analogico_doc VARCHAR(200),
   desc_siope_tipo_analogico_doc VARCHAR(500),
   desc_siope_tipo_ana_bnkit_doc VARCHAR(500),
-  doc_id INTEGER  
+  doc_id INTEGER  ,
+  -- SIAC-8153 Sofia 22.06.2021
+  cod_cdc_sub VARCHAR(200),
+  desc_cdc_sub VARCHAR(500),
+  cod_cdr_sub VARCHAR(200),
+  desc_cdr_sub VARCHAR(500)
+  -- SIAC-8153 Sofia 22.06.2021
 ) 
 WITH (oids = false);
 

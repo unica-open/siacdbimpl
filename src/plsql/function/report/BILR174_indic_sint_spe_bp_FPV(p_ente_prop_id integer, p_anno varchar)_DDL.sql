@@ -100,6 +100,14 @@ select 'CAMPO_B'::varchar campo_report, f.anno::varchar anno,
           and d.data_cancellazione is null
           and e.data_cancellazione is null
           and rcl2.data_cancellazione is null
+-- 23/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+          and  d.cronop_elem_id NOT IN (select elem_id
+                      from siac_t_bil_elem_escludi_indicatori escludi
+                      where escludi.ente_proprietario_id = p_ente_prop_id
+                          and escludi.validita_fine IS NULL
+                          and escludi.data_cancellazione IS NULL)                       
           group by f.anno, left(cl2.classif_code,2)
 UNION
 select 'CAMPO_D'::varchar  campo_report,e.anno_entrata::varchar anno,  
@@ -147,6 +155,14 @@ COALESCE(sum(e.cronop_elem_det_importo),0)::numeric importo
           and d.data_cancellazione is null
           and e.data_cancellazione is null
           and rcl2.data_cancellazione is null
+-- 23/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+          and  d.cronop_elem_id NOT IN (select elem_id
+                      from siac_t_bil_elem_escludi_indicatori escludi
+                      where escludi.ente_proprietario_id = p_ente_prop_id
+                          and escludi.validita_fine IS NULL
+                          and escludi.data_cancellazione IS NULL)            
           group by e.anno_entrata,  left(cl2.classif_code,2)          
 UNION 
  select 'CAMPO_E'::varchar campo_report, e.anno_entrata::varchar anno,  
@@ -194,6 +210,14 @@ UNION
           and d.data_cancellazione is null
           and e.data_cancellazione is null
           and rcl2.data_cancellazione is null
+-- 23/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+          and  d.cronop_elem_id NOT IN (select elem_id
+                      from siac_t_bil_elem_escludi_indicatori escludi
+                      where escludi.ente_proprietario_id = p_ente_prop_id
+                          and escludi.validita_fine IS NULL
+                          and escludi.data_cancellazione IS NULL)            
           group by e.anno_entrata,  left(cl2.classif_code,2)
 UNION   
  select 'CAMPO_F'::varchar campo_report,e.anno_entrata::varchar anno,  
@@ -241,13 +265,21 @@ UNION
           and d.data_cancellazione is null
           and e.data_cancellazione is null
           and rcl2.data_cancellazione is null
+-- 23/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+          and  d.cronop_elem_id NOT IN (select elem_id
+                      from siac_t_bil_elem_escludi_indicatori escludi
+                      where escludi.ente_proprietario_id = p_ente_prop_id
+                          and escludi.validita_fine IS NULL
+                          and escludi.data_cancellazione IS NULL)            
           group by e.anno_entrata,  left(cl2.classif_code,2)    ;      
 
 
 raise notice 'fine OK';
     exception
     when no_data_found THEN
-    raise notice 'nessun dato trovato per struttura bilancio';
+    raise notice 'nessun dato trovato.';
     return;
     when others  THEN
   	RTN_MESSAGGIO:='struttura bilancio altro errore';

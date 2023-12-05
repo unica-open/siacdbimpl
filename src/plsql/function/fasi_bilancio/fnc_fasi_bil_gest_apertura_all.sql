@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿-- 30.09.2016 Sofia  apertura bilancio di gestione
+-- 30.09.2016 Sofia  apertura bilancio di gestione
 -- faseBilancio --> E  esercizio provvisorio , da gestione prec a gestine corrente        --> in esercizio provvisorio
 --              --> EP esercizio provvisorio , da previsione corrente a gestione corrente --> in esercizio provvisorio
 --              --> G  esercizio gestione definitiva, da previsione corrente a gestione corrente --> in gestione definitiva
@@ -12,8 +12,22 @@
 -- STEP 1       -- capitoli di uscita
 -- STEP 2       -- capitoli di entrata
 
+drop FUNCTION IF EXISTS siac.fnc_fasi_bil_gest_apertura_all
+(
+  annobilancio           integer,
+  faseBilancio           varchar,
+  stepPartenza           integer,
+  checkGest              boolean,
+  impostaImporti         boolean,
+  enteproprietarioid     integer,
+  loginoperazione        varchar,
+  dataelaborazione       timestamp,
+  out faseBilElabIdRet   integer,
+  out codicerisultato    integer,
+  out messaggiorisultato varchar
+);
 
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_all
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_all
 (
   annobilancio           integer,
   faseBilancio           varchar,
@@ -137,7 +151,9 @@ BEGIN
 
     -- STEP 4 -- popolamento dei programmi-cronop di gestione
     if codiceRisultato=0 and stepPartenza>=2 then
-    	if faseBilancio = 'G' then
+--    	if faseBilancio = 'G' then -- 17.05.2023 Sofia SIAC-8633 ribaltamento dei progetti-cronop sia in esercizio provvisorio che in gestione def
+                                                  -- sempre da previsione corrente riportando sempre solo progetti non esistenti in gestione con relativi cronop
+                                                  -- e cronop non esistenti di progetti anche esistenti
             strMessaggio:='Ribaltamento Programmi-Cronoprogrammi di gestione da previsione corrente.';
         	select * into strRec
         	from fnc_fasi_bil_gest_apertura_programmi
@@ -152,9 +168,29 @@ BEGIN
             	strMessaggio:=strRec.messaggioRisultato;
         		codiceRisultato:=strRec.codiceRisultato;
             end if;
-        end if;
+--        end if;
     end if;
 
+   -- 08.04.2022 Sofia SIAC-8017
+    -- STEP 6 -- popolamento dei programmi-cronoprogrammi di previsione
+	if codiceRisultato=0 and stepPartenza>=2 then    -- deve essere stato eseguito sia spesa che entrata
+    	strMessaggio:='Ribaltamento Programmi-Cronoprogrammi di previsione da gestione precedente.';
+       	select * into strRec
+       	from fnc_fasi_bil_gest_apertura_saldo_sottoconto_vincolo
+		(
+	     enteProprietarioId,
+	     annoBilancio,   -- iniziale
+	     annoBilancio-1, -- finale
+	     loginOperazione,
+	     dataelaborazione
+	    );
+--       if strRec.codiceRisultato!=0 then
+--       	strMessaggio:=strRec.messaggioRisultato;
+  --      codiceRisultato:=strRec.codiceRisultato;
+    --   end if;
+    end if;
+    -- 08.04.2022 Sofia SIAC-8017
+   
     if codiceRisultato=0 then
 	   	messaggioRisultato:=strMessaggioFinale||' Elaborazione terminata con successo.';
 	    faseBilElabIdRet:=faseBilElabId;
@@ -190,3 +226,18 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+ALTER FUNCTION siac.fnc_fasi_bil_gest_apertura_all
+(
+  integer,
+  varchar,
+  integer,
+  boolean,
+  boolean,
+  integer,
+  varchar,
+  timestamp,
+  out integer,
+  out integer,
+  out varchar
+) OWNER TO siac;

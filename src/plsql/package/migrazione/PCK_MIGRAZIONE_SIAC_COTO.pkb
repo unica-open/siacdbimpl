@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SIAC IS
   procedure ditest(par_1 in varchar2, par_2 in varchar2, par_3 out varchar2)
   is
@@ -91,7 +97,7 @@ begin
               cdr.centro_resp,cdc.cdc,
               decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'STD',capEcc.Classe_Capitolo),
               decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'S',capEcc.flag_impegnabile),
---17.07.2015 Lusso: Per poter stampare correttamente la colonna 'Previsioni definitive anno precedente' dei report ufficiali, è necessario impostare lo stanziamento inziale
+--17.07.2015 Lusso: Per poter stampare correttamente la colonna 'Previsioni definitive anno precedente' dei report ufficiali, ï¿½ necessario impostare lo stanziamento inziale
 --dei capitoli di contabilia (Tipo stanziamento STI) con il valore dell'importo ST_ANNO_PREC di Tarantella
 --              cUebAnno.St_Prev,0,0,
 -- 21.04.2016 Sofia             cUebAnno.St_Anno_Prec,0,0,
@@ -247,7 +253,7 @@ begin
     --- aggiornamento stanziamento_iniziale_res
     
     msgRes:='Aggiornamento migr_capitolo_uscita.stanziamento_iniziale_res CAP-UP.';
--- 17.07.2015 Daniela: la tabella letta è cambiata, il campo usato è impoatt_no_riacc
+-- 17.07.2015 Daniela: la tabella letta ï¿½ cambiata, il campo usato ï¿½ impoatt_no_riacc
 -- 23.02.2016 Sofia : riportato calcolo stanz. residuo su impegni
  /* 21.04.2016 Sofia - importato valori su campi da capcdc_prev_u  
     update migr_capitolo_uscita m
@@ -788,7 +794,7 @@ exception
               cdr.centro_resp,cdc.cdc,
               decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'STD',capEcc.Classe_Capitolo),
               decode(nvl(capEcc.Numero_Capitolo,0), 0 ,'S',capEcc.flag_impegnabile),
---17.07.2015 Lusso: Per poter stampare correttamente la colonna 'Previsioni definitive anno precedente' dei report ufficiali, è necessario impostare lo stanziamento inziale
+--17.07.2015 Lusso: Per poter stampare correttamente la colonna 'Previsioni definitive anno precedente' dei report ufficiali, ï¿½ necessario impostare lo stanziamento inziale
 --dei capitoli di contabilia (Tipo stanziamento STI) con il valore dell'importo ST_ANNO_PREC di Tarantella
 --              cUebAnno.St_Prev,0,0,
 -- 21.04.2016 Sofia             cUebAnno.St_Anno_Prec,0,0,
@@ -1069,7 +1075,7 @@ exception
     
     --- aggiornamento stanziamento_iniziale_res
      msgRes:='Aggiornamento migr_capitolo_entrata.stanziamento_iniziale_res CAP-EP.';
--- 17.07.2015 Daniela: la tabella letta è cambiata, il campo usato è impoatt_no_riacc
+-- 17.07.2015 Daniela: la tabella letta ï¿½ cambiata, il campo usato ï¿½ impoatt_no_riacc
 -- 23.02.2016 Sofia  : riportato calcolo stanz. res su tabella accertamenti
 /* 21.04.2016 Sofia - valorizzati con campi aggiunti in capcdc_prev_e
     update migr_capitolo_entrata m
@@ -2270,8 +2276,8 @@ exception
     cImpScartati number := 0;
     numImpegno   number := 0;
  -- DAVIDE - 23.02.016 - segnalazione impegni e gestione corretta leggi_provvedimento
-    segnalare    boolean := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False: il record è inserito nella sola tabella migr_*
+    segnalare    boolean := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
     
   begin
 
@@ -2346,7 +2352,7 @@ exception
                           from impegni i
                          where i.anno_esercizio = p_anno_esercizio
                            and i.staoper in ('P', 'D')
-                           and I.SDF <> 'S' -- Gli impegni SDF (senza disponibilità di fondi) non vengoni migrati
+                           and I.SDF <> 'S' -- Gli impegni SDF (senza disponibilitï¿½ di fondi) non vengoni migrati
                          order by 1, 2, 3) loop
       -- inizializza variabili
       --h_classe_soggetto:=null;
@@ -2866,8 +2872,8 @@ exception
     h_cofog varchar2(50); -- ereditato da impegno
 
  -- DAVIDE - 23.02.016 - segnalazione subimpegni e gestione corretta leggi_provvedimento
-    segnalare    boolean := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False: il record è inserito nella sola tabella migr_*
+    segnalare    boolean := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
   begin
 
     p_imp_scartati := 0;
@@ -3335,8 +3341,8 @@ exception
     h_pdc_finanziario MIGR_CAPITOLO_ENTRATA.PDC_FIN_QUINTO%type := null;
     
 -- DAVIDE - 23.02.016 - segnalazione accertamenti e gestione corretta leggi_provvedimento    
-    segnalare    boolean := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False: il record è inserito nella sola tabella migr_*
+    segnalare    boolean := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
 
   begin
     p_imp_scartati := 0;
@@ -3881,8 +3887,8 @@ exception
     h_pdc_finanziario MIGR_ACCERTAMENTO.pdc_finanziario%type := null;
     
     -- DAVIDE - 23.02.016 - segnalazione subaccertamenti e gestione corretta leggi_provvedimento          
-    segnalare    boolean := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False: il record è inserito nella sola tabella migr_*
+    segnalare    boolean := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
 
   begin
 
@@ -4500,8 +4506,8 @@ exception
     
     h_sac_provvedimento  varchar2(20) := null; -- DAVIDE - Gestione SAC Provvedimento
  -- DAVIDE - 23.02.016 - segnalazione impegni pluriennali e gestione corretta leggi_provvedimento
-    segnalare    boolean := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False: il record è inserito nella sola tabella migr_*
+    segnalare    boolean := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
 
   begin
   
@@ -4671,7 +4677,7 @@ exception
           end if;
       
       -- definizione tipo_impegno
-      -- verificare se serve , facendo una distinct sul tipo_impegno l'unico valore risultante è S
+      -- verificare se serve , facendo una distinct sul tipo_impegno l'unico valore risultante ï¿½ S
            if (upper(migrImpegno.tipo_impegno) = 'C' 
                 or upper(migrImpegno.tipo_impegno) = 'S'
                 or upper(migrImpegno.tipo_impegno) = 'D') then 
@@ -4959,8 +4965,8 @@ end migrazione_impegniPlur;
     h_sac_provvedimento     varchar2(20) := null; -- DAVIDE - Gestione SAC Provvedimento
 
  -- DAVIDE - 23.02.016 - segnalazione subimpegni pluriennali e gestione corretta leggi_provvedimento
-  segnalare    boolean := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                   -- False: il record è inserito nella sola tabella migr_*
+  segnalare    boolean := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
      
     begin
     
@@ -5343,8 +5349,8 @@ end migrazione_impegniPlur;
     h_sac_provvedimento     varchar2(20) := null; -- DAVIDE - Gestione SAC Provvedimento
 
 -- DAVIDE - 23.02.016 - segnalazione accertamenti pluriennali e gestione corretta leggi_provvedimento
-    segnalare               boolean      := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                                   -- False: il record è inserito nella sola tabella migr_*
+    segnalare               boolean      := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                                   -- False: il record ï¿½ inserito nella sola tabella migr_*
 
   begin
     p_imp_scartati := 0;
@@ -5781,8 +5787,8 @@ end migrazione_accertamentoPlur;
     h_sac_provvedimento     varchar2(20)  := null; -- DAVIDE - Gestione SAC Provvedimento
 
   -- DAVIDE - 23.02.016 - segnalazione subaccertamenti pluriennali e gestione corretta leggi_provvedimento
-    segnalare               boolean       := False; -- True: il record è inserito in entrambe le tabelle migr_* e migr_*_scarto
-                                                    -- False: il record è inserito nella sola tabella migr_*
+    segnalare               boolean       := False; -- True: il record ï¿½ inserito in entrambe le tabelle migr_* e migr_*_scarto
+                                                    -- False: il record ï¿½ inserito nella sola tabella migr_*
 
   begin
     p_imp_scartati := 0;
@@ -6134,7 +6140,7 @@ end migrazione_accertamentoPlur;
         -- controllo sulla presenza dei parametri in input
         if (p_ente_proprietario_id is null or p_anno_esercizio is null) then
             v_codRes := -1;
-            v_msgRes := 'Uno o più parametri in input non sono stati valorizzati correttamente';
+            v_msgRes := 'Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
         end if;
         
         -- pulizia delle tabelle migr_
@@ -6366,7 +6372,7 @@ end migrazione_accertamentoPlur;
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_mutuo.Uno o più parametri in input non sono stati valorizzati correttamente';
+            pMsgRes := 'proc migrazione_mutuo.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
             return;
         end if;
 
@@ -6472,13 +6478,13 @@ end migrazione_accertamentoPlur;
                                 end if;
                               exception
                                 when no_data_found then
-                                  --codRes := -1; già impostato prima
+                                  --codRes := -1; giï¿½ impostato prima
                                   h_sogg_migrato  := 0;
                                   h_num           := 0;
                                   msgRes          := msgRes || 'Soggetto non valido.';
                                   msgMotivoScarto := msgRes;
                                 when others then
-                                  --codRes := -1; già impostato prima
+                                  --codRes := -1; giï¿½ impostato prima
                                   msgRes := msgRes || SQLCODE || '-' || SUBSTR(SQLERRM, 1, 100) || '.';
                               end;
                             end if;
@@ -6503,10 +6509,10 @@ end migrazione_accertamentoPlur;
                                 h_tipo_provvedimento := h_tipo_provvedimento || '||';
                               end if;
                               if codRes = 0 and h_stato_provvedimento is null then
-                                -- ci sono 3 casi in produzione per cui lo stato non è definito, quindi è corretto nel caso non lo sia,
+                                -- ci sono 3 casi in produzione per cui lo stato non ï¿½ definito, quindi ï¿½ corretto nel caso non lo sia,
                                 -- usare lo stato del mutuo?
-                                -- il valore NULL è possibile solo su tabelle DELIBERE e non su MOVIMENTI INTERNI
-                                h_stato_provvedimento := migrMutuo.stato; -- è così?
+                                -- il valore NULL ï¿½ possibile solo su tabelle DELIBERE e non su MOVIMENTI INTERNI
+                                h_stato_provvedimento := migrMutuo.stato; -- ï¿½ cosï¿½?
                               end if;
                             end if;
                             
@@ -6631,14 +6637,14 @@ end migrazione_accertamentoPlur;
         
         h_imp_migrato number := 0;
         h_mutuo varchar2(50) := null;
-        h_tipo varchar2(10) := '01'; -- di default il tipo voce mutuo è ORIGINALE, 
+        h_tipo varchar2(10) := '01'; -- di default il tipo voce mutuo ï¿½ ORIGINALE, 
                                       -- diversamente se imp_iniziale = 0 tipo = 002 (Storno), se anno_impegno<anno_esercizio tipo = 003 (Da residuo)
 
       begin
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_voce_mutuo.Uno o più parametri in input non sono stati valorizzati correttamente';
+            pMsgRes := 'proc migrazione_voce_mutuo.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
             return;
         end if;
 
@@ -6896,8 +6902,8 @@ end migrazione_accertamentoPlur;
         h_progdel               number(3) := null; -- docquote.progdel
         h_codben_pagamento      number(6) := null; -- documenti.codben_pagamento  se <> da codben liquidazione il record viene migrato ma 
                                                    -- inserito cmq. nella tabella di scarto.
-        da_segnalare            number := 0;  -- true: il record è inserito in tab. scarto oltre che in  tab. migrazione 
-                                              -- false: il record è inserito in tab.migrazione
+        da_segnalare            number := 0;  -- true: il record ï¿½ inserito in tab. scarto oltre che in  tab. migrazione 
+                                              -- false: il record ï¿½ inserito in tab.migrazione
         h_sogg_migrato          number := 0;
     
         h_sac_provvedimento     varchar2(20) := null; -- DAVIDE - Gestione SAC Provvedimento
@@ -6906,7 +6912,7 @@ end migrazione_accertamentoPlur;
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_liquidazione.Uno o più parametri in input non sono stati valorizzati correttamente';
+            pMsgRes := 'proc migrazione_liquidazione.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
             return;
         end if;
 
@@ -7047,7 +7053,7 @@ end migrazione_accertamentoPlur;
                                 msgRes          := msgRes|| 'Soggetto non migrato.';
                                 msgMotivoScarto := msgRes;
                             end;
-                            -- il soggetto non è stato migrato per lo stato?
+                            -- il soggetto non ï¿½ stato migrato per lo stato?
                             if h_sogg_migrato = 0 then
                               begin
                                 select nvl(count(*),0) into h_sogg_migrato
@@ -7199,7 +7205,7 @@ end migrazione_accertamentoPlur;
                                  migrCursor.nliq,
                                  migrCursor.anno_esercizio,
                                  msgMotivoScarto,
-                                 decode(da_segnalare,1,'S','N'), -- il record con fl_migrato = S è stato inserito anche nella migr_liquidazione.
+                                 decode(da_segnalare,1,'S','N'), -- il record con fl_migrato = S ï¿½ stato inserito anche nella migr_liquidazione.
                                  pEnte);
                               cLiqScartati := cLiqScartati + 1;
                             end if;
@@ -7888,7 +7894,7 @@ end migrazione_accertamentoPlur;
         -- DAVIDE - Fine
     
         h_sac_provvedimento     varchar2(20) := null; -- DAVIDE - Gestione SAC Provvedimento
-        h_sede_id number:=null; -- DAVIDE - 14.07.2016 - Valorizzata con il campo migr_sede_secodiaria.sede_id se il soggetto legato al doc è una sede secondaria
+        h_sede_id number:=null; -- DAVIDE - 14.07.2016 - Valorizzata con il campo migr_sede_secodiaria.sede_id se il soggetto legato al doc ï¿½ una sede secondaria
 
         ERROR_DOCUMENTO EXCEPTION;
         
@@ -8193,7 +8199,7 @@ end migrazione_accertamentoPlur;
                 -- verifica MDP
                 if codRes=0 then
                     -- se quota pagata non migriamo il collegamento con la MDP
-                    -- se la quota è incompleta ( non vi sono le imputazioni contabili ) non migriamo il collegamento con la MDP
+                    -- se la quota ï¿½ incompleta ( non vi sono le imputazioni contabili ) non migriamo il collegamento con la MDP
                     if migrCursor.Nmand=0 and migrCursor.nimp!=0 then
                         if migrCursor.Modpag_Quota!=0 then
                             h_modpag:=migrCursor.Modpag_Quota;
@@ -10120,7 +10126,7 @@ end migrazione_atto_allegato;
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_provvedimento.Uno o più parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
+            pMsgRes := 'proc migrazione_provvedimento.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
             return;
         end if;
 

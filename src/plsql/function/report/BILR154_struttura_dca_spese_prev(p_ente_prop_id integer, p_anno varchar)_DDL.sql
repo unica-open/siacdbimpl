@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR154_struttura_dca_spese_prev" (
@@ -484,7 +484,11 @@ select
     coalesce(capall.riaccertamenti_residui,0)::numeric,
     capall.bil_ele_code3::varchar,
     CASE WHEN  trim(COALESCE(capall.pdc_iv,'')) = ''
-    	THEN capall.pdc_v ::varchar 
+    --SIAC-8719 13/05/2022.
+    --Se il capitolo e' associato al piano dei conti di V livello, 
+    --devo comunque usare IV livello.
+    	--THEN capall.pdc_v ::varchar 
+        THEN left(capall.pdc_v, length(capall.pdc_v)-3)||'000'::varchar 
         ELSE capall.pdc_iv ::varchar end pdc_iv
 FROM capall left join clas on 
     clas.programma_id = capall.programma_id and    
@@ -509,4 +513,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR154_struttura_dca_spese_prev" (p_ente_prop_id integer, p_anno varchar)
+  OWNER TO siac;

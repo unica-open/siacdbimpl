@@ -62,7 +62,8 @@ RETURNS TABLE (
   attivita_inizio date,
   attivita_fine date,
   attivita_code varchar,
-  attivita_desc varchar
+  attivita_desc varchar,
+  conto_tesoreria varchar
 ) AS
 $body$
 DECLARE

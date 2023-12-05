@@ -85,6 +85,19 @@ user_table			 varchar;
 
 BEGIN
 
+/* Parametri: 
+
+- p_classificatori: 
+	1 = Piano dei conti patrimoniale - Report BILR136;
+    2 = Piano dei conti patrimoniale - Report BILR131.
+- p_liv_aggiuntivi: S/N.
+- p_tipo_stampa: Stampare tutti gli importi:
+	1 = No;
+    2 = Si.
+	
+
+*/ 
+
 nome_ente='';
 id_pdce0=0;
 codice_pdce0='';
@@ -207,6 +220,32 @@ SELECT v.*, user_table FROM
 
 raise notice 'ora: % ',clock_timestamp()::varchar;
 
+--siac-task issue #212 04/10/2023.
+--Inserisco gli eventuali livelli 7 che hanno al di sotto dei livelli 8 e che potrebbero avere delle prime note associate.
+insert into siac_rep_struttura_pdce(
+pdce_liv0_id ,  pdce_liv0_id_padre ,  pdce_liv0_code ,  pdce_liv0_desc ,
+  pdce_liv1_id ,  pdce_liv1_id_padre ,  pdce_liv1_code ,  pdce_liv1_desc ,
+  pdce_liv2_id ,  pdce_liv2_id_padre ,  pdce_liv2_code ,  pdce_liv2_desc ,
+  pdce_liv3_id ,  pdce_liv3_id_padre ,  pdce_liv3_code ,  pdce_liv3_desc ,
+  pdce_liv4_id ,  pdce_liv4_id_padre ,  pdce_liv4_code ,  pdce_liv4_desc ,
+  pdce_liv5_id ,  pdce_liv5_id_padre ,  pdce_liv5_code ,  pdce_liv5_desc ,
+  pdce_liv6_id ,  pdce_liv6_id_padre ,  pdce_liv6_code ,  pdce_liv6_desc ,
+  pdce_liv7_id ,  pdce_liv7_id_padre ,  pdce_liv7_code ,  pdce_liv7_desc ,
+  pdce_liv8_id ,  pdce_liv8_id_padre ,  pdce_liv8_code ,  pdce_liv8_desc, utente)
+select distinct pdce_liv0_id ,  pdce_liv0_id_padre ,  pdce_liv0_code ,  pdce_liv0_desc ,
+  pdce_liv1_id ,  pdce_liv1_id_padre ,  pdce_liv1_code ,  pdce_liv1_desc ,
+  pdce_liv2_id ,  pdce_liv2_id_padre ,  pdce_liv2_code ,  pdce_liv2_desc ,
+  pdce_liv3_id ,  pdce_liv3_id_padre ,  pdce_liv3_code ,  pdce_liv3_desc ,
+  pdce_liv4_id ,  pdce_liv4_id_padre ,  pdce_liv4_code ,  pdce_liv4_desc ,
+  pdce_liv5_id ,  pdce_liv5_id_padre ,  pdce_liv5_code ,  pdce_liv5_desc ,
+  pdce_liv6_id ,  pdce_liv6_id_padre ,  pdce_liv6_code ,  pdce_liv6_desc ,
+  pdce_liv7_id ,  pdce_liv7_id_padre ,  pdce_liv7_code ,  pdce_liv7_desc ,
+  0 ,  0 ,  '' ,  '', utente
+from siac_rep_struttura_pdce
+where pdce_liv8_id_padre in(select distinct pdce_liv7_id
+from siac_rep_struttura_pdce
+where utente=user_table);
+
 RTN_MESSAGGIO:='Estrazione dei dati codice bilancio''.';
 raise notice 'Estrazione dei dati codice bilancio';
 
@@ -307,10 +346,10 @@ RTN_MESSAGGIO:='Estrazione dei dati delle prime note''.';
 raise notice 'Estrazione dei dati delle prime note';
 
 /* estrazione dei dati delle prime note */
-IF p_classificatori = '1' THEN 
+IF p_classificatori = '1' THEN --BILR136
    sql_query_add := ' AND pdce_fam.pdce_fam_code IN (''CE'',''RE'') ';
    sql_query_add1 := ' AND strutt_pdce.pdce_liv0_code IN (''CE'',''RE'') ';
-ELSIF p_classificatori = '2' THEN   
+ELSIF p_classificatori = '2' THEN   --BILR131
    sql_query_add := ' AND pdce_fam.pdce_fam_code IN (''AP'',''PP'',''OP'',''OA'') '; 
    sql_query_add1 := ' AND strutt_pdce.pdce_liv0_code IN (''AP'',''PP'',''OP'',''OA'') ';
 END IF;      
@@ -512,7 +551,9 @@ LEFT JOIN b ON
       AND a.pdce_liv8_id=b.pdce_conto_id))';
 
 END IF;
+
 raise notice 'SQL % ',sql_query;
+
 FOR elenco_prime_note IN
 EXECUTE sql_query
         
@@ -522,9 +563,79 @@ LOOP
 	saldo_prec_avere=0;
 	saldo_ini_dare=0;
     saldo_ini_avere=0;
+     
+    tipo_pnota=elenco_prime_note.causale_ep_tipo_code;
+    id_pdce0=COALESCE(elenco_prime_note.pdce_liv0_id,0);
+    codice_pdce0=COALESCE(elenco_prime_note.pdce_liv0_code,'');
+    descr_pdce0=COALESCE(elenco_prime_note.pdce_liv0_desc,'');
+    
+    id_pdce1=COALESCE(elenco_prime_note.pdce_liv1_id,0);
+    codice_pdce1=COALESCE(elenco_prime_note.pdce_liv1_code,'');
+    descr_pdce1=COALESCE(elenco_prime_note.pdce_liv1_desc,'');
+    
+    id_pdce2=COALESCE(elenco_prime_note.pdce_liv2_id,0);
+    codice_pdce2=COALESCE(elenco_prime_note.pdce_liv2_code,'');
+    descr_pdce2=COALESCE(elenco_prime_note.pdce_liv2_desc,'');
+    
+    id_pdce3=COALESCE(elenco_prime_note.pdce_liv3_id,0);
+    codice_pdce3=COALESCE(elenco_prime_note.pdce_liv3_code,'');
+    descr_pdce3=COALESCE(elenco_prime_note.pdce_liv3_desc,'');  
+          
+    id_pdce4=COALESCE(elenco_prime_note.pdce_liv4_id,0);
+    codice_pdce4=COALESCE(elenco_prime_note.pdce_liv4_code,'');
+    descr_pdce4=COALESCE(elenco_prime_note.pdce_liv4_desc,''); 
+      
+    id_pdce5=COALESCE(elenco_prime_note.pdce_liv5_id,0);
+    codice_pdce5=COALESCE(elenco_prime_note.pdce_liv5_code,'');
+    descr_pdce5=COALESCE(elenco_prime_note.pdce_liv5_desc,'');  
+     
+    id_pdce6=COALESCE(elenco_prime_note.pdce_liv6_id,0);
+    codice_pdce6=COALESCE(elenco_prime_note.pdce_liv6_code,'');
+    descr_pdce6=COALESCE(elenco_prime_note.pdce_liv6_desc,''); 
+      
+    IF p_liv_aggiuntivi = 'N' AND p_classificatori = '1' THEN    
+       id_pdce7=0;
+       codice_pdce7='';
+       descr_pdce7='';         
+    ELSE   
+       id_pdce7=COALESCE(elenco_prime_note.pdce_liv7_id,0);
+       codice_pdce7=COALESCE(elenco_prime_note.pdce_liv7_code,'');
+       descr_pdce7=COALESCE(elenco_prime_note.pdce_liv7_desc,'');
+    END IF;
+    
+    --SIAC-8580 01/08/2023. Gestione del livello 8.
+    IF p_liv_aggiuntivi = 'N' AND p_classificatori <> '1' and elenco_prime_note.livello <> 8 THEN     
+       id_pdce8=0;
+       codice_pdce8='';
+       descr_pdce8='';          
+    ELSE         
+    	--raise notice 'Livello 8 = %', elenco_prime_note.pdce_liv8_id;
+        
+       id_pdce8=COALESCE(elenco_prime_note.pdce_liv8_id,0);
+       codice_pdce8=COALESCE(elenco_prime_note.pdce_liv8_code,'');
+       descr_pdce8=COALESCE(elenco_prime_note.pdce_liv8_desc,'');      
+    END IF;
+    
+    livello=elenco_prime_note.livello;
+    
+	if livello = 7 and id_pdce8 <> 0 then
+    	importo_dare=0;
+        importo_avere=0;
+    else 
+      IF upper(elenco_prime_note.movep_det_segno)='AVERE' THEN               
+              importo_dare=0;
+              importo_avere=COALESCE(elenco_prime_note.movep_det_importo,0);               
+      ELSE                
+              importo_dare=COALESCE(elenco_prime_note.movep_det_importo,0);
+              importo_avere=0;                          
+      END IF; 
+    end if;
     
     v_pdce_conto_id := null;
-    
+   
+    /* siac-task issue #212 04/10/2023.
+       Cambio il modo in cui viene scelto il pdce_conto_id utilizzato.
+       
     IF elenco_prime_note.pdce_liv8_code IS NOT NULL THEN
        v_pdce_conto_id := elenco_prime_note.pdce_liv8_id;
     ELSIF  elenco_prime_note.pdce_liv7_code IS NOT NULL THEN
@@ -543,8 +654,36 @@ LOOP
        v_pdce_conto_id := elenco_prime_note.pdce_liv1_id; 
     ELSIF  elenco_prime_note.pdce_liv0_code IS NOT NULL THEN
        v_pdce_conto_id := elenco_prime_note.pdce_liv0_id; 
-    END IF;                                                         
-           
+    END IF;               
+   
+                                                    
+            */
+ 	
+     
+    IF codice_pdce8 <> '' THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv8_id;
+    ELSIF codice_pdce7 <> '' THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv7_id;
+    ELSIF  elenco_prime_note.pdce_liv6_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv6_id; 
+    ELSIF  elenco_prime_note.pdce_liv5_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv5_id; 
+    ELSIF  elenco_prime_note.pdce_liv4_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv4_id; 
+    ELSIF  elenco_prime_note.pdce_liv3_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv3_id; 
+    ELSIF  elenco_prime_note.pdce_liv2_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv2_id; 
+    ELSIF  elenco_prime_note.pdce_liv1_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv1_id; 
+    ELSIF  elenco_prime_note.pdce_liv0_code IS NOT NULL THEN
+       v_pdce_conto_id := elenco_prime_note.pdce_liv0_id; 
+    END IF;       
+
+            
+    --siac-task issue #212 04/10/2023.
+    --la gestione del classif_id viene spostata dopo l'assegnazione del v_pdce_conto_id.
+               
     v_classif_id := null;
             
     SELECT rpcc.classif_id
@@ -630,69 +769,15 @@ LOOP
     	EXIT WHEN v_posiz_punto = 0;
     
     END LOOP;*/                  
-     
-    tipo_pnota=elenco_prime_note.causale_ep_tipo_code;
-    id_pdce0=COALESCE(elenco_prime_note.pdce_liv0_id,0);
-    codice_pdce0=COALESCE(elenco_prime_note.pdce_liv0_code,'');
-    descr_pdce0=COALESCE(elenco_prime_note.pdce_liv0_desc,'');
     
-    id_pdce1=COALESCE(elenco_prime_note.pdce_liv1_id,0);
-    codice_pdce1=COALESCE(elenco_prime_note.pdce_liv1_code,'');
-    descr_pdce1=COALESCE(elenco_prime_note.pdce_liv1_desc,'');
-    
-    id_pdce2=COALESCE(elenco_prime_note.pdce_liv2_id,0);
-    codice_pdce2=COALESCE(elenco_prime_note.pdce_liv2_code,'');
-    descr_pdce2=COALESCE(elenco_prime_note.pdce_liv2_desc,'');
-    
-    id_pdce3=COALESCE(elenco_prime_note.pdce_liv3_id,0);
-    codice_pdce3=COALESCE(elenco_prime_note.pdce_liv3_code,'');
-    descr_pdce3=COALESCE(elenco_prime_note.pdce_liv3_desc,'');  
-          
-    id_pdce4=COALESCE(elenco_prime_note.pdce_liv4_id,0);
-    codice_pdce4=COALESCE(elenco_prime_note.pdce_liv4_code,'');
-    descr_pdce4=COALESCE(elenco_prime_note.pdce_liv4_desc,''); 
       
-    id_pdce5=COALESCE(elenco_prime_note.pdce_liv5_id,0);
-    codice_pdce5=COALESCE(elenco_prime_note.pdce_liv5_code,'');
-    descr_pdce5=COALESCE(elenco_prime_note.pdce_liv5_desc,'');  
-     
-    id_pdce6=COALESCE(elenco_prime_note.pdce_liv6_id,0);
-    codice_pdce6=COALESCE(elenco_prime_note.pdce_liv6_code,'');
-    descr_pdce6=COALESCE(elenco_prime_note.pdce_liv6_desc,''); 
-      
-    IF p_liv_aggiuntivi = 'N' AND p_classificatori = '1' THEN    
-       id_pdce7=0;
-       codice_pdce7='';
-       descr_pdce7='';         
-    ELSE   
-       id_pdce7=COALESCE(elenco_prime_note.pdce_liv7_id,0);
-       codice_pdce7=COALESCE(elenco_prime_note.pdce_liv7_code,'');
-       descr_pdce7=COALESCE(elenco_prime_note.pdce_liv7_desc,'');
-    END IF;
-    
-    IF p_liv_aggiuntivi = 'N' AND p_classificatori <> '1' THEN     
-       id_pdce8=0;
-       codice_pdce8='';
-       descr_pdce8='';          
-    ELSE          
-       id_pdce8=COALESCE(elenco_prime_note.pdce_liv8_id,0);
-       codice_pdce8=COALESCE(elenco_prime_note.pdce_liv8_code,'');
-       descr_pdce8=COALESCE(elenco_prime_note.pdce_liv8_desc,'');      
-    END IF;
-    
-    livello=elenco_prime_note.livello;
-
-    IF upper(elenco_prime_note.movep_det_segno)='AVERE' THEN               
-            importo_dare=0;
-            importo_avere=COALESCE(elenco_prime_note.movep_det_importo,0);               
-    ELSE                
-            importo_dare=COALESCE(elenco_prime_note.movep_det_importo,0);
-            importo_avere=0;                          
-    END IF; 
-    
     --raise notice 'importo dare = %, importo avere = %',importo_dare,importo_avere;
+--	raise notice 'codice_pdce7 = % - codice_pdce8 = % - livello = % - id_pdce7 = % - id_pdce8 = % - Dare = % - Avere = %',
+  --  	codice_pdce7, codice_pdce8, livello, id_pdce7, id_pdce8, importo_dare, importo_avere;
+        
 
     return next;
+    
     nome_ente='';
     id_pdce0=0;
     codice_pdce0='';
@@ -754,4 +839,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR131_saldo_economico_patrimoniale" (p_ente_prop_id integer, p_anno varchar, p_classificatori varchar, p_liv_aggiuntivi varchar, p_tipo_stampa integer)
+  OWNER TO siac;

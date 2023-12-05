@@ -62,7 +62,8 @@ RETURNS TABLE (
   attivita_inizio date,
   attivita_fine date,
   attivita_code varchar,
-  attivita_desc varchar
+  attivita_desc varchar,
+  conto_tesoreria varchar
 ) AS
 $body$
 DECLARE
@@ -163,8 +164,9 @@ desc_ritenuta_irpeg='';
 importo_ente_irpeg=0;
 numeroParametriData=0;
 
-
 display_error='';
+conto_tesoreria:='';
+
 
 /* 01/08/2018 SIAC-6306.
 	Funzione creata per la gestione dell'aliquota IRPEF.
@@ -201,8 +203,14 @@ with ordinativo as (
            t_ord_ts_det.ord_ts_det_importo,
            d_ord_stato.ord_stato_code,
            t_ordinativo.ord_id,
-           t_ord_ts_det.ord_ts_id
-    from  siac_t_ordinativo t_ordinativo,
+           t_ord_ts_det.ord_ts_id,
+           		--13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+      	   COALESCE(d_contotes.contotes_code,'''') conto_tesoreria
+    from  siac_t_ordinativo t_ordinativo
+    		 --13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+           	LEFT JOIN siac_d_contotesoreria d_contotes 
+            	on (d_contotes.contotes_id = t_ordinativo.contotes_id 
+                	and d_contotes.data_cancellazione is null),
           siac_t_ordinativo_ts t_ord_ts,
           siac_t_ordinativo_ts_det t_ord_ts_det,
           siac_d_ordinativo_ts_det_tipo d_ts_det_tipo,
@@ -297,7 +305,9 @@ with ordinativo as (
            soggetto.soggetto_desc,  
            soggetto.partita_iva,
            soggetto.codice_fiscale,
-           reversali.*
+           reversali.*,
+           		--13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+           ordinativo.conto_tesoreria
     from  ordinativo         
     inner join capitolo  on ordinativo.ord_id = capitolo.ord_id
     inner join movimento on ordinativo.ord_ts_id = movimento.sord_id
@@ -352,7 +362,9 @@ with ordinativo as (
 			 reversali.code_caus_esenz,
 			 reversali.desc_caus_esenz,
              reversali.stato_reversale ,
-             reversali.num_reversale  
+             reversali.num_reversale,
+             	--13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+             ordinativo.conto_tesoreria  
     order by ordinativo.ord_numero, ordinativo.ord_emissione_data ';
 raise notice 'miaQuery = %', miaQuery;
 
@@ -408,7 +420,9 @@ loop
           benef_partita_iva=COALESCE(elencoMandati.partita_iva,'');
           benef_nome=COALESCE(elencoMandati.soggetto_desc,'');
           benef_codice=COALESCE(elencoMandati.soggetto_code,'');
-            
+                	--13/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+      	  conto_tesoreria:=elencoMandati.conto_tesoreria; 
+          
           return next;
        end if;
      
@@ -461,6 +475,7 @@ loop
   attivita_fine:=NULL;
   attivita_code:='';
   attivita_desc:='';
+  conto_tesoreria:='';
   
 end loop;  
    

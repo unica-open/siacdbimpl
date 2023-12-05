@@ -2,11 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-<<<<<<< .mine
-create or replace function fnc_migr_relaz_soggetto(  enteProprietarioId integer,
-=======
 Create or replace function fnc_migr_relaz_soggetto(  enteProprietarioId integer,
->>>>>>> .r10916
 		                                             loginOperazione varchar,
          		                                     dataElaborazione timestamp,
                                                      annoBilancio varchar,

@@ -2,20 +2,25 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_siac_disponibilitavariare_anno3 (
-  id_in integer
-)
-RETURNS numeric AS
-$body$
-DECLARE
 
+-- SIAC-7349 04/08/2020 CM Inizio
+
+DROP FUNCTION if exists siac.fnc_siac_disponibilitavariare_anno3(integer);
+CREATE OR REPLACE FUNCTION siac.fnc_siac_disponibilitavariare_anno3(
+	id_in integer)
+    RETURNS numeric
+    LANGUAGE 'plpgsql'
+
+    COST 100
+    VOLATILE 
+AS $BODY$
+DECLARE
 
 CAP_UG_TIPO constant varchar:='CAP-UG';
 CAP_UP_TIPO constant varchar:='CAP-UP';
 
 CAP_EG_TIPO constant varchar:='CAP-EG';
 CAP_EP_TIPO constant varchar:='CAP-EP';
-
 
 dispImpegnare numeric:=0;
 dispAccertare numeric:=0;
@@ -43,7 +48,6 @@ BEGIN
     and   bil.bil_id=bilElem.bil_id
     and   per.periodo_id=bil.periodo_id;
 
-
 	annoBilancio:=((annoBilancio::INTEGER)+2)::varchar;
 
 	case
@@ -54,11 +58,17 @@ BEGIN
 	    select * into stanzEffettivoRec
 		from fnc_siac_stanz_effettivo_up_anno (id_in,annoBilancio);
 
+		/* SIAC-7349 10:44
+			sia per UP che per UG, il calcolo dell'impegnato ai fini del Calcolo della disponibilita' a variare
+			dobbiamo restituire le ECONB ma non le modifiche negative provvisorie 
+			-> modif<0 provvisorie non riconteggiate, danno disp. al capitolo
+		*/
 		strMessaggio:='Calcolo disponibile variare elem_id='||id_in||
         	          'Tipo elemento di bilancio='||CAP_UP_TIPO||
     	              '.Calcolo impegnato per anno='||annobilancio||'.';
 	    select * into diCuiImpegnatoRec
-    	from fnc_siac_dicuiimpegnatoup_comp_anno (id_in,annoBilancio);
+    	from fnc_siac_dicuiimpegnatoup_comp_anno (id_in,annoBilancio, false); --SIAC-7349
+		-- from fnc_siac_dicuiimpegnatoup_comp_anno (id_in,annoBilancio);
 
         dispVariare:=stanzEffettivoRec.stanzEffettivo-diCuiImpegnatoRec.diCuiImpegnato;
       when  tipoCapitolo=CAP_EP_TIPO then
@@ -105,7 +115,6 @@ BEGIN
         dispVariare:=stanzEffettivoRec.stanzEffettivo-diCuiAccertatoRec.diCuiAccertato;
     end case;
 
-
 return dispVariare;
 
 exception
@@ -122,9 +131,9 @@ exception
  		RAISE EXCEPTION '% Errore DB % %',strMessaggio,SQLSTATE,substring(SQLERRM from 1 for 1000);
         return -1;
 END;
-$body$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY INVOKER
-COST 100;
+$BODY$;
+
+ALTER FUNCTION siac.fnc_siac_disponibilitavariare_anno3(integer)
+    OWNER TO siac;
+    
+-- SIAC-7349 04/08/2020 CM Fine

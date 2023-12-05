@@ -8,8 +8,9 @@
 
 # Target folder
 target/
-dist/
 logs/
+output-bin/
+
 
 # Eclipse files
 .classpath
@@ -23,15 +24,5 @@ logs/
 .recommenders/
 .settings/
 .sonar/
-
-# Own properties file
-/buildfiles/own.properties
-/bin/
-/build/
 /testbin/
-/buildfiles/local.properties
-
-# Mail utilities
-src/test/java/it/csi/siac/mail/include/*
-!src/test/java/it/csi/siac/mail/include/DND
-/own.properties
+/bin/

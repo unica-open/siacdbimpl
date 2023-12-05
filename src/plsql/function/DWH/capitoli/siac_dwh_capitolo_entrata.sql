@@ -145,7 +145,8 @@ CREATE TABLE siac.siac_dwh_capitolo_entrata (
   flagaccertatopercassa VARCHAR(1),
   ex_anno VARCHAR(4),
   ex_capitolo VARCHAR(200),
-  ex_articolo VARCHAR(200)
+  ex_articolo VARCHAR(200),
+  flag_pertinente_fcde varchar(1) NULL
 )
 WITH (oids = false);
 

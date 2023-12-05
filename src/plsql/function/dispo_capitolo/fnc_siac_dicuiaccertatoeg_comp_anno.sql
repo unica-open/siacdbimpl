@@ -2,6 +2,12 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
+drop function if exists siac.fnc_siac_dicuiaccertatoeg_comp_anno 
+(
+  id_in integer,
+  anno_in varchar
+);
+
 CREATE OR REPLACE FUNCTION siac.fnc_siac_dicuiaccertatoeg_comp_anno (
   id_in integer,
   anno_in varchar
@@ -243,6 +249,7 @@ end if;
     group by ts.movgest_ts_tipo_id
   ) tb, siac_d_movgest_ts_tipo tipo
   where tipo.movgest_ts_tipo_id=tb.movgest_ts_tipo_id
+  AND   tipo.movgest_ts_tipo_code='T' -- SIAC-8349 Sofia 16.09.2021
   order by tipo.movgest_ts_tipo_code desc
   limit 1;
   if importoModifNeg is null then importoModifNeg:=0; end if;
@@ -285,3 +292,6 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_siac_dicuiaccertatoeg_comp_anno(integer, varchar)
+    OWNER TO siac;

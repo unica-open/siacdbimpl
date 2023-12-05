@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE VIEW siac.siac_v_dwh_relazione_classi_sog (
+﻿CREATE OR REPLACE VIEW siac.siac_v_dwh_relazione_classi_sog (
     ana_classe_code,
     soggetto_code,
     ente_proprietario_id,

@@ -35,6 +35,10 @@ DECLARE
     STR_DET_TIPO     CONSTANT varchar:='STR';
     SCA_DET_TIPO     CONSTANT varchar:='SCA';
 
+	-- SIAC-7495 Sofia 14.09.2020
+    CAP_UP_ST CONSTANT varchar:='CAP-UP';
+    CAP_UG_ST CONSTANT varchar:='CAP-UG';
+
 	gestEqEsiste      integer:=null;
     prevEqApprova     integer:=null;
     gestEqEsisteNoPrev  integer:=null;
@@ -255,10 +259,89 @@ BEGIN
            (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
            returning fase_bil_elab_log_id into codResult;
 
-            if codResult is null then
-        	raise exception ' Errore in inserimento LOG.';
-            end if;
+           if codResult is null then
+           raise exception ' Errore in inserimento LOG.';
+           end if;
 
+		   -- SIAC-7495 Sofia 14.09.2020 - inizio
+	       if bilElemPrevTipo=CAP_UP_ST then
+           	 strMessaggio:='Inserimento backup componenti importi capitoli di gestione equivalenti esistenti.';
+             insert into bck_fase_bil_t_prev_approva_bil_elem_det_comp
+             (
+              elem_bck_det_comp_id,
+ 			  elem_bck_det_id,
+			  elem_bck_det_comp_tipo_id,
+			  elem_bck_det_importo,
+              elem_bck_data_creazione,
+              elem_bck_data_modifica,
+              elem_bck_login_operazione,
+              elem_bck_validita_inizio,
+              elem_bck_validita_fine,
+              fase_bil_elab_id,
+              validita_inizio,
+              login_operazione,
+              ente_proprietario_id
+              )
+              (select comp.elem_det_comp_id,
+              		  comp.elem_det_id,
+              		  comp.elem_det_comp_tipo_id,
+                      comp.elem_det_importo,
+                      comp.data_creazione,comp.data_modifica,comp.login_operazione,comp.validita_inizio,
+                      comp.validita_fine, fase.fase_bil_elab_id,clock_timestamp(),loginOperazione,fase.ente_proprietario_id
+               from fase_bil_t_prev_approva_str_elem_gest_esiste fase, siac_t_bil_elem_det det,
+		            siac_t_bil_elem_det_comp comp
+               where fase.ente_proprietario_id=enteProprietarioId
+               and   fase.bil_id=bilancioId
+               and   fase.fase_bil_elab_id=faseBilElabId
+               and   fase.data_cancellazione is null
+               and   fase.validita_fine is null
+               and   fase.elem_prev_id is not null
+               and   det.elem_id=fase.elem_gest_id
+               and   comp.elem_det_id=det.elem_det_id
+               and   det.data_cancellazione is null
+               and   det.validita_fine is null
+               and   comp.data_cancellazione is null
+               and   comp.validita_fine is null
+               );
+
+              codResult:=null;
+              strmessaggio:=strMessaggio||' Verifica inserimento.';
+              select 1  into codResult
+              from fase_bil_t_prev_approva_str_elem_gest_esiste fase, siac_t_bil_elem_det det,
+                   siac_t_bil_elem_det_comp comp
+              where fase.ente_proprietario_id=enteProprietarioId
+               and   fase.bil_id=bilancioId
+               and   fase.fase_bil_elab_id=faseBilElabId
+               and   fase.data_cancellazione is null
+               and   fase.validita_fine is null
+               and   fase.elem_prev_id is not null
+               and   det.elem_id=fase.elem_gest_id
+               and   comp.elem_det_id=det.elem_det_id
+               and   det.data_cancellazione is null
+               and   det.validita_fine is null
+               and   comp.data_cancellazione is null
+               and   comp.validita_fine is null
+               and   not exists (select 1 from bck_fase_bil_t_prev_approva_bil_elem_det_comp bck
+                                 where bck.fase_bil_elab_id=fase.fase_bil_elab_id
+                                 and   bck.elem_bck_det_comp_id=comp.elem_det_comp_id
+                                 and   bck.data_cancellazione is null
+                                 and   bck.validita_fine is null);
+               if codResult is not null then raise exception ' Elementi senza backup importi.'; end if;
+
+               codResult:=null;
+               insert into fase_bil_t_elaborazione_log
+               (fase_bil_elab_id,fase_bil_elab_log_operazione,
+                validita_inizio, login_operazione, ente_proprietario_id
+               )
+               values
+               (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+               returning fase_bil_elab_log_id into codResult;
+
+               if codResult is null then
+               	raise exception ' Errore in inserimento LOG.';
+               end if;
+           end if;
+		  -- SIAC-7495 Sofia 14.09.2020 - inizio
        end if;
     end if;
 
@@ -380,6 +463,98 @@ BEGIN
      if codResult is null then
         	raise exception ' Errore in inserimento LOG.';
      end if;
+
+     -- SIAC-7495 Sofia 15.09.2020 - inizio
+	 if bilElemPrevTipo=CAP_UP_ST then
+
+       strMessaggio:='Inserimento  componenti importi attuali capitoli di previsione su gestione  equivalenti non esistenti.';
+       insert into siac_t_bil_elem_det_comp
+       (elem_det_id,elem_det_comp_tipo_id, elem_det_importo,
+        validita_inizio, ente_proprietario_id, login_operazione)
+       (select detGest.elem_det_id,
+               tipo.elem_det_comp_tipo_id,
+               (case when importiPrev=true then compPrev.elem_det_importo
+                    else 0 END),
+               dataInizioVal,tipo.ente_proprietario_id,loginOperazione
+        from fase_bil_t_prev_approva_str_elem_gest_nuovo fase,
+             siac_t_bil_elem_det detPrev,siac_t_bil_elem_det_comp compPrev,
+             siac_d_bil_elem_det_comp_tipo tipo,
+             siac_t_bil_elem_det detGest
+        where fase.ente_proprietario_id=enteProprietarioId
+        and   fase.bil_id=bilancioId
+        and   fase.fase_bil_elab_id=faseBilElabId
+        and   fase.data_cancellazione is null
+        and   fase.validita_fine is null
+        and   detPrev.elem_id=fase.elem_id
+        and   compPrev.elem_det_id=detPrev.elem_det_id
+        and   tipo.elem_det_comp_tipo_id=compPrev.elem_det_comp_tipo_id
+        and   detGest.elem_id=fase.elem_gest_id
+        and   detGest.elem_det_tipo_id=detPrev.elem_det_tipo_id
+        and   detGest.periodo_id=detPrev.periodo_id
+        and   detPrev.data_cancellazione is null
+        and   detPrev.validita_fine is null
+        and   compPrev.data_cancellazione is null
+        and   compPrev.validita_fine is null
+        and   detGest.data_cancellazione is null
+        and   detGest.validita_fine is null
+        and   tipo.data_cancellazione is null
+       );
+
+       codResult:=null;
+       insert into fase_bil_t_elaborazione_log
+       (fase_bil_elab_id,fase_bil_elab_log_operazione,
+        validita_inizio, login_operazione, ente_proprietario_id
+       )
+       values
+       (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+       returning fase_bil_elab_log_id into codResult;
+
+       if codResult is null then
+         raise exception ' Errore in inserimento LOG.';
+       end if;
+
+       --- controllo inserimento importi prec
+       codResult:=null;
+       strMessaggio:='Inserimento componenti  importi capitoli di previsione su gestione equivalenti non esistenti.Verifica inserimento.';
+       select 1  into codResult
+       from siac_t_bil_elem_det det ,
+       	    siac_t_bil_elem_det_comp comp,
+            siac_d_bil_elem_det_comp_tipo tipo,
+            fase_bil_t_prev_approva_str_elem_gest_nuovo fase
+       where fase.ente_proprietario_id=enteProprietarioId
+       and   fase.bil_id=bilancioId
+       and   fase.fase_bil_elab_id=faseBilElabId
+       and   fase.data_cancellazione is null
+       and   fase.validita_fine is null
+       and   det.elem_id=fase.elem_gest_id
+       and   comp.elem_det_id=det.elem_det_id
+       and   tipo.elem_det_comp_tipo_id=comp.elem_det_comp_tipo_id
+       and   det.data_cancellazione is null
+       and   det.validita_fine is null
+       and   comp.data_cancellazione is null
+       and   comp.validita_fine is null
+       and   tipo.data_cancellazione is null
+  --     order by fase.fase_bil_prev_str_nuovo_id
+       limit 1;
+
+       if codResult is null then
+          raise exception ' Non effettuato.';
+       end if;
+
+       codResult:=null;
+       insert into fase_bil_t_elaborazione_log
+       (fase_bil_elab_id,fase_bil_elab_log_operazione,
+        validita_inizio, login_operazione, ente_proprietario_id
+       )
+       values
+       (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+       returning fase_bil_elab_log_id into codResult;
+
+       if codResult is null then
+              raise exception ' Errore in inserimento LOG.';
+       end if;
+     end if;
+     -- SIAC-7495 Sofia 15.09.2020 - fine
     end if;
 
 --	raise notice 'elemGestEq=% gestEqEsiste=%', elemGestEq,gestEqEsiste;
@@ -548,6 +723,253 @@ BEGIN
         if codResult is null then
         	raise exception ' Errore in inserimento LOG.';
         end if; */
+
+     -- SIAC-7495 Sofia 15.09.2020 - inizio
+	 if bilElemPrevTipo=CAP_UP_ST then
+	    strMessaggio:='Aggiornamento componenti importi capitoli di previsione  su gestione equivalenti esistenti.'
+        			 ||' Aggiornamento componenti esistenti.';
+		update siac_t_bil_elem_det_comp compGest
+        set elem_det_importo=compPrev.elem_det_importo,
+            data_modifica=clock_timestamp(),
+            login_operazione=loginOperazione
+        from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+             siac_t_bil_elem_det detPrev,siac_t_bil_elem_det_comp compPrev,
+             siac_d_bil_elem_det_comp_tipo tipo,
+             siac_t_bil_elem_det detGest
+     	where fase.ente_proprietario_id=enteProprietarioId
+        and   fase.bil_id=bilancioId
+        and   fase.fase_bil_elab_id=faseBilElabId
+	    and   fase.data_cancellazione is null
+    	and   fase.validita_fine is null
+	    and   fase.elem_prev_id is not null
+    	and   detPrev.elem_id=fase.elem_prev_id
+        and   compPrev.elem_det_id=detPrev.elem_det_id
+        and   tipo.elem_det_comp_tipo_id=compPrev.elem_det_comp_tipo_id
+        and   detGest.elem_id=fase.elem_gest_id
+        and   detGest.elem_det_tipo_id=detPrev.elem_det_tipo_id
+        and   detGest.periodo_id=detPrev.periodo_id
+        and   compGest.elem_det_id=detGest.elem_det_id
+        and   compGest.elem_det_comp_tipo_id=tipo.elem_det_comp_tipo_id
+	    and   detGest.data_cancellazione is null
+    	and   detGest.validita_fine is null
+        and   compGest.data_cancellazione is null
+    	and   compGest.validita_fine is null
+	    and   detPrev.data_cancellazione is null
+    	and   detPrev.validita_fine is null
+        and   compPrev.data_cancellazione is null
+    	and   compPrev.validita_fine is null
+        and   tipo.data_cancellazione is null;
+
+
+		codResult:=null;
+   	    insert into fase_bil_t_elaborazione_log
+        (fase_bil_elab_id,fase_bil_elab_log_operazione,
+         validita_inizio, login_operazione, ente_proprietario_id
+        )
+        values
+        (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+        returning fase_bil_elab_log_id into codResult;
+
+        if codResult is null then
+        	raise exception ' Errore in inserimento LOG.';
+        end if;
+
+		strMessaggio:='Aggiornamento componenti importi capitoli di previsione  su gestione equivalenti esistenti.'
+        			 ||' Azzeramento componenti non esistenti in previsione utilizzate in gestione.';
+        update siac_t_bil_elem_det_comp compGest
+        set elem_det_importo=0,
+            data_modifica=clock_timestamp(),
+            login_operazione=loginOperazione
+        from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+             siac_t_bil_elem_det detPrev,
+             siac_d_bil_elem_det_comp_tipo tipo,
+             siac_t_bil_elem_det detGest
+     	where fase.ente_proprietario_id=enteProprietarioId
+        and   fase.bil_id=bilancioId
+        and   fase.fase_bil_elab_id=faseBilElabId
+	    and   fase.data_cancellazione is null
+    	and   fase.validita_fine is null
+	    and   fase.elem_prev_id is not null
+    	and   detPrev.elem_id=fase.elem_prev_id
+        and   detGest.elem_id=fase.elem_gest_id
+        and   detGest.elem_det_tipo_id=detPrev.elem_det_tipo_id
+        and   detGest.periodo_id=detPrev.periodo_id
+        and   compGest.elem_det_id=detGest.elem_det_id
+        and   tipo.elem_det_comp_tipo_id=compGest.elem_det_comp_tipo_id
+        and   not exists
+        (
+        select 1
+        from siac_t_bil_elem_det_comp compPrev
+        where compPrev.elem_det_id=detPrev.elem_det_id
+        and   compPrev.elem_det_comp_tipo_id=tipo.elem_det_comp_tipo_id
+        and   compPrev.data_cancellazione is null
+    	and   compPrev.validita_fine is null
+        )
+        and
+        (
+          exists
+          (
+          select 1
+          from siac_t_bil_elem_det_var_comp var
+          where var.elem_det_comp_id=compGest.elem_det_comp_id
+          and   var.data_cancellazione is null
+          )
+        or
+          exists
+          (
+          select 1
+          from siac_r_movgest_bil_elem r
+          where r.elem_id=fase.elem_gest_id
+          and   r.elem_det_comp_tipo_id=compGest.elem_det_comp_tipo_id
+          and   r.data_cancellazione is null
+          )
+        )
+	    and   detGest.data_cancellazione is null
+    	and   detGest.validita_fine is null
+        and   compGest.data_cancellazione is null
+    	and   compGest.validita_fine is null
+	    and   detPrev.data_cancellazione is null
+    	and   detPrev.validita_fine is null
+        and   tipo.data_cancellazione is null;
+
+
+		strMessaggio:='Aggiornamento componenti importi capitoli di previsione  su gestione equivalenti esistenti.'
+        			 ||' Azzeramento e invalidamento componenti non esistenti in previsione non utilizzate in gestione.';
+        update siac_t_bil_elem_det_comp compGest
+        set elem_det_importo=0,
+            data_cancellazione=clock_timestamp(),
+            login_operazione=loginOperazione
+        from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+             siac_t_bil_elem_det detPrev,
+             siac_d_bil_elem_det_comp_tipo tipo,
+             siac_t_bil_elem_det detGest
+     	where fase.ente_proprietario_id=enteProprietarioId
+        and   fase.bil_id=bilancioId
+        and   fase.fase_bil_elab_id=faseBilElabId
+	    and   fase.data_cancellazione is null
+    	and   fase.validita_fine is null
+	    and   fase.elem_prev_id is not null
+    	and   detPrev.elem_id=fase.elem_prev_id
+        and   detGest.elem_id=fase.elem_gest_id
+        and   detGest.elem_det_tipo_id=detPrev.elem_det_tipo_id
+        and   detGest.periodo_id=detPrev.periodo_id
+        and   compGest.elem_det_id=detGest.elem_det_id
+        and   tipo.elem_det_comp_tipo_id=compGest.elem_det_comp_tipo_id
+        and   not exists
+        (
+        select 1
+        from siac_t_bil_elem_det_comp compPrev
+        where compPrev.elem_det_id=detPrev.elem_det_id
+        and   compPrev.elem_det_comp_tipo_id=tipo.elem_det_comp_tipo_id
+        and   compPrev.data_cancellazione is null
+    	and   compPrev.validita_fine is null
+        )
+        and not exists
+        (
+          select 1
+          from siac_t_bil_elem_det_var_comp var
+          where var.elem_det_comp_id=compGest.elem_det_comp_id
+          and   var.data_cancellazione is null
+        )
+        and not exists
+        (
+          select 1
+          from siac_r_movgest_bil_elem r
+          where r.elem_id=fase.elem_gest_id
+          and   r.elem_det_comp_tipo_id=compGest.elem_det_comp_tipo_id
+          and   r.data_cancellazione is null
+        )
+	    and   detGest.data_cancellazione is null
+    	and   detGest.validita_fine is null
+        and   compGest.data_cancellazione is null
+    	and   compGest.validita_fine is null
+	    and   detPrev.data_cancellazione is null
+    	and   detPrev.validita_fine is null
+        and   tipo.data_cancellazione is null;
+
+
+		codResult:=null;
+   	    insert into fase_bil_t_elaborazione_log
+        (fase_bil_elab_id,fase_bil_elab_log_operazione,
+         validita_inizio, login_operazione, ente_proprietario_id
+        )
+        values
+        (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+        returning fase_bil_elab_log_id into codResult;
+
+        if codResult is null then
+        	raise exception ' Errore in inserimento LOG.';
+        end if;
+
+
+        strMessaggio:='Aggiornamento componenti importi capitoli di previsione  su gestione equivalenti esistenti.'
+        			 ||' Inserimento componenti non esistenti in gestione.';
+        insert into siac_t_bil_elem_det_comp
+        (
+        	elem_det_id,
+            elem_det_comp_tipo_id,
+            elem_det_importo,
+            validita_inizio,
+            login_operazione,
+            ente_proprietario_id
+        )
+        select
+        	 detGest.elem_det_id,
+             tipo.elem_det_comp_tipo_id,
+             compPrev.elem_det_importo,
+             dataInizioVal,
+             loginOperazione,
+             tipo.ente_proprietario_id
+        from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+             siac_t_bil_elem_det detPrev,
+             siac_t_bil_elem_det_comp compPrev,
+             siac_d_bil_elem_det_comp_tipo tipo,
+             siac_t_bil_elem_det detGest
+     	where fase.ente_proprietario_id=enteProprietarioId
+        and   fase.bil_id=bilancioId
+        and   fase.fase_bil_elab_id=faseBilElabId
+	    and   fase.data_cancellazione is null
+    	and   fase.validita_fine is null
+	    and   fase.elem_prev_id is not null
+    	and   detPrev.elem_id=fase.elem_prev_id
+        and   compPrev.elem_det_id=detPrev.elem_det_id
+        and   tipo.elem_det_comp_tipo_id=compPrev.elem_det_comp_tipo_id
+        and   detGest.elem_id=fase.elem_gest_id
+        and   detGest.elem_det_tipo_id=detPrev.elem_det_tipo_id
+        and   detGest.periodo_id=detPrev.periodo_id
+        and   not exists
+        (
+        select 1
+        from siac_t_bil_elem_det_comp compGest
+        where compGest.elem_det_id=detGest.elem_det_id
+        and   compGest.elem_det_comp_tipo_id=tipo.elem_det_comp_tipo_id
+        and   compGest.data_cancellazione is null
+    	and   compGest.validita_fine is null
+        )
+	    and   detGest.data_cancellazione is null
+    	and   detGest.validita_fine is null
+        and   compPrev.data_cancellazione is null
+    	and   compPrev.validita_fine is null
+	    and   detPrev.data_cancellazione is null
+    	and   detPrev.validita_fine is null
+        and   tipo.data_cancellazione is null;
+
+
+		codResult:=null;
+   	    insert into fase_bil_t_elaborazione_log
+        (fase_bil_elab_id,fase_bil_elab_log_operazione,
+         validita_inizio, login_operazione, ente_proprietario_id
+        )
+        values
+        (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+        returning fase_bil_elab_log_id into codResult;
+
+        if codResult is null then
+        	raise exception ' Errore in inserimento LOG.';
+        end if;
+     end if;
+     -- SIAC-7495 Sofia 15.09.2020 - fine
+
 
 	end if;
 
@@ -749,8 +1171,349 @@ BEGIN
          if codResult is null then
         	raise exception ' Errore in inserimento LOG.';
          end if; */
+
+         -- SIAC-7495 Sofia 15.09.2020 - inizio
+	 	 if bilElemPrevTipo=CAP_UP_ST then
+         	 strMessaggio:='Inserimento backup componenti importi per capitoli di gestione esistenti senza previsione equivalente.';
+             insert into bck_fase_bil_t_prev_approva_bil_elem_det_comp
+             (
+              elem_bck_det_comp_id,
+ 			  elem_bck_det_id,
+			  elem_bck_det_comp_tipo_id,
+			  elem_bck_det_importo,
+              elem_bck_data_creazione,
+              elem_bck_data_modifica,
+              elem_bck_login_operazione,
+              elem_bck_validita_inizio,
+              elem_bck_validita_fine,
+              fase_bil_elab_id,
+              validita_inizio,
+              login_operazione,
+              ente_proprietario_id
+              )
+              (select comp.elem_det_comp_id,comp.elem_det_id,comp.elem_det_comp_tipo_id, comp.elem_det_importo,
+                      comp.data_creazione,comp.data_modifica,comp.login_operazione,comp.validita_inizio,
+                      comp.validita_fine, fase.fase_bil_elab_id,clock_timestamp(),loginOperazione,fase.ente_proprietario_id
+               from fase_bil_t_prev_approva_str_elem_gest_esiste fase, siac_t_bil_elem_det det,
+               	    siac_t_bil_elem_det_comp comp
+               where fase.ente_proprietario_id=enteProprietarioId
+               and   fase.bil_id=bilancioId
+               and   fase.fase_bil_elab_id=faseBilElabId
+               and   fase.data_cancellazione is null
+               and   fase.validita_fine is null
+               and   fase.elem_prev_id is null
+               and   det.elem_id=fase.elem_gest_id
+               and   comp.elem_det_id=det.elem_det_id
+               and   det.data_cancellazione is null
+               and   det.validita_fine is null
+               and   comp.data_cancellazione is null
+               and   comp.validita_fine is null
+              );
+
+              codResult:=null;
+              strmessaggio:=strMessaggio||' Verifica inserimento.';
+              select 1  into codResult
+              from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+                   siac_t_bil_elem_det det,siac_t_bil_elem_det_comp comp
+              where fase.ente_proprietario_id=enteProprietarioId
+               and   fase.bil_id=bilancioId
+               and   fase.fase_bil_elab_id=faseBilElabId
+               and   fase.data_cancellazione is null
+               and   fase.validita_fine is null
+               and   fase.elem_prev_id is null
+               and   det.elem_id=fase.elem_gest_id
+               and   comp.elem_det_id=det.elem_det_id
+               and   det.data_cancellazione is null
+               and   det.validita_fine is null
+               and   comp.data_cancellazione is null
+               and   comp.validita_fine is null
+               and   not exists (select 1 from bck_fase_bil_t_prev_approva_bil_elem_det_comp bck
+                                 where bck.fase_bil_elab_id=fase.fase_bil_elab_id
+                                 and   bck.elem_bck_det_comp_id=comp.elem_det_comp_id
+                                 and   bck.data_cancellazione is null
+                                 and   bck.validita_fine is null);
+              if codResult is not null then raise exception ' Elementi senza backup importi.'; end if;
+
+              strMessaggio:='Aggiornamento componenti importi a zero per capitoli di gestione esistenti senza previsione equivalente.'
+                            ||' Azzeramento importi per componenti utilizzati in gestione.';
+              update siac_t_bil_elem_det_comp compCor
+              set   elem_det_importo=0,
+                    data_modifica=now(),
+                    login_operazione=loginOperazione
+              from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+                   siac_t_bil_elem_det det
+              where fase.ente_proprietario_id=enteProprietarioId
+              and   fase.bil_id=bilancioId
+              and   fase.fase_bil_elab_id=faseBilElabId
+              and   fase.data_cancellazione is null
+              and   fase.validita_fine is null
+              and   fase.elem_prev_id is null
+              and   det.elem_id=fase.elem_gest_id
+              and   compCor.elem_det_id=det.elem_det_id
+              and
+              (
+                exists
+                (
+                select 1
+                from siac_t_bil_elem_det_var_comp var
+                where var.elem_det_comp_id=compCor.elem_det_comp_id
+                and   var.data_cancellazione is null
+                )
+                /* 09.10.2020 Sofia da scommentare con rilascio della SIAC-7349
+				or
+                exists
+                (
+                select 1
+                from siac_r_movgest_bil_elem re
+                where re.elem_id=fase.elem_gest_id
+                and   re.elem_det_comp_tipo_id=compCor.elem_det_comp_tipo_id
+                and   re.data_cancellazione is null
+                )*/
+              )
+              and   compCor.data_cancellazione is null
+              and   compCor.validita_fine is null
+              and   det.data_cancellazione is null
+              and   det.validita_fine is null;
+
+
+              strMessaggio:='Aggiornamento componenti importi a zero per capitoli di gestione esistenti senza previsione equivalente.'
+                            ||' Azzeramento importi per componenti non utilizzati in gestione.';
+              update siac_t_bil_elem_det_comp compCor
+              set   elem_det_importo=0,
+                    data_cancellazione=now(),
+                    login_operazione=loginOperazione
+              from fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+                   siac_t_bil_elem_det det
+              where fase.ente_proprietario_id=enteProprietarioId
+              and   fase.bil_id=bilancioId
+              and   fase.fase_bil_elab_id=faseBilElabId
+              and   fase.data_cancellazione is null
+              and   fase.validita_fine is null
+              and   fase.elem_prev_id is null
+              and   det.elem_id=fase.elem_gest_id
+              and   compCor.elem_det_id=det.elem_det_id
+              and   not exists
+              (
+                select 1
+                from siac_t_bil_elem_det_var_comp var
+                where var.elem_det_comp_id=compCor.elem_det_comp_id
+                and   var.data_cancellazione is null
+              )
+              /* 09.10.2020 Sofia da scommentare con rilascio della SIAC-7349
+			  and not exists
+              (
+                select 1
+                from siac_r_movgest_bil_elem re
+                where re.elem_id=fase.elem_gest_id
+                and   re.elem_det_comp_tipo_id=compCor.elem_det_comp_tipo_id
+                and   re.data_cancellazione is null
+              )*/
+              and   compCor.data_cancellazione is null
+              and   compCor.validita_fine is null
+              and   det.data_cancellazione is null
+              and   det.validita_fine is null;
+
+             codResult:=null;
+             insert into fase_bil_t_elaborazione_log
+             (fase_bil_elab_id,fase_bil_elab_log_operazione,
+              validita_inizio, login_operazione, ente_proprietario_id
+             )
+             values
+             (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+             returning fase_bil_elab_log_id into codResult;
+
+             if codResult is null then
+                raise exception ' Errore in inserimento LOG.';
+             end if;
+     	 end if;
+         -- SIAC-7495 Sofia 15.09.2020 - fine
        end if;
+
     end if;
+
+   -- SIAC-7495 Sofia 05.10.2020 - inizio
+   if bilElemPrevTipo=CAP_UP_ST then
+
+    strMessaggio:='Aggiornamento importi componenti a zero per capitoli di gestione nuovi : '
+                  ||' cancellazione logica componenti a zero non utilizzate.';
+    update siac_t_bil_elem_det_comp detCompCor
+    set --elem_det_importo=0,
+        data_cancellazione=clock_timestamp(),
+        login_operazione=loginOperazione||'-CANC-COMP-ZERO'
+    from  fase_bil_t_prev_approva_str_elem_gest_nuovo fase,
+          siac_t_bil_elem_det det ,siac_t_periodo per,
+          siac_d_bil_elem_det_comp_tipo tipo,
+          (
+          select tipo.elem_tipo_code,e.elem_code::integer,
+                 e.elem_id,
+                 tipo_comp.elem_det_comp_tipo_id,
+                 tipo_comp.elem_det_comp_tipo_desc,
+                 sum(comp.elem_det_importo)
+          from siac_t_bil_elem e,siac_d_bil_elem_tipo tipo,
+               siac_t_bil_elem_Det det,siac_t_bil_elem_Det_comp comp,
+               siac_d_bil_elem_det_comp_tipo tipo_comp,siac_t_periodo per
+          where tipo.ente_proprietario_id=enteProprietarioId
+          and   tipo.elem_tipo_code=CAP_UG_ST
+          and   e.elem_tipo_id=tipo.elem_tipo_id
+          and   e.bil_id=bilancioId
+          and   det.elem_id=e.elem_id
+          and   comp.elem_det_id=det.elem_det_id
+          and   tipo_comp.elem_det_comp_tipo_id=comp.elem_det_comp_tipo_id
+          and   per.periodo_id=det.periodo_id
+          and not exists
+          (
+          select 1
+          from siac_t_bil_elem_det_comp comp_comp,
+               siac_t_bil_elem_det_var_comp dvar_comp,siac_t_bil_elem_det_var dvar
+          where comp_comp.elem_det_comp_tipo_id=tipo_comp.elem_det_comp_tipo_id
+          and   dvar_comp.elem_det_comp_id=comp_comp.elem_det_comp_id
+          and   dvar.elem_det_var_id=dvar_comp.elem_det_var_id
+          and   dvar.elem_id=e.elem_id
+          and   comp_comp.data_cancellazione is null
+          and   dvar_comp.data_cancellazione is null
+          and   dvar.data_cancellazione is null
+          )
+         /*  09.10.2020 Sofia da scommentare con rilascio della SIAC-7349
+		  and not exists
+          (
+          select 1
+          from siac_r_movgest_bil_elem re
+          where  re.elem_id=e.elem_id
+          and    re.elem_det_comp_tipo_id=tipo_comp.elem_det_comp_tipo_id
+          and    re.data_cancellazione is null
+          )*/
+          and   e.data_cancellazione is null
+          and   det.data_cancellazione is null
+          and   det.validita_fine is null
+          and   comp.data_cancellazione is null
+          and   comp.validita_fine is null
+          and   tipo_comp.data_cancellazione is null
+          group by tipo.elem_tipo_code,e.elem_code::integer,
+                   e.elem_id,
+                   tipo_comp.elem_det_comp_tipo_id,
+                   tipo_comp.elem_det_comp_tipo_desc
+          having sum(comp.elem_det_importo)=0
+          order by 1,2,3
+          ) query
+    where fase.ente_proprietario_id=enteProprietarioId
+    and   fase.bil_id=bilancioId
+    and   fase.fase_bil_elab_id=faseBilElabId
+    and   fase.data_cancellazione is null
+    and   fase.validita_fine is null
+    and   det.elem_id=fase.elem_gest_id
+    and   detCompCor.elem_Det_id=det.elem_det_id
+    and   tipo.elem_Det_comp_tipo_id=detCompCor.elem_det_comp_tipo_id
+    and   per.periodo_id=det.periodo_id
+    and   query.elem_id=det.elem_id
+    and   query.elem_det_comp_tipo_id=tipo.elem_Det_comp_tipo_id
+    and   det.data_cancellazione is null
+    and   detCompCor.data_cancellazione is null;
+
+
+    codResult:=null;
+    insert into fase_bil_t_elaborazione_log
+    (fase_bil_elab_id,fase_bil_elab_log_operazione,
+    validita_inizio, login_operazione, ente_proprietario_id
+    )
+    values
+    (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+    returning fase_bil_elab_log_id into codResult;
+
+    if codResult is null then
+      raise exception ' Errore in inserimento LOG.';
+    end if;
+
+
+    strMessaggio:='Aggiornamento importi componenti a zero per capitoli di gestione esistenti : '
+                  ||' cancellazione logica componenti a zero non utilizzate.';
+    update siac_t_bil_elem_det_comp detCompCor
+    set --elem_det_importo=0,
+        data_cancellazione=clock_timestamp(),
+        login_operazione=loginOperazione||'-CANC-COMP-ZERO'
+    from  fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+          siac_t_bil_elem_det det ,siac_t_periodo per,
+          siac_d_bil_elem_det_comp_tipo tipo,
+          (
+          select tipo.elem_tipo_code,e.elem_code::integer,
+                 e.elem_id,
+                 tipo_comp.elem_det_comp_tipo_id,
+                 tipo_comp.elem_det_comp_tipo_desc,
+                 sum(comp.elem_det_importo)
+          from siac_t_bil_elem e,siac_d_bil_elem_tipo tipo,
+               siac_t_bil_elem_Det det,siac_t_bil_elem_Det_comp comp,
+               siac_d_bil_elem_det_comp_tipo tipo_comp,siac_t_periodo per
+          where tipo.ente_proprietario_id=enteProprietarioId
+          and   tipo.elem_tipo_code=CAP_UG_ST
+          and   e.elem_tipo_id=tipo.elem_tipo_id
+          and   e.bil_id=bilancioId
+          and   det.elem_id=e.elem_id
+          and   comp.elem_det_id=det.elem_det_id
+          and   tipo_comp.elem_det_comp_tipo_id=comp.elem_det_comp_tipo_id
+          and   per.periodo_id=det.periodo_id
+          and not exists
+          (
+          select 1
+          from siac_t_bil_elem_det_comp comp_comp,
+               siac_t_bil_elem_det_var_comp dvar_comp,siac_t_bil_elem_det_var dvar
+          where comp_comp.elem_det_comp_tipo_id=tipo_comp.elem_det_comp_tipo_id
+          and   dvar_comp.elem_det_comp_id=comp_comp.elem_det_comp_id
+          and   dvar.elem_det_var_id=dvar_comp.elem_det_var_id
+          and   dvar.elem_id=e.elem_id
+          and   comp_comp.data_cancellazione is null
+          and   dvar_comp.data_cancellazione is null
+          and   dvar.data_cancellazione is null
+          )
+          /* 09.10.2020 Sofia da scommentare con rilascio della SIAC-7349
+		  and not exists
+          (
+          select 1
+          from siac_r_movgest_bil_elem re
+          where  re.elem_id=e.elem_id
+          and    re.elem_det_comp_tipo_id=tipo_comp.elem_det_comp_tipo_id
+          and    re.data_cancellazione is null
+          )*/
+          and   e.data_cancellazione is null
+          and   det.data_cancellazione is null
+          and   det.validita_fine is null
+          and   comp.data_cancellazione is null
+          and   comp.validita_fine is null
+          and   tipo_comp.data_cancellazione is null
+          group by tipo.elem_tipo_code,e.elem_code::integer,
+                   e.elem_id,
+                   tipo_comp.elem_det_comp_tipo_id,
+                   tipo_comp.elem_det_comp_tipo_desc
+          having sum(comp.elem_det_importo)=0
+          order by 1,2,3
+          ) query
+    where fase.ente_proprietario_id=enteProprietarioId
+    and   fase.bil_id=bilancioId
+    and   fase.fase_bil_elab_id=faseBilElabId
+    and   fase.data_cancellazione is null
+    and   fase.validita_fine is null
+    and   det.elem_id=fase.elem_gest_id
+    and   detCompCor.elem_Det_id=det.elem_det_id
+    and   tipo.elem_Det_comp_tipo_id=detCompCor.elem_det_comp_tipo_id
+    and   per.periodo_id=det.periodo_id
+    and   query.elem_id=det.elem_id
+    and   query.elem_det_comp_tipo_id=tipo.elem_Det_comp_tipo_id
+    and   det.data_cancellazione is null
+    and   detCompCor.data_cancellazione is null;
+
+
+    codResult:=null;
+    insert into fase_bil_t_elaborazione_log
+    (fase_bil_elab_id,fase_bil_elab_log_operazione,
+    validita_inizio, login_operazione, ente_proprietario_id
+    )
+    values
+    (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+    returning fase_bil_elab_log_id into codResult;
+
+    if codResult is null then
+      raise exception ' Errore in inserimento LOG.';
+    end if;
+
+   end if;
 
    strMessaggio:='Aggiornamento elaborazione faseBilElabId='||faseBilElabId||' per conclusione OK.';
     update fase_bil_t_elaborazione set
@@ -800,3 +1563,19 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter function siac.fnc_fasi_bil_prev_approva_importi
+(
+   integer,
+   varchar,
+   varchar,
+   varchar,
+   boolean,
+   boolean,
+   integer,
+   integer,
+   varchar,
+   timestamp, 
+   out  integer,
+   out  varchar
+) owner to siac;

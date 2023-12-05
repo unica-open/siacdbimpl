@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE BILANCIO.PCK_MIGRAZIONE_SIAC AS
 
   STATO_IMPEGNO_P CONSTANT VARCHAR2(1) := 'P';

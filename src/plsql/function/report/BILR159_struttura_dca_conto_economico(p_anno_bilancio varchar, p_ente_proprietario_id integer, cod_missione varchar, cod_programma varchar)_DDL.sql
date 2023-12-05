@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR159_struttura_dca_conto_economico" (
@@ -19,13 +19,17 @@ RETURNS TABLE (
   pdce_conto_code varchar,
   pdce_conto_desc varchar,
   livello integer,
-  pnota_id integer
+  pnota_id integer,
+  ambito_id integer,
+  campo_pk_id integer,
+  campo_pk_id_2 integer
 ) AS
 $body$
 DECLARE
 
 nome_ente varchar;
 bilancio_id integer;
+bilanco_id_succ integer;
 RTN_MESSAGGIO text;
 sql_query VARCHAR;
 
@@ -42,11 +46,15 @@ BEGIN
   -- 	contiene un apice. Sostituisco l'apice con uno doppio.  
   nome_ente:=REPLACE(nome_ente,'''','''''');  
   
-  select a.bil_id into bilancio_id from siac_t_bil a,siac_t_periodo b
+  select a.bil_id 
+  	into bilancio_id 
+  from siac_t_bil a,siac_t_periodo b
   where a.ente_proprietario_id = p_ente_proprietario_id 
-  and b.periodo_id = a.periodo_id
-  and b.anno = p_anno_bilancio;
-
+    and b.periodo_id = a.periodo_id
+    and b.anno = p_anno_bilancio;
+    
+raise notice 'Id bilancio di % = %', p_anno_bilancio, bilancio_id; 
+    
 /* 18/10/2017: resa dinamica la query perche' sono stati aggiunti i parametri 
 	cod_missione e cod_programma */
 
@@ -71,7 +79,57 @@ per evitare di prendere in considerazione dati con capitoli appartenenti ad un a
 diverso da quello inserito
   */ 
     
-sql_query:='select zz.* from (
+/* 30/12/2020 SIAC-7894.
+	Inserita la gestione dell'ambito in quanto si deve filtrare per ambito FIN.
+
+*************************************************************
+
+   25/05/2021 SIAC-8197.
+    Quando vi sono importi negativi nella colonna Dare devono essere spostati 
+    come positivi nella colonna Avere e viceversa.
+    Questo controllo non vale per i conti:
+    - 1.5.1.01.01.001
+    - 1.6.1.01.01.001
+    - 2.5.1.01.01.001.         
+
+	Questo controllo e' stato implementato trasformando il segno da Dare ad Avere
+    e viceversa quando l'importo e' negativo ed il conto non e' compreso tra
+    i 3 indicati.
+    Il controllo c'è in 2 punti nella query costruita dinamicamente perche'
+    c'è una UNION.
+    
+*/  
+
+--SIAC-8713 17/05/2022.
+--Aggiunto il distinct perche' ci sono prime
+--note di un anno bilancio collegate a capitoli sia dell'anno corrente che
+--dell'anno successivo; in questo caso l'importo della prima nota
+--veniva duplicato.
+--Inoltre aono aggiunti anche i campi campo_pk_id, campo_pk_id_2 nella query
+-- per essere --certo di non escludere a causa del distinct le registrazioni 
+--che hanno 2 importi uguali. 
+sql_query:='select distinct --zz.*  
+ zz.nome_ente ,
+  zz.missione_code ,
+  zz.missione_desc ,
+  zz.programma_code ,
+  zz.programma_desc ,
+ -- zz.movep_det_segno ,
+ case when zz.importo < 0 and 
+   zz.pdce_conto_code not in (''1.5.1.01.01.001'', ''1.6.1.01.01.001'', ''2.5.1.01.01.001'')
+   then	case when zz.movep_det_segno =''Dare'' then ''Avere'' else ''Dare'' end
+  else zz.movep_det_segno end ,
+  case when zz.importo < 0 and 
+   zz.pdce_conto_code not in (''1.5.1.01.01.001'', ''1.6.1.01.01.001'', ''2.5.1.01.01.001'')
+   then zz.importo*-1 else  zz.importo end, 
+  zz.pdce_conto_code ,
+  zz.pdce_conto_desc ,
+  zz.livello ,
+  zz.pnota_id ,
+  --SIAC-8713 17/05/2022.
+  -- Aggiunti campo_pk_id e campo_pk_id_2
+  zz.ambito_id, zz.campo_pk_id, zz.campo_pk_id_2   
+from (
   with clas as (
   with missione as 
   (select 
@@ -216,7 +274,11 @@ sql_query:='select zz.* from (
   siac_d_class_tipo e,siac_d_class_tipo e2, siac_r_bil_elem_categoria f, 
   siac_d_bil_elem_categoria g,siac_r_bil_elem_stato h,siac_d_bil_elem_stato i
   where a.ente_proprietario_id='||p_ente_proprietario_id||'
-  and a.bil_id='||bilancio_id||'
+    --SIAC-8713 17/05/2022.
+    -- Tolto il riferimento al bilancio perche'' devo estrarre tutti i capitoli
+    --in quanto possono esserci prime note legate a documenti del bilancio
+    --successivo.
+  --and a.bil_id='||bilancio_id||'
   and b.elem_tipo_id=a.elem_tipo_id
   and b.elem_tipo_code = ''CAP-UG''
   and c.elem_id=a.elem_id
@@ -276,7 +338,7 @@ sql_query:='select zz.* from (
   -- 03/06/2019 SIAC-6875
   -- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   -- a parita'' degli altri valori estratti.
-  g.pnota_id
+  g.pnota_id, b.ambito_id
   FROM  siac_t_pdce_conto b
   INNER JOIN siac_t_pdce_fam_tree c ON b.pdce_fam_tree_id = c.pdce_fam_tree_id
   INNER JOIN siac_d_pdce_fam d ON c.pdce_fam_id = d.pdce_fam_id    
@@ -374,10 +436,11 @@ data dell''anno nuovo (in questo caso 2017) e viene creata quella nuova del 2017
 Per cui l''unica soluzione e'' recuperare nella tabella r_subdoc_movgest_ts  la
 relazione 2016 che troverai non piu'' valida."
   */
-    --and a.data_cancellazione IS NULL
-  AND    (a.data_cancellazione IS NULL OR (a.data_cancellazione IS NOT NULL
+   -- and a.data_cancellazione IS NULL
+  AND    (a.data_cancellazione IS NULL OR 
+   (a.data_cancellazione IS NOT NULL
   				AND a.validita_fine IS NOT NULL AND
-                a.validita_fine > to_timestamp(''31/12/'||p_anno_bilancio||''',''dd/mm/yyyy'')))
+                 a.validita_fine > to_timestamp(''31/12/'||p_anno_bilancio||''',''dd/mm/yyyy'')))   
   AND    b.data_cancellazione IS NULL
   AND    c.data_cancellazione IS NULL
   ),
@@ -419,20 +482,22 @@ relazione 2016 che troverai non piu'' valida."
   AND   b.data_cancellazione  IS NULL
   AND   c.data_cancellazione  IS NULL
   ),
-  /* 20/09/2017: SIAC-5216..
+  /* 20/09/2017: SIAC-5216.
   	Aggiunto collegamento per estrarre il capitolo nel caso il documento
   	sia una nota di Credito.
     In questo caso occorre prendere l''impegno del documento collegato e non quello della nota di 
     credito che non esiste */
   collegamento_SS_SE_NCD AS (
-  select c.elem_id, a.subdoc_id
+  select distinct c.elem_id, a.subdoc_id
   from  siac_r_subdoc_movgest_ts a, siac_t_movgest_ts b, siac_r_movgest_bil_elem c
   where a.movgest_ts_id = b.movgest_ts_id
   AND    b.movgest_id = c.movgest_id
   AND b.ente_proprietario_id = '||p_ente_proprietario_id||'
-  AND    (a.data_cancellazione IS NULL OR (a.data_cancellazione IS NOT NULL
+  --AND a.data_cancellazione IS NULL
+  AND    (a.data_cancellazione IS NULL OR 
+   (a.data_cancellazione IS NOT NULL
   				AND a.validita_fine IS NOT NULL AND
-                a.validita_fine > to_timestamp(''31/12/'||p_anno_bilancio||''',''dd/mm/yyyy'')))
+                 a.validita_fine > to_timestamp(''31/12/'||p_anno_bilancio||''',''dd/mm/yyyy'')))  
   AND    b.data_cancellazione IS NULL
   AND    c.data_cancellazione IS NULL
   )
@@ -445,7 +510,7 @@ relazione 2016 che troverai non piu'' valida."
   -- 03/06/2019 SIAC-6875
   -- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   -- a parita'' degli altri valori estratti.
-  prime_note.pnota_id,
+  prime_note.pnota_id,prime_note.ambito_id,
   -- COALESCE(collegamento_MMGS_MMGE_a.elem_id, collegamento_MMGS_MMGE_b.elem_id),
   -- collegamento_SS_SE.elem_id,
   -- collegamento_I_A.elem_id,
@@ -455,7 +520,10 @@ relazione 2016 che troverai non piu'' valida."
   -- collegamento_RR.elem_id
   -- collegamento_RE.elem_id
   --COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(collegamento_MMGS_MMGE_a.elem_id, collegamento_MMGS_MMGE_b.elem_id),collegamento_SS_SE.elem_id),collegamento_I_A.elem_id),collegamento_SI_SA.elem_id),collegamento_OP_OI.elem_id),collegamento_L.elem_id),collegamento_RR.elem_id),collegamento_RE.elem_id) elem_id
-  COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(collegamento_MMGS_MMGE_a.elem_id, collegamento_MMGS_MMGE_b.elem_id),collegamento_SS_SE.elem_id),collegamento_I_A.elem_id),collegamento_SI_SA.elem_id),collegamento_OP_OI.elem_id),collegamento_L.elem_id),collegamento_RR.elem_id),collegamento_RE.elem_id), collegamento_SS_SE_NCD.elem_id) elem_id
+  COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(COALESCE(collegamento_MMGS_MMGE_a.elem_id, collegamento_MMGS_MMGE_b.elem_id),collegamento_SS_SE.elem_id),collegamento_I_A.elem_id),collegamento_SI_SA.elem_id),collegamento_OP_OI.elem_id),collegamento_L.elem_id),collegamento_RR.elem_id),collegamento_RE.elem_id), collegamento_SS_SE_NCD.elem_id) elem_id,
+  --SIAC-8713 17/05/2022.
+  -- Aggiunti campo_pk_id e campo_pk_id_2
+  prime_note.campo_pk_id, prime_note.campo_pk_id_2
   FROM   prime_note
   LEFT   JOIN collegamento_MMGS_MMGE_a ON collegamento_MMGS_MMGE_a.mod_id = prime_note.campo_pk_id
                                        AND prime_note.collegamento_tipo_code IN (''MMGS'',''MMGE'') 
@@ -495,11 +563,15 @@ relazione 2016 che troverai non piu'' valida."
   from siac_t_bil_elem a
   where a.ente_proprietario_id = '||p_ente_proprietario_id||'
   and   a.elem_id = dati_prime_note.elem_id
-  and   a.bil_id ='||bilancio_id||'
+    --SIAC-8713 17/05/2022.
+    -- Tolto il riferimento al bilancio perche'' devo estrarre tutti i capitoli
+    --in quanto possono esserci prime note legate a documenti del bilancio
+    --successivo.  
+  --and   a.bil_id ='||bilancio_id||'
   and   a.data_cancellazione is null)) 
   )
   select 
-      '''||nome_ente||'''::varchar,
+      '''||nome_ente||'''::varchar nome_ente,
       clas.missione_code::varchar,
       clas.missione_desc::varchar,
       clas.programma_code::varchar,
@@ -512,7 +584,10 @@ relazione 2016 che troverai non piu'' valida."
       	-- 03/06/2019 SIAC-6875
   		-- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   		-- a parita'' degli altri valori estratti.
-  	  capall.pnota_id
+  	  capall.pnota_id, capall.ambito_id,
+        --SIAC-8713 17/05/2022.
+  		-- Aggiunti campo_pk_id e campo_pk_id_2
+      capall.campo_pk_id, capall.campo_pk_id_2  
   from capall 
   left join clas on 
   clas.programma_id = capall.programma_id and    
@@ -529,7 +604,7 @@ relazione 2016 che troverai non piu'' valida."
   sql_query:=sql_query||' 
   union all
     select 
-      '''||nome_ente||'''::varchar,
+      '''||nome_ente||'''::varchar nome_ente,
       clas.missione_code::varchar,
       clas.missione_desc::varchar,
       clas.programma_code::varchar,
@@ -542,7 +617,10 @@ relazione 2016 che troverai non piu'' valida."
       	-- 03/06/2019 SIAC-6875
   		-- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   		-- a parita'' degli altri valori estratti.
-  	  capall.pnota_id      
+  	  capall.pnota_id, capall.ambito_id,
+        --SIAC-8713 17/05/2022.
+  		-- Aggiunti campo_pk_id e campo_pk_id_2
+      capall.campo_pk_id, capall.campo_pk_id_2     
   from clas left join capall on 
   	clas.programma_id = capall.programma_id and    
  	 clas.macroag_id=capall.macroag_id
@@ -558,7 +636,7 @@ relazione 2016 che troverai non piu'' valida."
   sql_query:=sql_query||' 
   union all
       select 
-      '''||nome_ente||'''::varchar,
+      '''||nome_ente||'''::varchar nome_ente,
       clas.missione_code::varchar,
       clas.missione_desc::varchar,
       clas.programma_code::varchar,
@@ -571,7 +649,10 @@ relazione 2016 che troverai non piu'' valida."
       	-- 03/06/2019 SIAC-6875
   		-- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   		-- a parita'' degli altri valori estratti.
-  	  capall.pnota_id      
+  	  capall.pnota_id, capall.ambito_id,
+        --SIAC-8713 17/05/2022.
+  		-- Aggiunti campo_pk_id e campo_pk_id_2
+      capall.campo_pk_id, capall.campo_pk_id_2      
   from clas left join capall on 
   clas.programma_id = capall.programma_id and    
   clas.macroag_id=capall.macroag_id
@@ -584,13 +665,40 @@ relazione 2016 che troverai non piu'' valida."
   if cod_programma <> 'T' THEN
   	sql_query:=sql_query||' AND clas.programma_code ='''||cod_programma||'''';
   end if;
-  sql_query:=sql_query||' ) as zz ';
+  sql_query:=sql_query||' ) as zz ,
+    siac_d_ambito ambito
+where zz.ambito_id =ambito.ambito_id
+    and ambito.ambito_code=''AMBITO_FIN''  ';
 /*  16/10/2017: SIAC-5287.
     	Aggiunta gestione delle prime note libere.
 */  
 sql_query:=sql_query||' 
-UNION
-  select xx.* from (
+--SIAC-8713 09/05/2022.
+--Aggiunto UNION ALL per non escludere gli importi uguali sulla
+--stessa prima nota.
+--UNION 
+UNION ALL
+  select-- xx.* 
+   xx.nome_ente ,
+  xx.missione_code ,
+  xx.missione_desc ,
+  xx.programma_code ,
+  xx.programma_desc ,
+  case when xx.importo < 0 and 
+   xx.pdce_conto_code not in (''1.5.1.01.01.001'', ''1.6.1.01.01.001'', ''2.5.1.01.01.001'')
+   then	case when xx.segno_importo =''Dare'' then ''Avere'' else ''Dare'' end
+  else xx.segno_importo end ,
+   case when xx.importo < 0 and 
+   xx.pdce_conto_code not in (''1.5.1.01.01.001'', ''1.6.1.01.01.001'', ''2.5.1.01.01.001'')   
+   then xx.importo*-1 else xx.importo end ,   
+  xx.pdce_conto_code ,
+  xx.pdce_conto_desc ,
+  xx.livello ,
+  xx.pnota_id ,
+    --SIAC-8713 17/05/2022.
+  	-- Aggiunti campo_pk_id e campo_pk_id_2
+  xx.ambito_id, xx.campo_pk_id, xx.campo_pk_id_2  
+  from (
   WITH prime_note_lib AS (
   SELECT b.ente_proprietario_id, d_caus_ep.causale_ep_tipo_code, d.pdce_fam_code, d.pdce_fam_desc,
   e.movep_det_segno,
@@ -617,7 +725,9 @@ UNION
   -- 03/06/2019 SIAC-6875
   -- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   -- a parita'' degli altri valori estratti.
-  g.pnota_id
+  --SIAC-8713 17/05/2022.
+  -- Aggiunti campo_pk_id e campo_pk_id_2
+  g.pnota_id, b.ambito_id, 0 campo_pk_id, 0 campo_pk_id_2
   FROM  siac_t_pdce_conto b
   INNER JOIN siac_t_pdce_fam_tree c ON b.pdce_fam_tree_id = c.pdce_fam_tree_id
   INNER JOIN siac_d_pdce_fam d ON c.pdce_fam_id = d.pdce_fam_id    
@@ -730,7 +840,10 @@ select '''||nome_ente||'''::varchar nome_ente,
 	prime_note_lib.pdce_conto_code::varchar,
     prime_note_lib.pdce_conto_desc::varchar,
     prime_note_lib.livello::integer,
-    prime_note_lib.pnota_id  
+    prime_note_lib.pnota_id,  prime_note_lib.ambito_id,
+      --SIAC-8713 17/05/2022.
+  	  -- Aggiunti campo_pk_id e campo_pk_id_2
+    prime_note_lib.campo_pk_id, prime_note_lib.campo_pk_id_2
 from prime_note_lib
 	LEFT JOIN ele_prime_note_progr ON ele_prime_note_progr.movep_det_id=prime_note_lib.movep_det_id
     LEFT JOIN ele_prime_note_miss ON ele_prime_note_miss.movep_det_id=prime_note_lib.movep_det_id
@@ -758,7 +871,10 @@ union select '''||nome_ente||'''::varchar nome_ente,
       	-- 03/06/2019 SIAC-6875
   		-- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   		-- a parita'' degli altri valori estratti.
-  	prime_note_lib.pnota_id      
+  	prime_note_lib.pnota_id, prime_note_lib.ambito_id,
+      --SIAC-8713 17/05/2022.
+  	  -- Aggiunti campo_pk_id e campo_pk_id_2
+    prime_note_lib.campo_pk_id, prime_note_lib.campo_pk_id_2      
 from prime_note_lib
 	LEFT JOIN ele_prime_note_progr ON ele_prime_note_progr.movep_det_id=prime_note_lib.movep_det_id
     LEFT JOIN ele_prime_note_miss ON ele_prime_note_miss.movep_det_id=prime_note_lib.movep_det_id
@@ -786,7 +902,10 @@ union select '''||nome_ente||'''::varchar nome_ente,
       	-- 03/06/2019 SIAC-6875
   		-- aggiunto l''id della nota per essere certo di estrarre tutte le prime note anche
   		-- a parita'' degli altri valori estratti.
-  	prime_note_lib.pnota_id         
+  	prime_note_lib.pnota_id, prime_note_lib.ambito_id,
+      --SIAC-8713 17/05/2022.
+  	  -- Aggiunti campo_pk_id e campo_pk_id_2
+    prime_note_lib.campo_pk_id, prime_note_lib.campo_pk_id_2           
 from prime_note_lib
 	LEFT JOIN ele_prime_note_progr ON ele_prime_note_progr.movep_det_id=prime_note_lib.movep_det_id
     LEFT JOIN ele_prime_note_miss ON ele_prime_note_miss.movep_det_id=prime_note_lib.movep_det_id
@@ -801,11 +920,14 @@ if cod_missione <> 'T' THEN
     	AND (programma.programma_code ='''||cod_programma||''' OR ele_prime_note_progr.movep_det_id is null) ';
   end if; 
 sql_query:=sql_query||'
-    ) as xx';
+    ) as xx,
+ siac_d_ambito ambito
+where xx.ambito_id =ambito.ambito_id
+    and ambito.ambito_code=''AMBITO_FIN'' ';
     
 raise notice 'sql_query= %',     sql_query;
 
-  return query execute sql_query;
+ return query execute sql_query;
   
 
   exception
@@ -823,4 +945,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR159_struttura_dca_conto_economico" (p_anno_bilancio varchar, p_ente_proprietario_id integer, cod_missione varchar, cod_programma varchar)
+  OWNER TO siac;

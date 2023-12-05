@@ -383,7 +383,11 @@ c.evento_code::varchar prov_pnota,
 s.soggetto_code::varchar cod_soggetto,
 s.soggetto_desc::varchar       descr_soggetto,
 'ORD'::varchar tipo_documento,
-l.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--l.data_creazione::date data_registrazione_movimento,
+m.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
 q.ord_numero::varchar num_det_rif,
 a.ente_proprietario_id,
@@ -432,8 +436,7 @@ WHERE d.collegamento_tipo_code in ('OI','OP') and
         o.pnota_stato_code='D' and
         --SIAC-6429 aggiunto il date_trunc('day'
         date_trunc('day',m.pnota_dataregistrazionegiornale) between
-        p_data_reg_da and
-p_data_reg_a  and
+        p_data_reg_da and p_data_reg_a  and
         q.ord_id=b.campo_pk_id and
         r.ord_id=q.ord_id and
         s.soggetto_id=r.soggetto_id AND
@@ -465,7 +468,11 @@ m.pnota_progressivogiornale::integer num_prima_nota,
 case when d.collegamento_tipo_code = 'I' then 'IMP' else 'ACC'::varchar end tipo_pnota,
  c.evento_code::varchar prov_pnota,
 case when d.collegamento_tipo_code = 'I' then 'IMP' else 'ACC'::varchar end tipo_documento ,--uguale a tipo_pnota,
-l.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--l.data_creazione::date data_registrazione_movimento,
+m.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
 q.movgest_numero::varchar num_det_rif,
 a.ente_proprietario_id,
@@ -532,36 +539,57 @@ o.data_cancellazione IS NULL AND
 p.data_cancellazione IS NULL AND
 q.data_cancellazione IS NULL
 ),
+--SIAC-7650  28/05/2020.
+-- per i soggetti e la classe di soggetti aggiunto il test su 
+-- siac_d_movgest_ts_tipo.movgest_ts_tipo_code='T'
+-- per evitare che siano presi sutti i sub-impegni.
 sogcla as (
 select distinct c.movgest_id,b.soggetto_classe_code,b.soggetto_classe_desc
-From  siac_r_movgest_ts_sogclasse a,siac_d_soggetto_classe b,siac_t_movgest c,siac_t_movgest_ts d where a.ente_proprietario_id=p_ente_prop_id
+From  siac_r_movgest_ts_sogclasse a,siac_d_soggetto_classe b,
+siac_t_movgest c,siac_t_movgest_ts d,
+siac_d_movgest_ts_tipo e
+where a.ente_proprietario_id=p_ente_prop_id
 and b.soggetto_classe_id=a.soggetto_classe_id
 and c.movgest_id=d.movgest_id
 and d.movgest_ts_id=a.movgest_ts_id
+and d.movgest_ts_tipo_id= e.movgest_ts_tipo_id
+and e.movgest_ts_tipo_code='T'
 and a.data_cancellazione is null
 and b.data_cancellazione is null
 and c.data_cancellazione is null
 and d.data_cancellazione is null
+and e.data_cancellazione is null
 ),
 sog as (
 select c.movgest_id, b.soggetto_id,
 b.soggetto_code,b.soggetto_desc from siac_r_movgest_ts_sog a,
-siac_t_soggetto b,siac_t_movgest c,siac_t_movgest_ts d
-where a.ente_proprietario_id=p_ente_prop_id and b.soggetto_id=a.soggetto_id
+siac_t_soggetto b,siac_t_movgest c,siac_t_movgest_ts d,
+siac_d_movgest_ts_tipo e
+where a.ente_proprietario_id=p_ente_prop_id 
+and b.soggetto_id=a.soggetto_id
 and c.movgest_id=d.movgest_id
 and d.movgest_ts_id=a.movgest_ts_id
+and d.movgest_ts_tipo_id= e.movgest_ts_tipo_id
+and e.movgest_ts_tipo_code='T'
 and a.data_cancellazione is null
 and b.data_cancellazione is null
 and c.data_cancellazione is null
 and d.data_cancellazione is null
+and e.data_cancellazione is null
 )
 select
 movgest.pnota_dataregistrazionegiornale,
 movgest.num_prima_nota,
 movgest.tipo_pnota,
 movgest.prov_pnota,
-case when sog.soggetto_id is null then sogcla.soggetto_classe_code else sog.soggetto_code end  cod_soggetto,
-case when sog.soggetto_id is null then sogcla.soggetto_classe_desc else sog.soggetto_desc end descr_soggetto,
+	--SIAC-7650  28/05/2020.
+    -- aggiunto COALESCE
+case when sog.soggetto_id is null then 
+		COALESCE(sogcla.soggetto_classe_code,'') 
+    else COALESCE(sog.soggetto_code,'') end  cod_soggetto,
+case when sog.soggetto_id is null then 
+		COALESCE(sogcla.soggetto_classe_desc,'') 
+    else COALESCE(sog.soggetto_desc,'') end descr_soggetto,
 movgest.tipo_documento,
 movgest.data_registrazione_movimento,
 movgest.numero_documento,
@@ -593,7 +621,11 @@ m.pnota_progressivogiornale::integer num_prima_nota,
 case when d.collegamento_tipo_code = 'SI' then 'IMP' else 'ACC'::varchar end tipo_pnota,
  c.evento_code::varchar prov_pnota,
 case when d.collegamento_tipo_code = 'SI' then 'IMP' else 'ACC'::varchar end tipo_documento ,--uguale a tipo_pnota,
-l.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--l.data_creazione::date data_registrazione_movimento,
+m.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
 r.movgest_numero||'-'||q.movgest_ts_code::varchar num_det_rif,
 a.ente_proprietario_id,
@@ -722,7 +754,11 @@ a.pnota_progressivogiornale::integer num_prima_nota,
 case when i.collegamento_tipo_code = 'MMGS' then 'IMP' else 'ACC'::varchar end tipo_pnota,
  h.evento_code::varchar prov_pnota,
 case when i.collegamento_tipo_code = 'MMGS' then 'IMP' else 'ACC'::varchar end tipo_documento ,
-e.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--e.data_creazione::date data_registrazione_movimento,
+a.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
 a.ente_proprietario_id,
 e.pdce_conto_id,
@@ -910,85 +946,164 @@ movgest.movgest_ts_id=sog.movgest_ts_id
 -- 07/07/2017: le union NON devono escludere i record eventualmente duplicati
 --   quindi si deve usare la UNION ALL.
 -- union
-union all
+union all       
 SELECT
-m.pnota_dataregistrazionegiornale::date,
-m.pnota_progressivogiornale::integer num_prima_nota,
+t_prima_nota.pnota_dataregistrazionegiornale::date,
+t_prima_nota.pnota_progressivogiornale::integer num_prima_nota,
 'LIQ'::varchar tipo_pnota,
- c.evento_code::varchar prov_pnota,
-s.soggetto_code::varchar cod_soggetto,
- s.soggetto_desc::varchar       descr_soggetto,
+ d_evento.evento_code::varchar prov_pnota,
+t_sogg.soggetto_code::varchar cod_soggetto,
+ t_sogg.soggetto_desc::varchar       descr_soggetto,
 'LIQ'::varchar tipo_documento,
-l.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--l.data_creazione::date data_registrazione_movimento,
+t_prima_nota.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
-q.liq_numero::varchar num_det_rif,
-a.ente_proprietario_id,
-p.pdce_conto_id,
-g.evento_tipo_code::varchar  tipo_movimento,
-q.liq_emissione_data::date data_det_rif,
+t_liq.liq_numero::varchar num_det_rif,
+t_reg_movfin.ente_proprietario_id,
+t_mov_ep_det.pdce_conto_id,
+d_ev_tipo.evento_tipo_code::varchar  tipo_movimento,
+t_liq.liq_emissione_data::date data_det_rif,
 --SIAC-6279: 26/06/2018.
 -- La data di registrazione e' la pnota_dataregistrazionegiornale
 -- che e' sempre valorizzata perche' sono estratte solo le prime note
 -- in stato definitivio.
 --m.data_creazione::date  data_registrazione,
-m.pnota_dataregistrazionegiornale::date  data_registrazione,
+t_prima_nota.pnota_dataregistrazionegiornale::date  data_registrazione,
 -- 08.06/2018 Sofia SIAC-6200
-m.ambito_id ambito_prima_nota_id,
-case when  p.movep_det_segno='Dare' THEN COALESCE(p.movep_det_importo,0)::numeric  else 0::numeric  end importo_dare,
-case when  p.movep_det_segno='Avere' THEN COALESCE(p.movep_det_importo,0)::numeric  else 0::numeric  end importo_avere
-  FROM siac_t_reg_movfin a,
-       siac_r_evento_reg_movfin b,
-       siac_d_evento c,
-       siac_d_collegamento_tipo d,
-       siac_d_evento_tipo g,
-       siac_t_mov_ep l,
-       siac_t_prima_nota m,
-       siac_r_prima_nota_stato n,
-       siac_d_prima_nota_stato o,
-       siac_t_mov_ep_det p,
-       siac_t_liquidazione q,
-       siac_r_liquidazione_soggetto  r,
-       siac_t_soggetto  s
-WHERE d.collegamento_tipo_code in ('L') and
-  a.ente_proprietario_id=p_ente_prop_id
-  and
-  a.regmovfin_id = b.regmovfin_id AND
-        c.evento_id = b.evento_id AND
-        d.collegamento_tipo_id = c.collegamento_tipo_id AND
-        g.evento_tipo_id = c.evento_tipo_id AND
-        b.validita_fine is null and
-        a.bil_id=m.bil_id and
-        m.bil_id=bil_id_in
-        and    l.regmovfin_id = a.regmovfin_id AND
-        l.regep_id = m.pnota_id AND
-        m.pnota_id = n.pnota_id AND
-        o.pnota_stato_id = n.pnota_stato_id AND
-         n.validita_fine is null and
-        p.movep_id=l.movep_id  and
-        o.pnota_stato_code='D' and
-        --SIAC-6429 aggiunto il date_trunc('day'
-        date_trunc('day',m.pnota_dataregistrazionegiornale) between
-        p_data_reg_da and p_data_reg_a  and
-        q.liq_id=b.campo_pk_id and
-        r.liq_id=q.liq_id and
-        s.soggetto_id=r.soggetto_id AND
-        r.validita_fine is null and
-        a.data_cancellazione IS NULL AND
-        b.data_cancellazione IS NULL AND
-        c.data_cancellazione IS NULL AND
-        d.data_cancellazione IS NULL AND
-        g.data_cancellazione IS NULL AND
-        l.data_cancellazione IS NULL AND
-        m.data_cancellazione IS NULL AND
-        n.data_cancellazione IS NULL AND
-        o.data_cancellazione IS NULL AND
-        p.data_cancellazione IS NULL AND
-        q.data_cancellazione IS NULL AND
-        r.data_cancellazione IS NULL AND
-        s.data_cancellazione IS NULL
+t_prima_nota.ambito_id ambito_prima_nota_id,
+case when  t_mov_ep_det.movep_det_segno='Dare' THEN COALESCE(t_mov_ep_det.movep_det_importo,0)::numeric  else 0::numeric  end importo_dare,
+case when  t_mov_ep_det.movep_det_segno='Avere' THEN COALESCE(t_mov_ep_det.movep_det_importo,0)::numeric  else 0::numeric  end importo_avere
+  FROM siac_t_reg_movfin t_reg_movfin,
+       siac_r_evento_reg_movfin r_ev_reg_movfin,
+       siac_d_evento d_evento,
+       siac_d_collegamento_tipo d_coll_tipo,
+       siac_d_evento_tipo d_ev_tipo,
+       siac_t_mov_ep t_mov_ep,
+       siac_t_prima_nota t_prima_nota,
+       siac_r_prima_nota_stato r_pnota_stato,
+       siac_d_prima_nota_stato d_pnota_stato,
+       siac_t_mov_ep_det t_mov_ep_det,
+       siac_t_liquidazione t_liq,
+       siac_r_liquidazione_soggetto  r_liq_sogg,
+       siac_t_soggetto  t_sogg
+WHERE t_reg_movfin.regmovfin_id = r_ev_reg_movfin.regmovfin_id 
+	and d_evento.evento_id = r_ev_reg_movfin.evento_id
+    and d_coll_tipo.collegamento_tipo_id = d_evento.collegamento_tipo_id 
+    and d_ev_tipo.evento_tipo_id = d_evento.evento_tipo_id
+    and t_mov_ep.regmovfin_id = t_reg_movfin.regmovfin_id
+    and t_reg_movfin.bil_id=t_prima_nota.bil_id
+    and t_mov_ep_det.movep_id=t_mov_ep.movep_id
+    and d_pnota_stato.pnota_stato_id = r_pnota_stato.pnota_stato_id
+    and t_liq.liq_id=r_ev_reg_movfin.campo_pk_id
+    and t_mov_ep.regep_id = t_prima_nota.pnota_id
+    and t_prima_nota.pnota_id = r_pnota_stato.pnota_id
+    and r_liq_sogg.liq_id=t_liq.liq_id 
+    and t_sogg.soggetto_id=r_liq_sogg.soggetto_id 
+    and  t_reg_movfin.ente_proprietario_id=p_ente_prop_id
+    and t_prima_nota.bil_id=bil_id_in
+	and d_coll_tipo.collegamento_tipo_code in ('L') 
+    and d_pnota_stato.pnota_stato_code='D'
+    	--SIAC-6429 aggiunto il date_trunc('day'
+    and date_trunc('day',t_prima_nota.pnota_dataregistrazionegiornale) between
+        p_data_reg_da and p_data_reg_a
+    and r_ev_reg_movfin.validita_fine is null 
+    and r_pnota_stato.validita_fine is null 
+    and r_liq_sogg.validita_fine is null 
+    and t_reg_movfin.data_cancellazione IS NULL 
+    and r_ev_reg_movfin.data_cancellazione IS NULL 
+    and d_evento.data_cancellazione IS NULL 
+    and d_coll_tipo.data_cancellazione IS NULL 
+    and d_ev_tipo.data_cancellazione IS NULL 
+    and t_mov_ep.data_cancellazione IS NULL 
+    and t_prima_nota.data_cancellazione IS NULL 
+    and r_pnota_stato.data_cancellazione IS NULL 
+    and d_pnota_stato.data_cancellazione IS NULL 
+    and t_mov_ep_det.data_cancellazione IS NULL 
+    and t_liq.data_cancellazione IS NULL 
+    and r_liq_sogg.data_cancellazione IS NULL 
+    and t_sogg.data_cancellazione IS NULL                               
 -- 07/07/2017: le union NON devono escludere i record eventualmente duplicati
 --   quindi si deve usare la UNION ALL.
--- union
+
+-- SIAC-8224 04/06/2021.
+-- Le prime note legate a richieste economli (RE e RR) non erano gestite.
+-- Come tipo prima nota e tipo documento viene riportato il tipo collegamento (RE/RR).
+-- Come numero di riferimento e' riportato il numero di richiesta economale.
+-- Come data riferimento la data di inizio validita' della richiesta economale.
+-- Sono estratte anche le prime note legate a richieste economali senza soggetto.
+union all 
+select 
+t_prima_nota.pnota_dataregistrazionegiornale::date,
+t_prima_nota.pnota_progressivogiornale::integer num_prima_nota,
+d_coll_tipo.collegamento_tipo_code::varchar tipo_pnota,
+d_evento.evento_code::varchar prov_pnota,
+COALESCE(soggetto.soggetto_code,'')::varchar cod_soggetto,
+COALESCE(soggetto.soggetto_desc,'')::varchar descr_soggetto,
+d_coll_tipo.collegamento_tipo_code::varchar tipo_documento,
+t_prima_nota.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
+''::varchar numero_documento,
+t_rich_econ.ricecon_numero::varchar num_det_rif,
+t_reg_movfin.ente_proprietario_id,
+t_mov_ep_det.pdce_conto_id,
+d_ev_tipo.evento_tipo_code::varchar  tipo_movimento,
+t_rich_econ.validita_inizio::date data_det_rif,
+t_prima_nota.pnota_dataregistrazionegiornale::date  data_registrazione,
+t_prima_nota.ambito_id ambito_prima_nota_id,
+case when  t_mov_ep_det.movep_det_segno='Dare' THEN COALESCE(t_mov_ep_det.movep_det_importo,0)::numeric  else 0::numeric  end importo_dare,
+case when  t_mov_ep_det.movep_det_segno='Avere' THEN COALESCE(t_mov_ep_det.movep_det_importo,0)::numeric  else 0::numeric  end importo_avere  
+ FROM siac_t_reg_movfin t_reg_movfin,
+       siac_r_evento_reg_movfin r_ev_reg_movfin,
+       siac_d_evento d_evento,
+       siac_d_collegamento_tipo d_coll_tipo,
+       siac_d_evento_tipo d_ev_tipo,
+       siac_t_mov_ep t_mov_ep,
+       siac_t_prima_nota t_prima_nota,
+       siac_r_prima_nota_stato r_pnota_stato,
+       siac_d_prima_nota_stato d_pnota_stato,
+       siac_t_mov_ep_det t_mov_ep_det  ,
+       siac_t_richiesta_econ t_rich_econ
+       	left join (select r_rich_econ_sogg.ricecon_id, t_sogg.soggetto_code,
+        			t_sogg.soggetto_desc
+        		  from siac_r_richiesta_econ_sog r_rich_econ_sogg,
+       					siac_t_soggetto t_sogg 
+                  where  r_rich_econ_sogg.soggetto_id=t_sogg.soggetto_id
+                  		and r_rich_econ_sogg.ente_proprietario_id=p_ente_prop_id
+                    	and r_rich_econ_sogg.data_cancellazione IS NULL
+  						and t_sogg.data_cancellazione IS NULL) soggetto
+        on soggetto.ricecon_id=t_rich_econ.ricecon_id
+WHERE t_reg_movfin.regmovfin_id = r_ev_reg_movfin.regmovfin_id 
+	and d_evento.evento_id = r_ev_reg_movfin.evento_id
+    and d_coll_tipo.collegamento_tipo_id = d_evento.collegamento_tipo_id  
+    and d_ev_tipo.evento_tipo_id = d_evento.evento_tipo_id
+    and t_mov_ep.regmovfin_id = t_reg_movfin.regmovfin_id
+    and t_reg_movfin.bil_id=t_prima_nota.bil_id 
+    and t_mov_ep.regep_id = t_prima_nota.pnota_id    
+    and d_pnota_stato.pnota_stato_id = r_pnota_stato.pnota_stato_id
+    and t_prima_nota.pnota_id = r_pnota_stato.pnota_id
+    and t_mov_ep_det.movep_id=t_mov_ep.movep_id
+    and t_rich_econ.ricecon_id=r_ev_reg_movfin.campo_pk_id
+    and t_reg_movfin.ente_proprietario_id=p_ente_prop_id
+    and t_reg_movfin.bil_id=bil_id_in
+    and d_pnota_stato.pnota_stato_code='D'
+	and d_coll_tipo.collegamento_tipo_code in ('RE','RR') 
+    and date_trunc('day',t_prima_nota.pnota_dataregistrazionegiornale) between
+        p_data_reg_da and p_data_reg_a
+    and r_ev_reg_movfin.validita_fine is null 
+    and r_pnota_stato.validita_fine is null 
+    and t_reg_movfin.data_cancellazione IS NULL 
+    and r_ev_reg_movfin.data_cancellazione IS NULL 
+    and d_evento.data_cancellazione IS NULL 
+    and d_coll_tipo.data_cancellazione IS NULL 
+    and d_ev_tipo.data_cancellazione IS NULL 
+    and t_mov_ep.data_cancellazione IS NULL 
+    and t_prima_nota.data_cancellazione IS NULL 
+    and r_pnota_stato.data_cancellazione IS NULL 
+    and d_pnota_stato.data_cancellazione IS NULL 
+    and t_mov_ep_det.data_cancellazione IS NULL
+    and t_rich_econ.data_cancellazione IS NULL
 union all
 --DOC
 SELECT
@@ -999,7 +1114,11 @@ m.pnota_progressivogiornale::integer num_prima_nota,
 t.soggetto_code::varchar cod_soggetto,
  t.soggetto_desc::varchar       descr_soggetto,
 'FAT'::varchar tipo_documento,
-l.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--l.data_creazione::date data_registrazione_movimento,
+m.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
 r.doc_numero::varchar num_det_rif,
 a.ente_proprietario_id,
@@ -1082,7 +1201,11 @@ else 'LIB'::varchar end tipo_pnota,
 m.pnota_desc::varchar cod_soggetto,
  ''::varchar       descr_soggetto,
 'LIB'::varchar tipo_documento,
-l.data_creazione::date data_registrazione_movimento,
+--01/06/2021 SIAC-8228 
+--cambia la data di registrazione, devo prendere quella
+--della prima nota.
+--l.data_creazione::date data_registrazione_movimento,
+m.pnota_dataregistrazionegiornale::date data_registrazione_movimento,
 ''::varchar numero_documento,
 ''::varchar num_det_rif,
 m.ente_proprietario_id,
@@ -1210,7 +1333,7 @@ from ord
      cross join bb
 where -- 08.06/2018 Sofia SIAC-6200
      ( case when coalesce(p_ambito,'')!='' then ord.ambito_prima_nota_id=pdce_conto_ambito_id
-            else ord.ambito_prima_nota_id=ord.ambito_prima_nota_id end )
+            else ord.ambito_prima_nota_id=ord.ambito_prima_nota_id end ) 
 ) as outp;
 
 delete from siac_rep_struttura_pdce 	where utente=user_table;

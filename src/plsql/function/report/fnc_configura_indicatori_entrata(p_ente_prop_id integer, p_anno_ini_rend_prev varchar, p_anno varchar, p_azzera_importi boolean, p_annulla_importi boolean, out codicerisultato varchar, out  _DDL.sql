@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_configura_indicatori_entrata (
+CREATE OR REPLACE FUNCTION siac.fnc_configura_indicatori_entrata (
   p_ente_prop_id integer,
   p_anno_ini_rend_prev varchar,
   p_anno varchar,
@@ -179,49 +179,48 @@ loop
                     select  *
                     from "fnc_bilr_struttura_cap_bilancio_entrate"(entePropIdCorr,p_anno_ini_rend_prev,'')),
         capitoli as(
-        select cl.classif_id categoria_id,
-          e.*
-         from 	siac_r_bil_elem_class rc,
-                siac_t_bil_elem e,
-                siac_d_class_tipo ct,
-                siac_t_class cl,
-                siac_t_bil bilancio,
-                siac_t_periodo anno_eserc,
-                siac_d_bil_elem_tipo tipo_elemento, 
-                siac_d_bil_elem_stato stato_capitolo,
-                siac_r_bil_elem_stato r_capitolo_stato,
-                siac_d_bil_elem_categoria cat_del_capitolo,
-                siac_r_bil_elem_categoria r_cat_capitolo
-        where ct.classif_tipo_id				=	cl.classif_tipo_id
-        and cl.classif_id					=	rc.classif_id 
-        and bilancio.periodo_id				=	anno_eserc.periodo_id 
-        and e.bil_id						=	bilancio.bil_id 
-        and e.elem_tipo_id					=	tipo_elemento.elem_tipo_id 
-        and e.elem_id						=	rc.elem_id 
-        and	e.elem_id						=	r_capitolo_stato.elem_id
-        and	r_capitolo_stato.elem_stato_id	=	stato_capitolo.elem_stato_id
-        and	e.elem_id						=	r_cat_capitolo.elem_id
-        and	r_cat_capitolo.elem_cat_id		=	cat_del_capitolo.elem_cat_id
-        and e.ente_proprietario_id			=	entePropIdCorr
-        and e.bil_id = bilId1
-        and tipo_elemento.elem_tipo_code 	= 	'CAP-EG'
-        and	stato_capitolo.elem_stato_code	=	'VA'
-        and ct.classif_tipo_code			=	'CATEGORIA'
-        and	cat_del_capitolo.elem_cat_code	=	'STD'
-        and e.data_cancellazione 				is null
-        and	r_capitolo_stato.data_cancellazione	is null
-        and	r_cat_capitolo.data_cancellazione	is null
-        and	rc.data_cancellazione				is null
-        and	ct.data_cancellazione 				is null
-        and	cl.data_cancellazione 				is null
-        and	bilancio.data_cancellazione 		is null
-        and	anno_eserc.data_cancellazione 		is null
-        and	tipo_elemento.data_cancellazione	is null
-        and	stato_capitolo.data_cancellazione 	is null
-        and	cat_del_capitolo.data_cancellazione	is null
-        and now() between rc.validita_inizio and COALESCE(rc.validita_fine,now())
-        and now() between r_cat_capitolo.validita_inizio and COALESCE(r_cat_capitolo.validita_fine,now())
-        ),
+          select cl.classif_id categoria_id,
+            e.*
+           from 	siac_r_bil_elem_class rc,
+                  siac_t_bil_elem e,
+                  siac_d_class_tipo ct,
+                  siac_t_class cl,
+                  siac_t_bil bilancio,
+                  siac_t_periodo anno_eserc,
+                  siac_d_bil_elem_tipo tipo_elemento, 
+                  siac_d_bil_elem_stato stato_capitolo,
+                  siac_r_bil_elem_stato r_capitolo_stato,
+                  siac_d_bil_elem_categoria cat_del_capitolo,
+                  siac_r_bil_elem_categoria r_cat_capitolo
+          where ct.classif_tipo_id				=	cl.classif_tipo_id
+          and cl.classif_id					=	rc.classif_id 
+          and bilancio.periodo_id				=	anno_eserc.periodo_id 
+          and e.bil_id						=	bilancio.bil_id 
+          and e.elem_tipo_id					=	tipo_elemento.elem_tipo_id 
+          and e.elem_id						=	rc.elem_id 
+          and	e.elem_id						=	r_capitolo_stato.elem_id
+          and	r_capitolo_stato.elem_stato_id	=	stato_capitolo.elem_stato_id
+          and	e.elem_id						=	r_cat_capitolo.elem_id
+          and	r_cat_capitolo.elem_cat_id		=	cat_del_capitolo.elem_cat_id
+          and e.ente_proprietario_id			=	entePropIdCorr
+          and e.bil_id = bilId1
+          and tipo_elemento.elem_tipo_code 	= 	'CAP-EG'
+          and	stato_capitolo.elem_stato_code	=	'VA'
+          and ct.classif_tipo_code			=	'CATEGORIA'
+          and	cat_del_capitolo.elem_cat_code	=	'STD'
+          and e.data_cancellazione 				is null
+          and	r_capitolo_stato.data_cancellazione	is null
+          and	r_cat_capitolo.data_cancellazione	is null
+          and	rc.data_cancellazione				is null
+          and	ct.data_cancellazione 				is null
+          and	cl.data_cancellazione 				is null
+          and	bilancio.data_cancellazione 		is null
+          and	anno_eserc.data_cancellazione 		is null
+          and	tipo_elemento.data_cancellazione	is null
+          and	stato_capitolo.data_cancellazione 	is null
+          and	cat_del_capitolo.data_cancellazione	is null
+          and now() between rc.validita_inizio and COALESCE(rc.validita_fine,now())
+          and now() between r_cat_capitolo.validita_inizio and COALESCE(r_cat_capitolo.validita_fine,now())),
          accertamenti as (
             select capitolo.elem_id,
                 sum (dt_movimento.movgest_ts_det_importo) importo_accert
@@ -364,7 +363,15 @@ loop
         FROM strut_bilancio
             LEFT JOIN capitoli on strut_bilancio.categoria_id = capitoli.categoria_id
             LEFT JOIN accertamenti on accertamenti.elem_id = capitoli.elem_id
-            LEFT JOIN riscossioni on riscossioni.elem_id = capitoli.elem_id           
+            LEFT JOIN riscossioni on riscossioni.elem_id = capitoli.elem_id   
+  -- 20/03/2020. SIAC-7446.
+  --	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+  --	creata per gestire un'esigenza di CMTO.   
+          where capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+              from siac_t_bil_elem_escludi_indicatori escludi
+              where escludi.ente_proprietario_id = p_ente_prop_id
+                  and escludi.validita_fine IS NULL
+                  and escludi.data_cancellazione IS NULL)                    
         GROUP BY id_titolo, id_tipologia
         ORDER BY id_titolo, id_tipologia;
 
@@ -564,7 +571,15 @@ loop
             LEFT JOIN accertamenti on accertamenti.elem_id = capitoli.elem_id
             LEFT JOIN riscossioni on riscossioni.elem_id = capitoli.elem_id    
             LEFT JOIN valori_indic on (valori_indic.classif_id_titolo = strut_bilancio.titolo_id
-                and valori_indic.classif_id_tipologia =  strut_bilancio.tipologia_id)        
+                and valori_indic.classif_id_tipologia =  strut_bilancio.tipologia_id)
+  -- 20/03/2020. SIAC-7446.
+  --	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+  --	creata per gestire un'esigenza di CMTO.   
+          where capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+              from siac_t_bil_elem_escludi_indicatori escludi
+              where escludi.ente_proprietario_id = p_ente_prop_id
+                  and escludi.validita_fine IS NULL
+                  and escludi.data_cancellazione IS NULL)     
         GROUP BY id_titolo, id_tipologia, valori_indic.conf_ind_id
         ORDER BY id_titolo, id_tipologia) query_tot
         where siac_t_conf_indicatori_entrata.conf_ind_id=query_tot.conf_ind_id;

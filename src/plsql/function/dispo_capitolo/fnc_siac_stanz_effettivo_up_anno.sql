@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿--- calcolo stanziamento effettivo su capitolo di previsione
+--- calcolo stanziamento effettivo su capitolo di previsione
 -- da utilizzarsi dalla fase di bilancio di esercizio di previsione in poi
 -- calcolo stanziamento effettivo
  -- esercizio previsione
@@ -22,24 +22,32 @@
  -- ai fini del calcolo della disponibilita ad impegnare, in esercizio provvisorio
  -- viene restituito per il primo anno di pluriennale
  -- il massimo impegnabile, presente eventualmente nel tipo importo MI
-
-CREATE OR REPLACE FUNCTION fnc_siac_stanz_effettivo_up_anno (
-  id_in         integer default null,
-  anno_comp_in  varchar default not null,
-  ente_prop_in  integer default null,
-  bil_id_in     integer default null,
-  anno_in       varchar default null,
-  ele_code_in   varchar default null,
-  ele_code2_in  varchar default null,
-  ele_code3_in  varchar default null
+drop function if exists  siac.fnc_siac_stanz_effettivo_up_anno (
+  id_in integer,
+  anno_comp_in varchar,
+  ente_prop_in integer,
+  bil_id_in integer,
+  anno_in varchar,
+  ele_code_in varchar,
+  ele_code2_in varchar,
+  ele_code3_in varchar
+);
+CREATE OR REPLACE FUNCTION siac.fnc_siac_stanz_effettivo_up_anno (
+  id_in integer = NULL::integer,
+  anno_comp_in varchar = (NOT NULL::boolean),
+  ente_prop_in integer = NULL::integer,
+  bil_id_in integer = NULL::integer,
+  anno_in varchar = NULL::character varying,
+  ele_code_in varchar = NULL::character varying,
+  ele_code2_in varchar = NULL::character varying,
+  ele_code3_in varchar = NULL::character varying
 )
-RETURNS table
-(
-	elemId integer,
-    annoCompetenza varchar,
-    stanzEffettivo numeric,
-    stanzEffettivoCassa numeric,
-    massimoImpegnabile numeric
+RETURNS TABLE (
+  elemid integer,
+  annocompetenza varchar,
+  stanzeffettivo numeric,
+  stanzeffettivocassa numeric,
+  massimoimpegnabile numeric
 ) AS
 $body$
 DECLARE
@@ -66,6 +74,8 @@ STATO_VAR_D    constant varchar:='D'; -- DEFINITIVA
 STATO_VAR_B    constant varchar:='B'; -- BOZZA
 --- 31.03.2016 Sofia SIAC-3304 aggiunto stato P
 STATO_VAR_P    constant varchar:='P'; -- PRE-DEFINITIVO
+-- 10.10.2022 Sofia Jira-SIAC-8828
+STATO_VAR_BD    constant varchar:='BD'; -- BOZZA DEC
 
 bilancioId integer:=0;
 bilElemId  integer:=0;
@@ -441,7 +451,8 @@ BEGIN
     	   tipoStatoVar.variazione_stato_tipo_id=statoVar.variazione_stato_tipo_id and
 --	       tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_B,STATO_VAR_P) and -- 1109015 Sofia aggiunto STATO_VAR_B
 --	       tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P) and -- 26072016 Sofia JIRA-SIAC-3887
-	       tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14102016 Sofia JIRA-SIAC-4099
+--	       tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14102016 Sofia JIRA-SIAC-4099
+	       tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B,STATO_VAR_BD) and -- 10.10.202 Sofia JIRA-SIAC-8828	       
            var.variazione_id=statoVar.variazione_id and
            var.data_cancellazione is null and var.validita_fine is null and
 	       var.bil_id=bilancioId;
@@ -478,7 +489,8 @@ BEGIN
     	       tipoStatoVar.variazione_stato_tipo_id=statoVar.variazione_stato_tipo_id and
 --   	           tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_B,STATO_VAR_P) and -- 1109015 Sofia aggiunto STATO_VAR_B
 --   	           tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P) and -- 26072016 Sofia JIRA-SIAC-3887
-   	           tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14102016 Sofia JIRA-SIAC-4099
+--   	           tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14102016 Sofia JIRA-SIAC-4099
+   	           tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B,STATO_VAR_BD) and -- 10.10.2022 Sofia JIRA-SIAC-8828   	           
         	   var.variazione_id=statoVar.variazione_id and
                var.data_cancellazione is null and var.validita_fine is null and
 	           var.bil_id=bilancioId;
@@ -497,11 +509,15 @@ BEGIN
      stanziamentoPrevCassa:= stanziamentoPrevCassa-deltaMenoPrevCassa;
  end if;
 
-
-
+raise notice 'deltaMenoPrev=%', deltaMenoPrev;
+ raise notice 'deltaMenoPrevCassa=%', deltaMenoPrevCassa;
+ raise notice 'deltaMenoGest=%', deltaMenoGest;
+ raise notice 'deltaMenoGestCassa=%', deltaMenoGestCassa;
  strMessaggio:='Stanziamento effettivo elem_id='||bilElemId||'.';
  case
-   when bilFaseOperativa=FASE_BIL_PROV then
+--   when bilFaseOperativa=FASE_BIL_PROV then -- 15.01.2021 Sofia JiraSIAC-7958
+-- 15.01.2021 Sofia JiraSIAC-7958
+   when bilFaseOperativa=FASE_BIL_PROV and ente_prop_in!=2 then
  --  		if stanziamentoPrev>stanziamento then 26072016 Sofia JIRA-SIAC-3887
    		if stanziamentoPrev>stanziamento-deltaMenoGest then
         /* 04.07.2016 Sofia ID-INC000001114035
@@ -566,4 +582,7 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
-COST 100;
+COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_siac_stanz_effettivo_up_anno 
+               ( id_in integer,anno_comp_in varchar, ente_prop_in integer,bil_id_in integer,anno_in varchar,ele_code_in varchar, ele_code2_in varchar,ele_code3_in varchar) OWNER TO siac;

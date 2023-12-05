@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 -- PACKAGE MIGRAZIONE SOGGETTI REGP
 CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
 
@@ -44,7 +50,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
 --        tipoAccreditoSiac := SIAC_TIPOACCRE_CSC;
       elsif modAccredito.codaccre = CODACCRE_GF then
         tipoAccreditoSiac := SIAC_TIPOACCRE_CBI;
-                    -- DAVIDE : inserire modalità accredito per CRP, EDISU, ARPEA, APL, ARAI, PARCHI
+                    -- DAVIDE : inserire modalitï¿½ accredito per CRP, EDISU, ARPEA, APL, ARAI, PARCHI
       elsif modAccredito.codaccre in (CODACCRE_BE, CODACCRE_FT, CODACCRE_GC, CODACCRE_QD, CODACCRE_SP,
                                       CODACCRE_LA, CODACCRE_MV, CODACCRE_TB, CODACCRE_ST, CODACCRE_DB,
                                       CODACCRE_D3, CODACCRE_MD, CODACCRE_MS, CODACCRE_RC, CODACCRE_RP,
@@ -136,7 +142,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
 
 
     msgRes:='Migrazione soggetto.Popolamento soggetto_temp.Inserimento soggetti con ORD/REV da '||p_anni||' anni.';
-    -- soggetti validi che hanno ordinativi a partire da un certo anno in poi escludendo BBE,AST ( bonus bebè e buoni scuola )
+    -- soggetti validi che hanno ordinativi a partire da un certo anno in poi escludendo BBE,AST ( bonus bebï¿½ e buoni scuola )
     insert into migr_soggetto_temp
       (codice_soggetto, motivo, ente_proprietario_id)
       select distinct f.codben, 'ORD', p_ente
@@ -190,7 +196,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
     commit;
 
     msgRes:='Migrazione soggetto.Popolamento soggetto_temp.Soggetti collegati ad impegni/accertamenti nell'' anno.';
-    -- impegni/accertamenti - su soggetti anche non validi ma da migrare poichè migreranno impegni/accertamenti
+    -- impegni/accertamenti - su soggetti anche non validi ma da migrare poichï¿½ migreranno impegni/accertamenti
     insert into migr_soggetto_temp
       (codice_soggetto, motivo, ente_proprietario_id)
       select distinct f.codben, 'IAC', p_ente
@@ -214,7 +220,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
 
     msgRes:='Migrazione soggetto.Popolamento soggetto_temp.Soggetti con liquidazioni nell'' anno.';
     -- liquidazioni dell'anno di migrazione, prendendo eventualmente anche BBE e AST
-    -- anche bloccati perchè  potrebbero avere bloccato il soggetto o la MDP ma la liquidazione esiste
+    -- anche bloccati perchï¿½  potrebbero avere bloccato il soggetto o la MDP ma la liquidazione esiste
     -- quindi deve esistere anche il soggetto e la relativa MDP
     -- questi soggetti dovranno essere pagati !
     insert into migr_soggetto_temp
@@ -257,7 +263,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
   msgRes:='Migrazione soggetto.Popolamento soggetto_temp.Soggetti con carte contabili nell''anno.';
   -- soggetti anche bloccati legati a movimenti nell'anno -- probabilmente in ottica di migrazione in corso di un anno
   -- carte contabili dell'anno di migrazione, prendendo eventualmente anche BBE e AST
-  -- anche bloccati perchè  potrebbero avere bloccato il soggetto o la MDP ma la carta esiste
+  -- anche bloccati perchï¿½  potrebbero avere bloccato il soggetto o la MDP ma la carta esiste
   -- quindi deve esistere anche il soggetto e la relativa MDP
   insert into migr_soggetto_temp
   (codice_soggetto,motivo,ente_proprietario_id)
@@ -1913,7 +1919,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
   commit;
 
   -- Formato comune passato: descrizione||codistat||codbelfiore.
-  -- Il codice istato non viene valorizzato quindi se le altre informazioni sono presenti risulterà descrizione||||codbelfiore.
+  -- Il codice istato non viene valorizzato quindi se le altre informazioni sono presenti risulterï¿½ descrizione||||codbelfiore.
   msgRes:='Migrazione Soggetto.Aggiorna campo comune nascita con codice belfiore.';
   update migr_soggetto m set
    comune_nascita =
@@ -1935,7 +1941,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
   commit;
 
   -- Formato comune passato: descrizione||codistat||codbelfiore.
-  -- Il codice istato non viene valorizzato quindi se le altre informazioni sono presenti risulterà descrizione||||codbelfiore.
+  -- Il codice istato non viene valorizzato quindi se le altre informazioni sono presenti risulterï¿½ descrizione||||codbelfiore.
   msgRes:='Migrazione Soggetto.Aggiorna campo comune residenza con codice belfiore.';
   update migr_soggetto m set
    comune =
@@ -2609,7 +2615,7 @@ begin
   migrazione_aggiorna_via_sede(pEnte,codRes,msgRes);
 
   -- Formato comune passato: descrizione||codistat||codbelfiore.
-  -- Il codice istato non viene valorizzato quindi se le altre informazioni sono presenti risulterà descrizione||||codbelfiore.
+  -- Il codice istato non viene valorizzato quindi se le altre informazioni sono presenti risulterï¿½ descrizione||||codbelfiore.
   msgRes:='Migrazione Soggetto Sedi Secondarie.Aggiorna campo comune con codice belfiore.';
   update migr_sede_secondaria m set
    comune =

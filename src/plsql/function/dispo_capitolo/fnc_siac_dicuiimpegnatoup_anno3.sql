@@ -2,7 +2,13 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION fnc_siac_dicuiimpegnatoup_anno3 (id_in integer)
+
+-- SIAC-7349 04/08/2020 CM Inizio
+
+DROP FUNCTION if exists siac.fnc_siac_dicuiimpegnatoup_anno3(integer);
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dicuiimpegnatoup_anno3 (
+  id_in integer
+)
 RETURNS numeric AS
 $body$
 DECLARE
@@ -27,12 +33,13 @@ BEGIN
 	      bil.bil_id=bilElem.bil_id and
     	  per.periodo_id=bil.periodo_id;
 
-
+	/* SIAC-7349 mantengo questa chiamata perche cosi' il default del parametro verifica_mod_provv = TRUE 
+	 * forza la restituzione delle modifiche provvisorie al valore dicuiimpegnato
+	 * che qui servira' per il calcolo della disponibilita' ad impegnare  */
     strMessaggio:='Calcolo totale impegnato UP elem_id='||id_in||'.';
     select * into diCuiImpegnatoRec
     from  fnc_siac_dicuiimpegnatoup_comp_anno (id_in,((annoBilancio::INTEGER)+2)::varchar);
-
-
+	
     diCuiImpegnato:=diCuiImpegnatoRec.diCuiImpegnato;
 
 
@@ -58,4 +65,11 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100;
+
+
+ALTER FUNCTION siac.fnc_siac_dicuiimpegnatoup_anno3 (integer)
+  OWNER TO siac;
+  
+-- SIAC-7349 04/08/2020 CM Fine

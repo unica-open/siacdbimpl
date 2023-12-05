@@ -2,6 +2,13 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
+
+drop function if not exists siac.fnc_siac_dwh_contabilita_generale (
+  p_anno_bilancio varchar,
+  p_ente_proprietario_id integer,
+  p_data timestamp
+);
+
 CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_contabilita_generale (
   p_anno_bilancio varchar,
   p_ente_proprietario_id integer,
@@ -1433,7 +1440,8 @@ from
                OR
                q.data_cancellazione BETWEEN to_timestamp('01/01/'||p_anno_bilancio, 'dd/mm/yyyy') AND now()
           )-- SIAC-5696 FINE
-     and d.collegamento_tipo_code ='RE'
+--     and d.collegamento_tipo_code ='RE'
+     and d.collegamento_tipo_code IN ('RE','RR') -- SIAC-8717 Sofia 12.05.2022
      and ((s.data_cancellazione is null and s.validita_fine is null) -- SIAC-5941 Integrazione INIZIO
                 or s.causale_ep_stato_id =
                (select d_caus_stato.causale_ep_stato_id
@@ -2018,3 +2026,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
 COST 100 ROWS 1000;
+
+alter function  siac.fnc_siac_dwh_contabilita_generale ( varchar, integer, timestamp) owner to siac;

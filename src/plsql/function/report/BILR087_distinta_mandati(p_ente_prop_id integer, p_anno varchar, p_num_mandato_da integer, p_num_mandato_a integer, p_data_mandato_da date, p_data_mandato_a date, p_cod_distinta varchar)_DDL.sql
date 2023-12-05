@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR087_distinta_mandati" (
@@ -42,7 +42,9 @@ RETURNS TABLE (
   atto_numero integer,
   atto_struttura varchar,
   conto_tesoreria varchar,
-  commissioni varchar
+  commissioni varchar,
+  pnrr_code varchar,
+  perimetro_sanitario varchar
 ) AS
 $body$
 DECLARE
@@ -111,7 +113,8 @@ atto_numero=0;
 atto_struttura='';
 conto_tesoreria='';
 commissioni='';
-
+pnrr_code:='';
+perimetro_sanitario:='';
 
 	/* 12/02/2015: Aggiunto questo controllo per presentare un messaggio di errore
     	sul report nel caso l'utente non abbia specificato nessun parametro di ricerca */
@@ -192,7 +195,7 @@ END;*/
     	Prendo tutti gli importi dell'anno di esercizio precedenti il periodo
         o i numeri di mandato indicati dall'utente */
 /* 04/02/2016: estraggo  l'anno dell'impegno tramite la relativa liquidazione
-	perchè per sapere se l'importo è competenza o residuo devo confrontare 
+	perche' per sapere se l'importo e' competenza o residuo devo confrontare 
     l'anno dell'impegno e non quello del mandato */        
 BEGIN
 	for elencoImportiPrec in              
@@ -284,7 +287,7 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
 
 for elencoMandati in
 /* 04/02/2016: estraggo anche l'anno dell'impegno tramite la relativa liquidazione
-	perchè per sapere se l'importo è competenza o residuo devo confrontare 
+	perche' per sapere se l'importo e' competenza o residuo devo confrontare 
     l'anno dell'impegno e non quello del mandato */
 select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente, 
 		t_periodo.anno anno_eser, t_ordinativo.ord_anno,
@@ -310,20 +313,53 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
 		,case when r_ord_atto.attoamm_id is not null then t_ord_atto.attoamm_numero
         	else t_liq_atto.attoamm_numero end attoamm_numero
 		,case when r_ord_atto.attoamm_id is not null then COALESCE(t_class.classif_code,'')||' ' ||COALESCE(t_ord_atto.attoamm_oggetto,'')
-        	else COALESCE(t_class1.classif_code,'')||' ' ||COALESCE(t_liq_atto.attoamm_oggetto,'') end attoamm_struttura
+        	else COALESCE(t_class1.classif_code,'')||' ' ||COALESCE(t_liq_atto.attoamm_oggetto,'') end attoamm_struttura,
  -- 03/04/17 Daniela fine
+                --siac-tasks-Issues#70 20/04/2023.
+                --Aggiunta selezione del falg PNRR e Perimetro Sanitario 
+ 		case when COALESCE(pnrr.pnrr_code,'') ='1' then 'SI'
+        	else 'NO' end pnrr_code,
+--da Canova: il perimetro sanitario correttamente espone due valori : 3 e 4 ma devono avere la descrizione differente in quanto 
+--sono ambiti differenti.
+--3 - per le spese delle gestione ordinaria della regione
+--4 - per le spese della gestione sanitaria della regione
+--quindi direi visto che la colonna è perimetro sanitario: se 3 esponi NO, se 4 esponi SI  
+--e' NO anche se non definito (enti diversi da Regione).          
+        case when COALESCE(perim_sanit.perim_sanitario,'') ='4' then 'SI'
+        	else 'NO' end    perimetro_sanitario       	
 		FROM  	siac_t_ente_proprietario ep,
         		siac_t_ente_oil OL,
                 siac_t_bil t_bil,
                 siac_t_periodo t_periodo,
                 siac_r_ordinativo_bil_elem r_ordinativo_bil_elem,
-				siac_t_bil_elem t_bil_elem,                  
+				siac_t_bil_elem t_bil_elem
+                --siac-tasks-Issues#70 20/04/2023.
+                --Aggiunta selezione del falg PNRR e Perimetro Sanitario
+                	left join (select r_bil_class.elem_id, class.classif_code pnrr_code
+                        from siac_t_class class,
+                          siac_d_class_tipo tipo_class,
+                          siac_r_bil_elem_class r_bil_class
+                        where class.classif_tipo_id=tipo_class.classif_tipo_id
+                        and r_bil_class.classif_id=class.classif_id
+                        and class.ente_proprietario_id=p_ente_prop_id
+                        and tipo_class.classif_tipo_code in ('CLASSIFICATORE_4',
+                                                              'CLASSIFICATORE_40')) pnrr
+                    on t_bil_elem.elem_id=pnrr.elem_id
+                      left join (select r_bil_class.elem_id, class.classif_code perim_sanitario
+                        from siac_t_class class,
+                          siac_d_class_tipo tipo_class,
+                          siac_r_bil_elem_class r_bil_class
+                        where class.classif_tipo_id=tipo_class.classif_tipo_id
+                        and r_bil_class.classif_id=class.classif_id
+                        and class.ente_proprietario_id=p_ente_prop_id
+                        and tipo_class.classif_tipo_code in ('PERIMETRO_SANITARIO_SPESA')) perim_sanit
+                    on t_bil_elem.elem_id=perim_sanit.elem_id,                  
                 siac_t_ordinativo t_ordinativo
                 LEFT JOIN siac_d_distinta d_distinta
                 	on (d_distinta.dist_id=t_ordinativo.dist_id
                     	AND d_distinta.data_cancellazione IS NULL)
 -- 03/04/17 Daniela: nuovi campi per jira SIAC-4698
-				-- Operatore che ha registrato il mandato, ha senso l'outer join? Direi di si perchè non si trova sempre il codice nella tabella dei soggetti
+				-- Operatore che ha registrato il mandato, ha senso l'outer join? Direi di si perche' non si trova sempre il codice nella tabella dei soggetti
 				LEFT JOIN siac_t_soggetto t_soggetto1 on (t_soggetto1.soggetto_code=t_ordinativo.login_creazione and t_soggetto1.data_cancellazione is NULL)
 				-- Commissioni  e conto corrente 
 				LEFT JOIN siac_d_commissione_tipo d_commisione on (d_commisione.comm_tipo_id = t_ordinativo.comm_tipo_id and d_commisione.data_cancellazione is null)
@@ -344,7 +380,7 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
 				LEFT JOIN siac_d_atto_amm_tipo d_liq_atto_amm_tipo ON (d_liq_atto_amm_tipo.attoamm_tipo_id=t_liq_atto.attoamm_tipo_id AND d_liq_atto_amm_tipo.data_cancellazione IS NULL)
                 LEFT JOIN siac_r_atto_amm_class r_liq_atto_amm_class ON (r_liq_atto_amm_class.attoamm_id=t_liq_atto.attoamm_id AND r_liq_atto_amm_class.data_cancellazione IS NULL)
                 LEFT JOIN siac_t_class t_class1 ON (t_class1.classif_id= r_liq_atto_amm_class.classif_id AND t_class1.data_cancellazione IS NULL),
- -- 03/04/17 Daniela fine
+ -- 03/04/17 Daniela fine 
                 siac_r_liquidazione_movgest r_liq_movgest,
                 siac_t_movgest t_movgest,
                 siac_t_movgest_ts t_movgest_ts,
@@ -404,12 +440,12 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
                     Q = QUIETANZIATO
                     F = FIRMATO
                     A = ANNULLATO 
-                  Sono estratti tutti gli stati, se è annullato è segnalato sulla stampa */
+                  Sono estratti tutti gli stati, se e' annullato e' segnalato sulla stampa */
             --AND d_ord_stato.ord_stato_code IN ('I', 'A', 'N') 
             AND d_ord_tipo.ord_tipo_code='P' /* Ordinativi di pagamento */
             AND d_ts_det_tipo.ord_ts_det_tipo_code='A' /* importo attuale */
-            	/* devo testare la data di fine validità perchè
-                	quando un ordinativo è annullato, lo trovo 2 volte,
+            	/* devo testare la data di fine validita' perche'
+                	quando un ordinativo e' annullato, lo trovo 2 volte,
                     uno con stato inserito e l'altro annullato */
             AND r_ord_stato.validita_fine IS NULL 
             AND ep.data_cancellazione IS NULL
@@ -427,7 +463,11 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
             AND  d_ord_stato.data_cancellazione IS NULL
             AND  d_ord_tipo.data_cancellazione IS NULL  
             AND r_ord_soggetto.data_cancellazione IS NULL
-            AND t_soggetto.data_cancellazione IS NULL
+            --SIAC-8413 20/10/2021.
+            --Non si deve fare il test sualla data cancellazione del soggetto
+            --perche' il soggetto era valido al momento della creazione del 
+            --mandato e quindi deve essere estratto.
+            --AND t_soggetto.data_cancellazione IS NULL
             AND r_liq_ord.data_cancellazione IS NULL 
             AND r_liq_movgest.data_cancellazione IS NULL 
             AND t_movgest.data_cancellazione IS NULL
@@ -447,7 +487,8 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
             , d_contotes.contotes_code
             , r_ord_atto.attoamm_id
             , d_ord_atto_amm_tipo.attoamm_tipo_code,d_ord_atto_amm_tipo.attoamm_tipo_desc, t_ord_atto.attoamm_anno,t_ord_atto.attoamm_numero,t_class.classif_code, t_ord_atto.attoamm_oggetto
-            , d_liq_atto_amm_tipo.attoamm_tipo_code,d_liq_atto_amm_tipo.attoamm_tipo_desc, t_liq_atto.attoamm_anno,t_liq_atto.attoamm_numero,t_class1.classif_code, t_liq_atto.attoamm_oggetto
+            , d_liq_atto_amm_tipo.attoamm_tipo_code,d_liq_atto_amm_tipo.attoamm_tipo_desc, t_liq_atto.attoamm_anno,t_liq_atto.attoamm_numero,t_class1.classif_code, t_liq_atto.attoamm_oggetto,
+            pnrr.pnrr_code, perim_sanit.perim_sanitario
  -- 03/04/17 Daniela fine
             ORDER BY t_ordinativo.ord_numero, t_ordinativo.ord_emissione_data            
 loop
@@ -472,7 +513,7 @@ loop
   numero_mandato=elencoMandati.ord_numero;
   data_mandato=elencoMandati.ord_emissione_data;
 
-      /* se il mandato è ANNULLATO l'importo deve essere riportato
+      /* se il mandato e' ANNULLATO l'importo deve essere riportato
           come negativo */
   if(stato_mandato='A') THEN
       importo_lordo_mandato= COALESCE(-elencoMandati.IMPORTO_TOTALE,0);
@@ -480,8 +521,8 @@ loop
       importo_lordo_mandato= COALESCE(elencoMandati.IMPORTO_TOTALE,0);
   end if;
 
-  /*  04/02/2016: se l'ordinativo ha un impegno che è di un anno precedente 
-          l'anno di esercizio, l'importo è un residuo, altrimenti è di competenza.
+  /*  04/02/2016: se l'ordinativo ha un impegno che e' di un anno precedente 
+          l'anno di esercizio, l'importo e' un residuo, altrimenti e' di competenza.
           Prima confrontavo l'anno dell'ordinativo invece che dell'impegno. */        
   --IF elencoMandati.ord_anno  < anno_eser_int THEN
   IF elencoMandati.anno_impegno  < anno_eser_int THEN
@@ -509,7 +550,9 @@ loop
   atto_struttura=COALESCE(elencoMandati.attoamm_struttura,'');
   conto_tesoreria=COALESCE(elencoMandati.contotes_code,'');
   commissioni=COALESCE(elencoMandati.comm_tipo_desc,'');
-      
+  pnrr_code = elencoMandati.pnrr_code;
+  perimetro_sanitario = elencoMandati.perimetro_sanitario;
+  
 return next;
 
 
@@ -543,6 +586,8 @@ atto_numero=0;
 atto_struttura='';
 conto_tesoreria='';
 commissioni='';
+pnrr_code:='';
+perimetro_sanitario:='';
 
 raise notice 'fine numero mandato % ',elencoMandati.ord_numero;
 end loop;
@@ -562,4 +607,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR087_distinta_mandati" (p_ente_prop_id integer, p_anno varchar, p_num_mandato_da integer, p_num_mandato_a integer, p_data_mandato_da date, p_data_mandato_a date, p_cod_distinta varchar)
+  OWNER TO siac;

@@ -2,6 +2,14 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
+
+drop FUNCTION if exists siac.fnc_siac_dwh_ordinativo_pagamento 
+(
+  p_anno_bilancio varchar,
+  p_ente_proprietario_id integer,
+  p_data timestamp
+);
+
  CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_ordinativo_pagamento (
   p_anno_bilancio varchar,
   p_ente_proprietario_id integer,
@@ -215,6 +223,9 @@ INSERT INTO siac.siac_dwh_ordinativo_pagamento
   desc_siope_assenza_motivazione,
   desc_siope_assenza_motiv_bnkit,
   ord_da_trasmettere -- 20.06.2018 Sofia siac-6175
+  --  20.01.2023 Sofia Jira 	SIAC-8762
+  ,cod_conto_tes_vincolato
+  ,descri_conto_tes_vincolato
   )
 select tb.ente_proprietario_id, tb.ente_denominazione, tb.anno, tb.fase_operativa_code,tb.fase_operativa_desc,
 tb.ord_anno, tb.ord_numero,tb.ord_desc, tb.ord_stato_code,tb.ord_stato_desc,
@@ -286,6 +297,9 @@ tb.soggetto_id_da soggetto_csc_id, -- SIAC-5228
 tb.siope_tipo_debito_code, tb.siope_tipo_debito_desc, tb.siope_tipo_debito_desc_bnkit,
 tb.siope_assenza_motivazione_code, tb.siope_assenza_motivazione_desc, tb.siope_assenza_motivazione_desc_bnkit,
 tb.ord_da_trasmettere -- 20.06.2018 Sofia siac-6175
+--  20.01.2023 Sofia Jira 	SIAC-8762
+,tb.contotes_code_vinc
+,tb.contotes_desc_vinc
 from (
 with ordinativipag as (
 with ord_pag as (
@@ -384,7 +398,7 @@ siac_t_modpag b,siac_t_soggetto c
 where a.modpag_id=b.modpag_id and a.ente_proprietario_id=p_ente_proprietario_id
 AND p_data BETWEEN a.validita_inizio AND COALESCE(a.validita_fine, p_data)
 and c.soggetto_id=b.soggetto_id
-and a.data_cancellazione is null and b.data_cancellazione is null
+and a.data_cancellazione is null -- 13.05.2022 Sofia JIRA SIAC-8599 and b.data_cancellazione is null
 and c.data_cancellazione is null
 UNION -- 04.07.2017 Sofia SIAC-5036
 select a.ord_id, b.modpag_id ,
@@ -419,7 +433,7 @@ AND   p_data BETWEEN rel.validita_inizio AND COALESCE(rel.validita_fine, p_data)
 AND   p_data BETWEEN rmdp.validita_inizio AND COALESCE(rmdp.validita_fine, p_data)
 AND   p_data BETWEEN roil.validita_inizio AND COALESCE(roil.validita_fine, p_data)
 and   a.data_cancellazione is null
-and   b.data_cancellazione is null
+--and   b.data_cancellazione is null -- 13.05.2022 Sofia JIRA SIAC-8599
 and   c.data_cancellazione is null
 and   rel.data_cancellazione is null
 and   rmdp.data_cancellazione is null
@@ -1071,6 +1085,16 @@ AND    rel.data_cancellazione is null
 AND    roil.data_cancellazione is null
 AND    tipo.data_cancellazione is null
 AND    oil.data_cancellazione is null
+),
+-- 20.01.2023 Sofia Jira SIAC-8762
+contotes_vincolato as  
+(select  r.ord_id, conto.contotes_code, conto.contotes_desc,conto.contotes_id 
+from siac_d_contotesoreria conto ,siac_r_ordinativo_contotes_nodisp  r
+where conto.ente_proprietario_id=p_ente_proprietario_id
+and     r.contotes_id=conto.contotes_id 
+and     conto.data_cancellazione is null
+and     r.data_cancellazione  is null 
+and     r.validita_fine  is null 
 )
 select ordinativipag.ente_proprietario_id, ordinativipag.ente_denominazione, ordinativipag.anno,
 ordinativipag.fase_operativa_code, ordinativipag.fase_operativa_desc,
@@ -1165,6 +1189,9 @@ modpagcsc.oil_relaz_tipo_code, -- SIAC-5228
 modpagcsc.relaz_tipo_code,     -- SIAC-5228
 modpagcsc.relaz_tipo_desc,     -- SIAC-5228
 ordinativipag.ord_da_trasmettere -- 20.06.2018 Sofia siac-6175
+-- 20.01.2023 Sofia Jira 	SIAC-8762
+,contotes_vincolato.contotes_code contotes_code_vinc 
+,contotes_vincolato.contotes_desc contotes_desc_vinc
 from ordinativipag
 left join class21
 on ordinativipag.ord_id=class21.ord_id
@@ -1201,6 +1228,8 @@ left join firma
 on ordinativipag.ord_id=firma.ord_id
 left join mif on ordinativipag.ord_id = mif.mif_ord_ord_id
 left join modpagcsc on ordinativipag.ord_id = modpagcsc.ord_id
+-- 20.01.2023 Sofia Jira  SIAC-8762
+left join  contotes_vincolato on (ordinativipag.ord_id=contotes_vincolato.ord_id)
 ) as tb;
 
 esito:= 'Fine inserimento ordinativi in pagamento (siac_dwh_ordinativo_pagamento) - '||clock_timestamp();
@@ -1392,7 +1421,7 @@ siac_t_modpag b,siac_t_soggetto c
 where a.modpag_id=b.modpag_id and a.ente_proprietario_id=p_ente_proprietario_id
 AND p_data BETWEEN a.validita_inizio AND COALESCE(a.validita_fine, p_data)
 and c.soggetto_id=b.soggetto_id
-and a.data_cancellazione is null and b.data_cancellazione is null
+and a.data_cancellazione is null -- -- 13.05.2022 Sofia JIRA SIAC-8599 and b.data_cancellazione is null
 and c.data_cancellazione is null),
 acc as (select
 a.accredito_tipo_id,
@@ -2144,3 +2173,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
 COST 100 ROWS 1000;
+
+alter function  siac.fnc_siac_dwh_ordinativo_pagamento (  varchar, integer, timestamp) owner to siac;

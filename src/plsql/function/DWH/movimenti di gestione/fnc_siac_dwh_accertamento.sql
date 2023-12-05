@@ -2,14 +2,21 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_accertamento (
+drop function if exists 
+siac.fnc_siac_dwh_accertamento 
+(
   p_anno_bilancio varchar,
   p_ente_proprietario_id integer,
   p_data timestamp
-)
-RETURNS TABLE (
-  esito varchar
-) AS
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_accertamento
+( p_anno_bilancio varchar,
+  p_ente_proprietario_id integer,
+  p_data timestamp
+ )
+ RETURNS TABLE(esito varchar)
+AS 
 $body$
 DECLARE
 
@@ -104,6 +111,10 @@ v_annoRiaccertato VARCHAR := null;
 v_numeroRiaccertato VARCHAR := null;
 v_numeroOriginePlur VARCHAR := null;
 v_flagDaRiaccertamento VARCHAR := null;
+
+-- 19.02.2020 Sofia jira siac-7292
+v_flagDaReanno VARCHAR := null;
+
 v_automatico VARCHAR := null;
 v_note VARCHAR := null;
 v_validato VARCHAR := null;
@@ -154,6 +165,12 @@ v_FlagCollegamentoAccertamentoFattura VARCHAR := null;
 -- 04.06.2018 Sofia siac-6220
 v_FlagAttivaGsa VARCHAR := null;
 
+-- SIAC-7541 27.04.2020 Sofia
+v_codice_cdr_competente varchar:=null;
+v_descrizione_cdr_competente varchar:=null;
+v_codice_cdc_competente varchar:=null;
+v_descrizione_cdc_competente varchar:=null;
+
 v_data_inizio_val_stato_subaccer TIMESTAMP := null;
 v_data_inizio_val_stato_accer TIMESTAMP := null;
 v_data_creazione_subaccer TIMESTAMP := null;
@@ -172,6 +189,9 @@ v_versione_cronop varchar:=null;
 v_desc_cronop varchar:=null;
 v_anno_cronop varchar:=null;
 v_programma_id integer:=null;
+
+-- SIAC-8171 06.09.2021 Sofia
+v_codice_verbale varchar:=NULL;
 
 v_user_table varchar;
 params varchar;
@@ -263,7 +283,7 @@ LEFT JOIN  siac.siac_t_bil_elem tbe ON rmbe.elem_id = tbe.elem_id
                                     AND tbe.data_cancellazione IS NULL
 WHERE tep.ente_proprietario_id = p_ente_proprietario_id
 AND tp.anno = p_anno_bilancio
---and tm.movgest_anno::integer=2015
+--and tm.movgest_anno::integer=2020
 --and tm.movgest_numero::integer=1901
 AND dmt.movgest_tipo_code = 'A'
 AND p_data BETWEEN tmt.validita_inizio AND COALESCE(tmt.validita_fine, p_data)
@@ -450,6 +470,8 @@ v_classificatore_generico_4_valore:= null;
 v_classificatore_generico_5:= null;
 v_classificatore_generico_5_descrizione_valore:= null;
 v_classificatore_generico_5_valore:= null;
+
+
 -- Ciclo per estrarre i classificatori relativi ad un dato movimento
 FOR rec_classif_id IN
 SELECT tc.classif_id, tc.classif_tipo_id,
@@ -618,6 +640,10 @@ v_annoRiaccertato := null;
 v_numeroRiaccertato := null;
 v_numeroOriginePlur := null;
 v_flagDaRiaccertamento := null;
+
+-- 19.02.2020 Sofia jira siac-7292
+v_flagDaReanno := null;
+
 v_automatico := null;
 v_note := null;
 v_validato := null;
@@ -643,6 +669,9 @@ v_FlagCollegamentoAccertamentoFattura  := null;
 -- 04.06.2018 Sofia siac-6220
 v_FlagAttivaGsa  := null;
 
+
+-- 06.09.2021 Sofia siac-8171
+v_codice_verbale:=NULL;
 
 -- Ciclo per estrarre gli attibuti relativi ad un movgest_ts_id
 FOR rec_attr IN
@@ -689,6 +718,8 @@ LOOP
      v_numeroOriginePlur := v_flag_attributo;
   ELSIF rec_attr.attr_code = 'flagDaRiaccertamento' THEN
      v_flagDaRiaccertamento := v_flag_attributo;
+  ELSIF rec_attr.attr_code = 'flagDaReanno' THEN -- 19.02.2020 Sofia jira siac-7292
+     v_flagDaReanno := v_flag_attributo;
   ELSIF rec_attr.attr_code = 'numeroUEBOrigine' THEN
      v_numero_ueb_origine := v_flag_attributo;
   ELSIF rec_attr.attr_code = 'ACC_AUTO' THEN
@@ -703,6 +734,8 @@ LOOP
   ELSIF rec_attr.attr_code = 'FlagAttivaGsa' THEN
      v_FlagAttivaGsa := v_flag_attributo;
      --nuova sezione GSA 04.06.2018 Sofia siac-6220
+  elsif rec_attr.attr_code='codVerbaleAccertamento' THEN   -- 06.09.2021 Sofia SIAC-8171
+     v_codice_verbale:=v_flag_attributo;
 
   END IF;
 
@@ -955,6 +988,12 @@ SELECT COALESCE(SUM(totd.ord_ts_det_importo),0)
 -- 30.06.2016 Sofia SIAC JIRA-5030   INIZIO
 
 
+-- SIAC-7541 27.04.2020 Sofia
+v_codice_cdc_competente := NULL;
+v_descrizione_cdc_competente := null;
+v_codice_cdr_competente := NULL;
+v_descrizione_cdr_competente := null;
+
 IF v_movgest_ts_tipo_code = 'T' THEN
 
 v_programma_code := null;
@@ -982,6 +1021,10 @@ AND    rmtp.data_cancellazione IS NULL
 AND    tp.data_cancellazione IS NULL
 and    rs.data_cancellazione IS NULL;
 
+
+
+
+
 -- 23.10.2018 Sofia SIAC-6336
 if v_programma_id is not null then
 	select cronop.cronop_code, cronop.cronop_desc, per.anno::integer
@@ -1001,7 +1044,35 @@ if v_programma_id is not null then
     order by cronop.cronop_id desc
     limit 1;
 
+
+
 end if;
+
+-- SIAC-7541 27.04.2020 Sofia
+select  c.classif_code, c.classif_Desc
+        into v_codice_cdr_competente,v_descrizione_cdr_competente
+from   siac_r_movgest_class rc,siac_t_class c,siac_d_class_tipo tipo
+where  rc.movgest_Ts_id=rec_movgest_ts_id.movgest_ts_id
+and    c.classif_id=rc.classif_id
+and    tipo.classif_tipo_id=c.classif_tipo_id
+and    tipo.classif_tipo_code='CDR'
+and    rc.data_cancellazione is null
+and    rc.validita_fine is null;
+
+select  c.classif_code, c.classif_Desc
+        into v_codice_cdc_competente,v_descrizione_cdc_competente
+from   siac_r_movgest_class rc,siac_t_class c,siac_d_class_tipo tipo
+where  rc.movgest_Ts_id=rec_movgest_ts_id.movgest_ts_id
+and    c.classif_id=rc.classif_id
+and    tipo.classif_tipo_id=c.classif_tipo_id
+and    tipo.classif_tipo_code='CDC'
+and    rc.data_cancellazione is null
+and    rc.validita_fine is null;
+
+
+
+
+
 
 INSERT INTO siac.siac_dwh_accertamento
 (ente_proprietario_id,
@@ -1083,6 +1154,7 @@ annoriaccertato,
 numriaccertato,
 numorigineplur,
 flagdariaccertamento,
+flagdareanno, -- 19.02.2020 Sofia jira siac-7292
 automatico,
 note,
 validato,
@@ -1115,7 +1187,14 @@ desc_programma,
 stato_programma,
 versione_cronop,
 desc_cronop,
-anno_cronop
+anno_cronop,
+-- SIAC-7541 27.04.2020 Sofia
+cod_cdr_struttura_comp,
+desc_cdr_struttura_comp,
+cod_cdc_struttura_comp,
+desc_cdc_struttura_comp,
+-- siac-8171 06.09.2021 Sofia
+codice_verbale
   )
   VALUES (v_ente_proprietario_id,
           v_ente_denominazione,
@@ -1196,6 +1275,7 @@ anno_cronop
           v_numeroRiaccertato,
           v_numeroOriginePlur,
           v_flagDaRiaccertamento,
+          v_flagDaReanno, -- 19.02.2020 Sofia jira siac-7292
           v_automatico,
           v_note,
           v_validato,
@@ -1228,9 +1308,52 @@ anno_cronop
 		  v_programma_stato,
 		  v_versione_cronop,
 	      v_desc_cronop,
-	      v_anno_cronop
+	      v_anno_cronop,
+          -- SIAC-7541 27.04.2020 Sofia
+          v_codice_cdr_competente,
+          v_descrizione_cdr_competente,
+          v_codice_cdc_competente,
+          v_descrizione_cdc_competente,
+          -- siac-8171 06.09.2021 Sofia
+          v_codice_verbale
          );
 ELSIF v_movgest_ts_tipo_code = 'S' THEN
+
+  -- SIAC-7541 27.04.2020 Sofia
+
+  select  c.classif_code, c.classif_Desc
+          into v_codice_cdr_competente,v_descrizione_cdr_competente
+  from siac_t_movgest_Ts ts, siac_d_movgest_ts_tipo tipo_ts,
+       siac_r_movgest_class rc,siac_t_class c,siac_d_class_tipo tipo
+  where  ts.movgest_id=rec_movgest_ts_id.movgest_id
+  and    tipo_ts.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+  and    tipo_ts.movgest_ts_tipo_code='T'
+  and    rc.movgest_Ts_id=ts.movgest_ts_id
+  and    c.classif_id=rc.classif_id
+  and    tipo.classif_tipo_id=c.classif_tipo_id
+  and    tipo.classif_tipo_code='CDR'
+  and    rc.data_cancellazione is null
+  and    rc.validita_fine is null
+  and    ts.data_cancellazione is null
+  and    ts.validita_fine is null;
+
+  select  c.classif_code, c.classif_Desc
+          into v_codice_cdc_competente,v_descrizione_cdc_competente
+  from siac_t_movgest_Ts ts, siac_d_movgest_ts_tipo tipo_ts,
+       siac_r_movgest_class rc,siac_t_class c,siac_d_class_tipo tipo
+  where  ts.movgest_id=rec_movgest_ts_id.movgest_id
+  and    tipo_ts.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+  and    tipo_ts.movgest_ts_tipo_code='T'
+  and    rc.movgest_Ts_id=ts.movgest_ts_id
+  and    c.classif_id=rc.classif_id
+  and    tipo.classif_tipo_id=c.classif_tipo_id
+  and    tipo.classif_tipo_code='CDC'
+  and    rc.data_cancellazione is null
+  and    rc.validita_fine is null
+  and    ts.data_cancellazione is null
+  and    ts.validita_fine is null;
+
+
   INSERT INTO siac.siac_dwh_subaccertamento
   (ente_proprietario_id,
 ente_denominazione,
@@ -1312,6 +1435,7 @@ annoriaccertato,
 numriaccertato,
 numorigineplur,
 flagdariaccertamento,
+flagdareanno, -- 19.02.2020 Sofia jira siac-7292
 automatico,
 note,
 validato,
@@ -1337,7 +1461,12 @@ flag_attiva_gsa, -- 04.06.2018 Sofia siac-6220
 data_inizio_val_stato_subaccer,
 data_inizio_val_subaccer,
 data_creazione_subaccer,
-data_modifica_subaccer
+data_modifica_subaccer,
+-- SIAC-7541 27.04.2020 Sofia
+cod_cdr_struttura_comp,
+desc_cdr_struttura_comp,
+cod_cdc_struttura_comp,
+desc_cdc_struttura_comp
   )
   VALUES (v_ente_proprietario_id,
           v_ente_denominazione,
@@ -1419,6 +1548,7 @@ data_modifica_subaccer
           v_numeroRiaccertato,
           v_numeroOriginePlur,
           v_flagDaRiaccertamento,
+          v_flagDaReanno, -- 19.02.2020 Sofia siac-7292
           v_automatico,
           v_note,
           v_validato,
@@ -1444,7 +1574,12 @@ data_modifica_subaccer
           v_data_inizio_val_stato_subaccer,
           v_data_inizio_val_subaccer,
           v_data_creazione_subaccer,
-          v_data_modifica_subaccer
+          v_data_modifica_subaccer,
+          -- SIAC-7541 27.04.2020 Sofia
+          v_codice_cdr_competente,
+          v_descrizione_cdr_competente,
+          v_codice_cdc_competente,
+          v_descrizione_cdc_competente
          );
 END IF;
 
@@ -1471,3 +1606,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
 COST 100 ROWS 1000;
+
+alter FUNCTION siac.fnc_siac_dwh_accertamento (varchar,integer,timestamp) owner to siac;

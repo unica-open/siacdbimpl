@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SIAC IS
 
 procedure migrazione_cpu(p_anno_esercizio varchar2,p_ente number,pCodRes out number, pMsgRes out varchar2) is
@@ -188,7 +194,7 @@ begin
            cdicuiimpe.nro_capitolo (+) = cAnno.nro_capitolo_77 and
            cdicuiimpe.nro_articolo (+) = 0);
   commit;
-  /* 26.11.2015 Sofia commentata perche non esiste più la tabella
+  /* 26.11.2015 Sofia commentata perche non esiste piï¿½ la tabella
   msgRes:='Inserimento migr_capitolo_uscita CAP-UP da prev_peg_residui_noriac.';
 
   insert into migr_capitolo_uscita
@@ -369,10 +375,10 @@ con res.anno_peg=m.anno_esercizio*/
      commit;                */
      msgRes:='Aggiornamento migr_capitolo_uscita per stanz. cassa CAP-UP.';
      update migr_capitolo_uscita  m
-         --ANNA V 30/06/2016 commentato perchè in fase di caricamento lo stanziamento_iniziale_cassa é uguale allo stanziamento_cassa
+         --ANNA V 30/06/2016 commentato perchï¿½ in fase di caricamento lo stanziamento_iniziale_cassa ï¿½ uguale allo stanziamento_cassa
      set --m.stanziamento_iniziale_cassa=m.stanziamento_iniziale_cassa+m.stanziamento_iniziale_res,
          m.stanziamento_res=m.stanziamento_iniziale_res
-         -- ANNA V. commentato perchè è stato inserito l'importo cassa in preventivo
+         -- ANNA V. commentato perchï¿½ ï¿½ stato inserito l'importo cassa in preventivo
          --m.stanziamento_cassa=m.stanziamento_cassa+m.stanziamento_iniziale_res
      where m.anno_esercizio=p_anno_esercizio and m.tipo_capitolo='CAP-UP' and m.stanziamento_iniziale_res!=0
      -- DAVIDE : gestione ente proprietario nelle tabelle di migrazione
@@ -1079,7 +1085,7 @@ begin
            capEcc.ente_proprietario_id (+)=p_ente );-- 07.01.2016 Sofia aggiunto
     commit;
 
-/*  26.11.2015 Sofia commentata perchè non esiste più la tabella
+/*  26.11.2015 Sofia commentata perchï¿½ non esiste piï¿½ la tabella
     msgRes:='Inserimento migr_capitolo_entrata CAP-EP da prev_peg_residui_noriac.';
     insert into migr_capitolo_entrata
     ( capent_id,tipo_capitolo,anno_esercizio,numero_capitolo,numero_articolo,numero_ueb,
@@ -1257,10 +1263,10 @@ con res.anno_peg=m.anno_esercizio*/
 
       msgRes:='Aggiornamento migr_capitolo_entrata CAP-EP per stanz. cassa.';
       update migr_capitolo_entrata  m
-      set -- ANNA V. commentato perchè è in fase di caricamento preventivo stanziamento_iniziale_cassa=stanziamento_cassa
+      set -- ANNA V. commentato perchï¿½ ï¿½ in fase di caricamento preventivo stanziamento_iniziale_cassa=stanziamento_cassa
       --m.stanziamento_iniziale_cassa=m.stanziamento_iniziale_cassa+m.stanziamento_iniziale_res,
           m.stanziamento_res=m.stanziamento_iniziale_res
-          -- ANNA V. commentato perchè è stato inserito l'importo cassa in preventivo
+          -- ANNA V. commentato perchï¿½ ï¿½ stato inserito l'importo cassa in preventivo
           --m.stanziamento_cassa=m.stanziamento_cassa+m.stanziamento_iniziale_res
       where m.anno_esercizio=p_anno_esercizio and m.tipo_capitolo='CAP-EP' and m.stanziamento_iniziale_res!=0
             -- DAVIDE : gestione ente proprietario nelle tabelle di migrazione
@@ -2255,7 +2261,7 @@ end reset_seq;
 
       -- soggetto determinato, il soggetto deve essere stato migrato.
 
-      -- 09.10.2015 se il soggetto associato è un ati, viene trattato come soggetto non determinato
+      -- 09.10.2015 se il soggetto associato ï¿½ un ati, viene trattato come soggetto non determinato
       if migrImpegno.nat_giuridica = 5 then h_sogg_determinato := 'N'; else h_sogg_determinato:=migrImpegno.soggetto_determinato; end if;
       if h_sogg_determinato = 'S' and codRes = 0 then
         msgRes := 'Verifica soggetto migrato.';
@@ -2657,7 +2663,7 @@ end reset_seq;
                         and mc.anno_esercizio = asm.anno_peg
                         and mc.anno_delibera = a.anno_prot
                         and mc.nro_delibera = a.nro_prot
-                        and mc.cod_fornitore IS NOT NULL and mc.cod_fornitore <> COD_SOGGETTO_NULL -- condizione da eliminare perchè tutti i sub devono avere il soggetto determinato, necessaria bonifica dei dati
+                        and mc.cod_fornitore IS NOT NULL and mc.cod_fornitore <> COD_SOGGETTO_NULL -- condizione da eliminare perchï¿½ tutti i sub devono avere il soggetto determinato, necessaria bonifica dei dati
                         order by 2,3,4) loop*/
 
       msgRes := 'Lettura SubMovimenti.';
@@ -2745,7 +2751,7 @@ end reset_seq;
 
       end if;
 
-      -- pdc_finanziario è recuperato dall'impegno padre
+      -- pdc_finanziario ï¿½ recuperato dall'impegno padre
       if codRes = 0 then
         if p_tipo_cap = TIPO_CAP_USCITA then
            msgRes := 'Lettura pdc_finanziario impegno';
@@ -3031,7 +3037,7 @@ end reset_seq;
         -- controllo sulla presenza dei parametri in input
         if (p_ente_proprietario_id is null or p_anno_esercizio is null) then
             v_codRes := -1;
-            v_msgRes := 'Uno o più parametri in input non sono stati valorizzati correttamente';
+            v_msgRes := 'Uno o piï¿½ parametri in input non sono stati valorizzati correttamente';
         end if;
 
         -- pulizia delle tabelle migr_
@@ -3120,7 +3126,7 @@ end reset_seq;
         -- controllo sulla presenza dei parametri in input
         if (pEnte is null or pAnnoEsercizio is null) then
             pCodRes := -1;
-            pMsgRes := 'proc migrazione_liquidazione.Uno o più parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
+            pMsgRes := 'proc migrazione_liquidazione.Uno o piï¿½ parametri in input non sono stati valorizzati correttamente. Ente: '||pEnte||', annoEsercizio: '||pAnnoEsercizio;
             return;
         end if;
 
@@ -3175,7 +3181,7 @@ end reset_seq;
                 and liq.tipo_cap=asm.tipo_eu
                 and liq.nro_movimento = asm.nro_movimento
                 and asm.anno_peg=pAnnoEsercizio -- parametro input
-                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
                 and a.anno_prot=liq.anno_delibera
                 and a.nro_prot=liq.nro_delibera
                 and migrM.anno_impegno = imp.anno_intervento
@@ -3218,7 +3224,7 @@ end reset_seq;
                 and liq.tipo_cap=asm.tipo_eu
                 and liq.nro_movimento = asm.nro_movimento
                 and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
                 and a.anno_prot=liq.anno_delibera
                 and a.nro_prot=liq.nro_delibera
                 and migrM.anno_impegno = sub.anno_intervento
@@ -3264,7 +3270,7 @@ end reset_seq;
                 and liq.tipo_cap=asm.tipo_eu
                 and liq.nro_movimento = asm.nro_movimento
                 and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
                 and a.anno_prot=liq.anno_delibera
                 and a.nro_prot=liq.nro_delibera
                 and migrM.anno_impegno = imp.anno_intervento
@@ -3308,7 +3314,7 @@ end reset_seq;
                 and liq.tipo_cap=asm.tipo_eu
                 and liq.nro_movimento = asm.nro_movimento
                 and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+                and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
                 and a.anno_prot=liq.anno_delibera
                 and a.nro_prot=liq.nro_delibera
                 and migrM.anno_impegno = sub.anno_intervento
@@ -3488,7 +3494,7 @@ end reset_seq;
 
     -- gestione degli scarti
     -- 1) scarti per soggetto non migrato.
-    /* la verifica del soggetto migrato è fatto nel loop
+    /* la verifica del soggetto migrato ï¿½ fatto nel loop
     msgRes := 'Inserimento scarti per soggetto non migrato.';
      insert into migr_liquidazione_scarto
                                 (liquidazione_scarto_id,
@@ -3506,7 +3512,7 @@ end reset_seq;
       and liq.tipo_cap=asm.tipo_eu
       and liq.nro_movimento = asm.nro_movimento
       and asm.anno_peg=pAnnoEsercizio
-      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
       and not exists (select 1 from migr_soggetto migrS
             where migrS.Codice_Soggetto=liq.cod_fornitore
             and migrS.Ente_Proprietario_Id = pEnte);*/
@@ -3536,7 +3542,7 @@ end reset_seq;
       and liq.tipo_cap=asm.tipo_eu
       and liq.nro_movimento = asm.nro_movimento
       and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
       --and liq.nro_movimento = 1453106
       and migrM.anno_impegno(+) = imp.anno_intervento
       and migrM.numero_impegno(+) = imp.nro_movimento
@@ -3560,7 +3566,7 @@ end reset_seq;
       and liq.tipo_cap=asm.tipo_eu
       and liq.nro_movimento = asm.nro_movimento
       and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
       and migrM.anno_impegno(+) = sub.anno_intervento
       and migrM.numero_impegno(+) = sub.nro_mov_riferim
       and migrM.numero_subimpegno(+) = sub.nro_movimento
@@ -3586,7 +3592,7 @@ end reset_seq;
       and liq.tipo_cap=asm.tipo_eu
       and liq.nro_movimento = asm.nro_movimento
       and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
       and migrM.anno_impegno(+) = imp.anno_intervento
       and migrM.numero_impegno(+) = imp.nro_mov_riferim
       and migrM.numero_subimpegno(+) = 0
@@ -3613,7 +3619,7 @@ end reset_seq;
       and liq.tipo_cap=asm.tipo_eu
       and liq.nro_movimento = asm.nro_movimento
       and asm.anno_peg=pAnnoEsercizio -- parametro input funzione
-      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilità della liquidazione
+      and nvl(asm.residuo_da_riportare,0)>0 -- disponibilitï¿½ della liquidazione
       and migrM.anno_impegno(+) = sub.anno_intervento
       and migrM.numero_impegno(+) = sub.nro_mov_riferim
       and migrM.numero_subimpegno(+) = sub.nro_movimento
@@ -3657,9 +3663,9 @@ end reset_seq;
 
         h_sogg_migrato number := 0;
         h_sogg_valido number := 0;
-        h_codice_soggetto number:=null; -- coincide con il codice soggetto del doc se questo non è una sede secondaria, altrimenti è il codice soggetto di riferimento della sede secondaria
+        h_codice_soggetto number:=null; -- coincide con il codice soggetto del doc se questo non ï¿½ una sede secondaria, altrimenti ï¿½ il codice soggetto di riferimento della sede secondaria
 
-        h_sede_id number:=null; --Valorizzata con il campo migr_sede_secodiaria.sede_id se il soggetto legato al doc è una sede secondaria
+        h_sede_id number:=null; --Valorizzata con il campo migr_sede_secodiaria.sede_id se il soggetto legato al doc ï¿½ una sede secondaria
 
         h_num number := 0;
         h_stato varchar2(3):=null;
@@ -3750,7 +3756,7 @@ end reset_seq;
             end if;
 
             if codRes = 0 then
-                -- scartiamo i doc per cui non è stato possibile definirne il tipo, il dato deve essere bonificato.
+                -- scartiamo i doc per cui non ï¿½ stato possibile definirne il tipo, il dato deve essere bonificato.
                 if migrCursor.Tipo is null then
                     codRes := -1;
                     msgMotivoScarto := 'Tipo documento non determinato.';
@@ -3837,9 +3843,9 @@ end reset_seq;
                tipo_fonte,
                anno,
                numero,
-               codice_soggetto_fonte, -- è il dato letto dalla vista
-               codice_soggetto, -- coincide con il dato letto dalla vista se il soggetto non è sede secondaria, in alternativa è il codice del soggetto di riferimento della sede
-               sede_id, -- è l'id della tabella migr_sede_secondaria
+               codice_soggetto_fonte, -- ï¿½ il dato letto dalla vista
+               codice_soggetto, -- coincide con il dato letto dalla vista se il soggetto non ï¿½ sede secondaria, in alternativa ï¿½ il codice del soggetto di riferimento della sede
+               sede_id, -- ï¿½ l'id della tabella migr_sede_secondaria
                codice_soggetto_pag, -- valore di default
                stato,
                descrizione,
@@ -3865,7 +3871,7 @@ end reset_seq;
                -- tipo_impresa, -non gestito
                data_registro_fatt,
                numero_registro_fatt,
---               anno_registro_fatt, non è letto dalla vista
+--               anno_registro_fatt, non ï¿½ letto dalla vista
                collegato_cec, -- non gestito
                utente_creazione,
                utente_modifica,
@@ -3879,7 +3885,7 @@ end reset_seq;
                migrCursor.numero,
                migrCursor.codice_soggetto,
                h_codice_soggetto,
-               h_sede_id, --è valorizzato se il soggetto del doc è una sede secondaria
+               h_sede_id, --ï¿½ valorizzato se il soggetto del doc ï¿½ una sede secondaria
                0,-- codben_pagamento
                h_stato,
                migrCursor.descrizione,
@@ -4082,7 +4088,7 @@ end reset_seq;
           h_tipoMovrif := 0;
           h_nro_movimentorif :=0;
           h_anno_movimentorif := 0;
-          h_progben := NULL; -- modalità di pagamento valorizzata solo se quota non pagata
+          h_progben := NULL; -- modalitï¿½ di pagamento valorizzata solo se quota non pagata
           h_nimac := 0; --dato valorizzato solo se quota non pagata
           h_nsubimac := 0; --dato valorizzato solo se quota non pagata
           h_annoimac := NULL; --dato valorizzato solo se quota non pagata
@@ -4106,7 +4112,7 @@ end reset_seq;
 
               if migrCursor.numero_mandato = 0 -- quota non pagata
               then
-              -- 1 Verifica Modalità di pagamento se valorizzata
+              -- 1 Verifica Modalitï¿½ di pagamento se valorizzata
               if migrCursor.codice_modpag is not null then
                 msgRes := 'Verifica mdp migrata '||migrCursor.codice_modpag||' per soggetto code '||migrCursor.codice_soggetto||', sede id '|| migrCursor.sede_id||'.';
                 h_progben := migrCursor.codice_modpag;
@@ -4219,7 +4225,7 @@ end reset_seq;
                   when no_data_found then
                     h_motivoScarto:=NULL;
                   when too_many_rows then
-                    h_motivoScarto:='Movimento scartato per più di un motivo.'; -- migliorare concatenando i motivi di scarto del movimento.
+                    h_motivoScarto:='Movimento scartato per piï¿½ di un motivo.'; -- migliorare concatenando i motivi di scarto del movimento.
                   when others then
                       msgRes := msgRes || ' Errore ' || SQLCODE || '-' ||SUBSTR(SQLERRM, 1, 100);
                       RAISE ERROR_DOCUMENTO;
@@ -4261,7 +4267,7 @@ end reset_seq;
                     when no_data_found then
                       h_motivoScarto:=NULL;
                     when too_many_rows then
-                      h_motivoScarto:='Liquidazione scartata per più di un motivo.'; -- migliorare concatenando i motivi di scarto della liquidazione.
+                      h_motivoScarto:='Liquidazione scartata per piï¿½ di un motivo.'; -- migliorare concatenando i motivi di scarto della liquidazione.
                     when others then
                         msgRes := msgRes || ' Errore ' || SQLCODE || '-' ||SUBSTR(SQLERRM, 1, 100);
                         RAISE ERROR_DOCUMENTO;
@@ -4282,7 +4288,7 @@ end reset_seq;
             end if; -- codRes = 0
             else
             msgRes := 'Quota Pagata.';
-            -- la quota è pagata, integriamo le note
+            -- la quota ï¿½ pagata, integriamo le note
             if migrCursor.numero_subimpegno = 0 then
               h_note:='PAGAMENTO N.MAND '||migrCursor.numero_mandato||' N.LIQ '||migrCursor.nro_liquidazione||' IMPEGNO '||
                     migrCursor.anno_impegno||'/'||migrCursor.numero_impegno||'  ANNO '||migrCursor.anno_esercizio||'.';

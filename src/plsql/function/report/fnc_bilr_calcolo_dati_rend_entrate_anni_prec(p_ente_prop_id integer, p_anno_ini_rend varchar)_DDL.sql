@@ -366,7 +366,14 @@ and	stato_capitolo.data_cancellazione 	is null
 and	cat_del_capitolo.data_cancellazione	is null
 and now() between rc.validita_inizio and COALESCE(rc.validita_fine,now())
 and now() between r_cat_capitolo.validita_inizio and COALESCE(r_cat_capitolo.validita_fine,now())
-),
+-- 20/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un''esigenza di CMTO.   
+    and e.elem_id NOT IN (select elem_id
+			from siac_t_bil_elem_escludi_indicatori escludi
+            where escludi.ente_proprietario_id = '||p_ente_prop_id	||'
+            	and escludi.validita_fine IS NULL
+                and escludi.data_cancellazione IS NULL)),
  accertamenti as (
  	select capitolo.elem_id,
 		sum (dt_movimento.movgest_ts_det_importo) importo_accert

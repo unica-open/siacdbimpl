@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 -- PACKAGE MIGRAZIONE SOGGETTI COTO
 CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
  function fnc_migrazione_mod_accredito(pEnte number,
@@ -34,7 +40,7 @@ CREATE OR REPLACE PACKAGE BODY PCK_MIGRAZIONE_SOGGETTI_SIAC IS
                                       CODACCRE_PA,
                                       CODACCRE_DM,
                                       CODACCRE_MO
-				-- DAVIDE - 05.02.016 - spostate modalità accredito da CO a GE					  
+				-- DAVIDE - 05.02.016 - spostate modalitï¿½ accredito da CO a GE					  
 							, CODACCRE_AB, CODACCRE_AC, CODACCRE_AP) then
         tipoAccreditoSiac := SIAC_TIPOACCRE_GE;
         decodificaOIL := '1||CONTANTI';
@@ -2393,7 +2399,7 @@ begin
   
   --- MDP CESSIONE INCASSO/CREDITO [SENZA SEDE SECONDARIA . non serve controllare queste non avranno sede sec]
   --- MDP del soggetto ceduto , in questo caso il codaccre resta sulla MDP del soggetto cedente
-  --- quindi sulle nuove MDP del ceduto è impostato CB in caso di presenza di cod_iban, diversamente un codaccre
+  --- quindi sulle nuove MDP del ceduto ï¿½ impostato CB in caso di presenza di cod_iban, diversamente un codaccre
   --- di cassa , non volenvo fissare CT, si imposta CR - CONTANTI IN CIRCOLARITA
   msgRes:='Migrazione Soggetto MDP.MDP con cessione di credito/incasso senza sede secondaria.Soggetti ceduti.';
   insert into migr_modpag

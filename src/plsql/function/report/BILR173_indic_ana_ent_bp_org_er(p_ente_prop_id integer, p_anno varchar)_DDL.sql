@@ -196,7 +196,15 @@ SELECT  annoIniRend::varchar bil_anno,
         importi_cap.importo_residui_anno1::numeric prev_residui_anno1
 FROM strut_bilancio
 	LEFT JOIN capitoli on strut_bilancio.categoria_id = capitoli.categoria_id
-    LEFT JOIN importi_cap on importi_cap.elem_id = capitoli.elem_id ;
+    LEFT JOIN importi_cap on importi_cap.elem_id = capitoli.elem_id
+-- 19/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+WHERE capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+			from siac_t_bil_elem_escludi_indicatori escludi
+            where escludi.ente_proprietario_id = p_ente_prop_id
+            	and escludi.validita_fine IS NULL
+                and escludi.data_cancellazione IS NULL);    
                     
 EXCEPTION
 	when no_data_found THEN

@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR156_struttura_dca_entrate_prev" (
@@ -254,7 +254,10 @@ and now() between rc.validita_inizio and COALESCE(rc.validita_fine,now())
 and now() between r_cat_capitolo.validita_inizio and COALESCE(r_cat_capitolo.validita_fine,now())
 ),
 importi_residui as(
-select 		r_capitolo_ordinativo.elem_id,
+-- 21/07/2020 SIAC-7714
+-- query per gli importi residui rivista. E stata presa quella del report BILR062.
+
+/*select 		r_capitolo_ordinativo.elem_id,
             sum(ordinativo_imp.ord_ts_det_importo) imp_residuo
 from 		siac_t_bil 						bilancio,
 	 		siac_t_periodo 					anno_eserc, 
@@ -276,10 +279,8 @@ from 		siac_t_bil 						bilancio,
         and	ordinativo.ord_tipo_id				=	tipo_ordinativo.ord_tipo_id
 		and	tipo_ordinativo.ord_tipo_code		= 	v_ord_tipo_code_incasso		------ incasso
         and	ordinativo.ord_id					=	r_stato_ordinativo.ord_id
-        and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id
-    
-        and	stato_ordinativo.ord_stato_code			<> v_ord_stato_code_annullato --- 
-    
+        and	r_stato_ordinativo.ord_stato_id		=	stato_ordinativo.ord_stato_id    
+        and	stato_ordinativo.ord_stato_code			<> v_ord_stato_code_annullato ---     
         and	ordinativo.bil_id					=	bilancio.bil_id
         and	ordinativo.ord_id					=	ordinativo_det.ord_id
         and	ordinativo_det.ord_ts_id			=	ordinativo_imp.ord_ts_id
@@ -313,6 +314,76 @@ between r_stato_ordinativo.validita_inizio
 between r_ordinativo_movgest.validita_inizio 
     and COALESCE(r_ordinativo_movgest.validita_fine,now())
         group by r_capitolo_ordinativo.elem_id,r_capitolo_ordinativo.ente_proprietario_id
+        */
+select 	tb2.elem_id,
+		tb.importo imp_residuo
+from (
+select    
+capitolo.elem_id,
+sum (dt_movimento.movgest_ts_det_importo) importo
+    from 
+      siac_t_bil      bilancio, 
+      siac_t_periodo     anno_eserc, 
+      siac_t_bil_elem     capitolo , 
+      siac_r_movgest_bil_elem   r_mov_capitolo, 
+      siac_d_bil_elem_tipo    t_capitolo, 
+      siac_t_movgest     movimento, 
+      siac_d_movgest_tipo    tipo_mov, 
+      siac_t_movgest_ts    ts_movimento, 
+      siac_r_movgest_ts_stato   r_movimento_stato, 
+      siac_d_movgest_stato    tipo_stato, 
+      siac_t_movgest_ts_det   dt_movimento, 
+      siac_d_movgest_ts_tipo   ts_mov_tipo, 
+      siac_d_movgest_ts_det_tipo  dt_mov_tipo 
+      where bilancio.periodo_id    		 	= 	anno_eserc.periodo_id 
+      and bilancio.bil_id      				=	capitolo.bil_id
+      and capitolo.elem_tipo_id      		= 	t_capitolo.elem_tipo_id
+      and movimento.bil_id					=	bilancio.bil_id
+      and r_mov_capitolo.elem_id    		=	capitolo.elem_id
+      and r_mov_capitolo.movgest_id    		= 	movimento.movgest_id 
+      and movimento.movgest_tipo_id    		= 	tipo_mov.movgest_tipo_id
+      and movimento.movgest_id      		= 	ts_movimento.movgest_id 
+      and ts_movimento.movgest_ts_id    	= 	r_movimento_stato.movgest_ts_id 
+      and r_movimento_stato.movgest_stato_id  = tipo_stato.movgest_stato_id  
+      and ts_movimento.movgest_ts_tipo_id  = ts_mov_tipo.movgest_ts_tipo_id
+      and ts_movimento.movgest_ts_id    	= dt_movimento.movgest_ts_id 
+      and dt_movimento.movgest_ts_det_tipo_id  = dt_mov_tipo.movgest_ts_det_tipo_id 
+      and capitolo.ente_proprietario_id		= p_ente_prop_id 
+      and anno_eserc.anno       			=   p_anno       
+      and t_capitolo.elem_tipo_code    		= 	'CAP-EG'
+      and movimento.movgest_anno 		  	< 	p_anno::integer      
+      and tipo_mov.movgest_tipo_code    	= v_movgest_tipo -- A = Accertamenti       
+      and tipo_stato.movgest_stato_code   in ('D','N') ------ P,A,N       
+      and ts_mov_tipo.movgest_ts_tipo_code  = 'T'       
+      and dt_mov_tipo.movgest_ts_det_tipo_code = 'I' ----- importo attuale 
+      and	now() between bilancio.validita_inizio and coalesce (bilancio.validita_fine, now())
+      and	now() between anno_eserc.validita_inizio and coalesce (anno_eserc.validita_fine, now())
+      and	now() between capitolo.validita_inizio and coalesce (capitolo.validita_fine, now())
+      and	now() between t_capitolo.validita_inizio and coalesce (t_capitolo.validita_fine, now())
+      and	now() between movimento.validita_inizio and coalesce (movimento.validita_fine, now())
+      and	now() between ts_movimento.validita_inizio and coalesce (ts_movimento.validita_fine, now())
+      and anno_eserc.data_cancellazione    	is null 
+      and bilancio.data_cancellazione     	is null 
+      and capitolo.data_cancellazione     	is null 
+      and r_mov_capitolo.data_cancellazione is null 
+      and t_capitolo.data_cancellazione    	is null 
+      and movimento.data_cancellazione     	is null 
+      and tipo_mov.data_cancellazione     	is null 
+      and r_movimento_stato.data_cancellazione   is null 
+      and ts_movimento.data_cancellazione   is null 
+      and tipo_stato.data_cancellazione    	is null 
+      and dt_movimento.data_cancellazione   is null 
+      and ts_mov_tipo.data_cancellazione    is null 
+      and dt_mov_tipo.data_cancellazione    is null
+group by capitolo.elem_id)
+tb 
+,
+(select * from  siac_t_bil_elem    			capitolo_eg,
+      			siac_d_bil_elem_tipo    	t_capitolo_eg
+      where capitolo_eg.elem_tipo_id		=	t_capitolo_eg.elem_tipo_id 
+      and 	t_capitolo_eg.elem_tipo_code 	= 	elemTipoCode) tb2
+where
+ tb2.elem_id	=	tb.elem_id          
 ),        
 importi_riacc_residui  as (
 select    
@@ -530,7 +601,11 @@ select p_anno::varchar bil_anno,
     COALESCE(prev_def_cassa.importo_prev_def_cassa,0)::numeric  previsioni_definitive_cassa,
     COALESCE(importi_riacc_residui.importo_riacc_residui,0)::numeric  riaccertamenti_residui,
     CASE WHEN  trim(COALESCE(elenco_pdci_IV.pdc_iv,'')) = ''
-    	THEN elenco_pdci_V.pdc_v::varchar 
+    --SIAC-8719 13/05/2022.
+    --Se il capitolo e' associato al piano dei conti di V livello, 
+    --devo comunque usare IV livello.
+        --THEN elenco_pdci_V.pdc_v::varchar 
+    	THEN left(elenco_pdci_V.pdc_v, length(elenco_pdci_V.pdc_v)-3)||'000'::varchar 
     	ELSE elenco_pdci_IV.pdc_iv::varchar end pdc_iv,
     COALESCE(importi_residui.imp_residuo,0)::numeric  residui_attivi    
 	from capitoli
@@ -557,4 +632,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR156_struttura_dca_entrate_prev" (p_ente_prop_id integer, p_anno varchar)
+  OWNER TO siac;

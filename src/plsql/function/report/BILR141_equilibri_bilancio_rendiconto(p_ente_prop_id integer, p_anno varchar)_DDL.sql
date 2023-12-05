@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR141_equilibri_bilancio_rendiconto" (
@@ -13,7 +13,8 @@ RETURNS TABLE (
   tipo_capitolo varchar,
   codice_importo varchar,
   pdc_fin varchar,
-  importo numeric
+  importo numeric,
+  macroagg varchar
 ) AS
 $body$
 DECLARE
@@ -28,6 +29,9 @@ rec_fin        record;
 user_table	   varchar;
 p_anno_int 	   integer;
 BEGIN
+
+--SIAC-7192 24/02/2020.
+-- Aggiunta la colonna macroagg in output.
 
   RTN_MESSAGGIO:='lettura user table ''.';
   select fnc_siac_random_user()
@@ -53,6 +57,7 @@ BEGIN
           m.movgest_anno::VARCHAR,
           ts.movgest_ts_id,
           e.elem_id,
+          d_bil_elem_cat.elem_cat_code,
           --et.elem_tipo_code,
           --mt.movgest_tipo_code,        
           --sum (tsd.movgest_ts_det_importo) importo
@@ -70,7 +75,9 @@ BEGIN
             siac_r_movgest_ts_stato tsrs,
             siac_d_movgest_stato mst, 
             siac_t_movgest_ts_det   tsd ,
-            siac_d_movgest_ts_det_tipo  tsdt
+            siac_d_movgest_ts_det_tipo  tsdt,
+            siac_r_bil_elem_categoria r_bil_elem_cat,
+            siac_d_bil_elem_categoria d_bil_elem_cat
           where 
           b.periodo_id					=	p.periodo_id 
           and p.ente_proprietario_id   	= 	p_ente_prop_id
@@ -93,6 +100,8 @@ BEGIN
           and ts.movgest_ts_tipo_id  	= 	tsti.movgest_ts_tipo_id 
           and ts.movgest_ts_id     		= 	tsd.movgest_ts_id 
           and tsd.movgest_ts_det_tipo_id  = tsdt.movgest_ts_det_tipo_id 
+          and r_bil_elem_cat.elem_id = e.elem_id
+          and r_bil_elem_cat.elem_cat_id= d_bil_elem_cat.elem_cat_id
           and tsdt.movgest_ts_det_tipo_code = 'A' ----- importo attuale 
 /*          and now() between b.validita_inizio and coalesce (b.validita_fine, now())
           and now() between p.validita_inizio and coalesce (p.validita_fine, now())
@@ -132,7 +141,9 @@ BEGIN
           and tsrs.data_cancellazione   is null 
           and mst.data_cancellazione    is null 
           and tsd.data_cancellazione   	is null 
-          and tsdt.data_cancellazione   is null      
+          and tsdt.data_cancellazione   is null     
+          and r_bil_elem_cat.data_cancellazione   is null  
+          and d_bil_elem_cat.data_cancellazione   is null  
           --group by m.movgest_anno, ts.movgest_ts_id
   ),
   /*pdc_finanziario as
@@ -179,6 +190,7 @@ BEGIN
    )
   select
   movimenti_imp_acc.movgest_anno,
+  movimenti_imp_acc.elem_cat_code,
   --movimenti_imp_acc.elem_tipo_code,
   --movimenti_imp_acc.movgest_tipo_code, 
   SUM(COALESCE(movimenti_imp_acc.movgest_ts_det_importo,0)) importo,
@@ -189,6 +201,7 @@ BEGIN
   movimenti_imp_acc.elem_id = pdc_finanziario.elem_id
   group by 
   movimenti_imp_acc.movgest_anno, 
+  movimenti_imp_acc.elem_cat_code,
   --movimenti_imp_acc.elem_tipo_code,
   --movimenti_imp_acc.movgest_tipo_code, 
   pdc_finanziario.classif_code  
@@ -204,18 +217,20 @@ BEGIN
         codice_importo,
         pdc_fin,
         importo,
-        utente
+        utente,
+        macroagg
       )  
     VALUES
       ( p_ente_prop_id,
         rec_imp_acc.movgest_anno,
         null,
         null,
-        null,
+        rec_imp_acc.elem_cat_code,-- null,
         null,
         rec_imp_acc.pdc,
         rec_imp_acc.importo,
-        user_table
+        user_table,
+        null
       );  
   
   END LOOP;
@@ -363,7 +378,8 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
               codice_importo,
               pdc_fin,
               importo,
-              utente
+              utente,
+              macroagg
             )  
           VALUES
             ( p_ente_prop_id,
@@ -374,7 +390,8 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
               rec_capitoli_1.codice_importo,
               null,
               rec_capitoli_1.importo,
-              user_table
+              user_table,
+              null 
             );          
         
         END LOOP;
@@ -410,56 +427,61 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
               siac_r_bil_elem_class     r_bil_elem_class,
               siac_t_class              t_class,
               siac_d_class_tipo         d_class_tipo 
-          where 	capitolo_importi.ente_proprietario_id = p_ente_prop_id
-          and	anno_eserc.anno						= 	p_anno						
-          and	bilancio.periodo_id					=	anno_eserc.periodo_id 								
-          and	capitolo.bil_id						=	bilancio.bil_id 			 
-          and	capitolo.elem_id					=	capitolo_importi.elem_id 
-          and	capitolo.elem_tipo_id				=	tipo_elemento.elem_tipo_id 						
-          and	tipo_elemento.elem_tipo_code 		= 'CAP-UG'
-          and	capitolo_importi.elem_det_tipo_id	=	capitolo_imp_tipo.elem_det_tipo_id
-          and	capitolo_imp_tipo.elem_det_tipo_code	= 'STA'
-          and	capitolo_imp_periodo.periodo_id		=	capitolo_importi.periodo_id 			  
-          and	capitolo_imp_periodo.anno           =   p_anno
-          and	capitolo.elem_id					=	r_capitolo_stato.elem_id
-          and	r_capitolo_stato.elem_stato_id		=	stato_capitolo.elem_stato_id
-          and	stato_capitolo.elem_stato_code		=	'VA'
-          and	capitolo.elem_id					=	r_cat_capitolo.elem_id
-          and	r_cat_capitolo.elem_cat_id			=	cat_del_capitolo.elem_cat_id
-          and	cat_del_capitolo.elem_cat_code		=   'FPV'	
-          and r_bil_elem_class.elem_id            =   capitolo.elem_id
-          and r_bil_elem_class.classif_id         =   t_class.classif_id
-          and t_class.classif_tipo_id             =   d_class_tipo.classif_tipo_id
-          and d_class_tipo.classif_tipo_code      = 'MACROAGGREGATO'
-          and	capitolo_importi.data_cancellazione 	is null
-          and	capitolo_imp_tipo.data_cancellazione 	is null
-          and	capitolo_imp_periodo.data_cancellazione is null
-          and	capitolo.data_cancellazione 			is null
-          and	tipo_elemento.data_cancellazione 		is null
-          and	bilancio.data_cancellazione 			is null
-          and	anno_eserc.data_cancellazione 			is null
-          and	stato_capitolo.data_cancellazione 		is null
-          and	r_capitolo_stato.data_cancellazione 	is null
-          and	cat_del_capitolo.data_cancellazione 	is null
-          and	r_cat_capitolo.data_cancellazione 		is null
-          and	capitolo_importi.validita_fine 	is null
-          and	capitolo_imp_tipo.validita_fine 	is null
-          and	capitolo_imp_periodo.validita_fine is null
-          and	capitolo.validita_fine 			is null
-          and	tipo_elemento.validita_fine 		is null
-          and	bilancio.validita_fine 			is null
-          and	anno_eserc.validita_fine 			is null
-          and	stato_capitolo.validita_fine 		is null
-          and	r_capitolo_stato.validita_fine 	is null
-          and	cat_del_capitolo.validita_fine 	is null
-          and	r_cat_capitolo.validita_fine 		is null          
-          group by 
-          capitolo_imp_periodo.anno,
-          tipo_elemento.elem_tipo_code,
-          capitolo_imp_tipo.elem_det_tipo_code,		
-          cat_del_capitolo.elem_cat_code,
-          d_class_tipo.classif_tipo_code,
-          t_class.classif_id
+          where bilancio.periodo_id					=	anno_eserc.periodo_id
+              and	capitolo.bil_id						=	bilancio.bil_id 			 
+              and	capitolo.elem_id					=	capitolo_importi.elem_id 
+              and	capitolo.elem_tipo_id				=	tipo_elemento.elem_tipo_id 	
+              and	capitolo_importi.elem_det_tipo_id	=	capitolo_imp_tipo.elem_det_tipo_id
+              and	capitolo_imp_periodo.periodo_id		=	capitolo_importi.periodo_id 
+              and	capitolo.elem_id					=	r_capitolo_stato.elem_id
+              and	r_capitolo_stato.elem_stato_id		=	stato_capitolo.elem_stato_id
+              and	capitolo.elem_id					=	r_cat_capitolo.elem_id
+              and	r_cat_capitolo.elem_cat_id			=	cat_del_capitolo.elem_cat_id
+              and r_bil_elem_class.elem_id            =   capitolo.elem_id
+              and r_bil_elem_class.classif_id         =   t_class.classif_id
+              and t_class.classif_tipo_id             =   d_class_tipo.classif_tipo_id          
+              and 	capitolo_importi.ente_proprietario_id = p_ente_prop_id
+              and	anno_eserc.anno						= 	p_anno														          					
+              and	tipo_elemento.elem_tipo_code 		= 'CAP-UG'          
+              and	capitolo_imp_tipo.elem_det_tipo_code	= 'STA'          			  
+              and	capitolo_imp_periodo.anno           =   p_anno          
+              and	stato_capitolo.elem_stato_code		=	'VA'          
+              and	cat_del_capitolo.elem_cat_code		=   'FPV'	          
+              and d_class_tipo.classif_tipo_code      = 'MACROAGGREGATO'
+              and	capitolo_importi.data_cancellazione 	is null
+              and	capitolo_imp_tipo.data_cancellazione 	is null
+              and	capitolo_imp_periodo.data_cancellazione is null
+              and	capitolo.data_cancellazione 			is null
+              and	tipo_elemento.data_cancellazione 		is null
+              and	bilancio.data_cancellazione 			is null
+              and	anno_eserc.data_cancellazione 			is null
+              and	stato_capitolo.data_cancellazione 		is null
+              and	r_capitolo_stato.data_cancellazione 	is null
+              and	cat_del_capitolo.data_cancellazione 	is null
+              and	r_cat_capitolo.data_cancellazione 		is null
+              --siac-tasks-Issues#75 20/04/2023.
+              --Mancava il test su data_cancellazione su siac_r_bil_elem_class
+              and 	r_bil_elem_class.data_cancellazione 	is null
+              and	capitolo_importi.validita_fine 	is null
+              and	capitolo_imp_tipo.validita_fine 	is null
+              and	capitolo_imp_periodo.validita_fine is null
+              and	capitolo.validita_fine 			is null
+              and	tipo_elemento.validita_fine 		is null
+              and	bilancio.validita_fine 			is null
+              and	anno_eserc.validita_fine 			is null
+              and	stato_capitolo.validita_fine 		is null
+              and	r_capitolo_stato.validita_fine 	is null
+              and	cat_del_capitolo.validita_fine 	is null
+              and	r_cat_capitolo.validita_fine 		is null 
+              --siac-tasks-Issues#75 20/04/2023.
+              --Mancava il test su validita_fine su siac_r_bil_elem_class              
+              and 	r_bil_elem_class.validita_fine 	is null         
+          group by capitolo_imp_periodo.anno,
+              tipo_elemento.elem_tipo_code,
+              capitolo_imp_tipo.elem_det_tipo_code,		
+              cat_del_capitolo.elem_cat_code,
+              d_class_tipo.classif_tipo_code,
+              t_class.classif_id
   ),
   titusc as (
   select 
@@ -521,11 +543,12 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
   capitoli.tipo_capitolo_cod,
   capitoli.tipo_capitolo,
   capitoli.codice_importo,
-  capitoli.importo
-  from titusc, macroag, capitoli
+  capitoli.importo,
+  macroag.macroag_code
+  from titusc, macroag,  	capitoli     	
   where titusc.titusc_id=macroag.titusc_id 
   and   capitoli.classif_id = macroag.macroag_id
-  and   titusc.titusc_code in ('1','2')  
+  and   titusc.titusc_code in ('1','2','3')  
   
         LOOP
         
@@ -538,7 +561,8 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
               codice_importo,
               pdc_fin,
               importo,
-              utente
+              utente,
+              macroagg 
             )  
           VALUES
             ( p_ente_prop_id,
@@ -549,14 +573,15 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
               rec_capitoli_2.codice_importo,
               null,
               rec_capitoli_2.importo,
-              user_table
+              user_table,
+              rec_capitoli_2.macroag_code
             );          
         
         END LOOP;
   raise notice 'ora: % ',clock_timestamp()::varchar;  
   FOR rec_fin IN
   SELECT a.anno, a.titolo, a.cap_entrata_spesa, a.tipo_capitolo, a.codice_importo,
-         a.pdc_fin, a.importo
+         a.pdc_fin, a.importo, a.macroagg
   FROM  siac_rep_gest_equi_bil_imp a
   WHERE a.ente_proprietario_id = p_ente_prop_id
   AND   a.anno = p_anno
@@ -571,7 +596,7 @@ raise notice 'ora: % ',clock_timestamp()::varchar;
     codice_importo := rec_fin.codice_importo;
     pdc_fin := rec_fin.pdc_fin;
     importo := rec_fin.importo;
-  
+    macroagg := rec_fin.macroagg;
     return next;
     anno := '';
     titolo := '';
@@ -602,4 +627,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR141_equilibri_bilancio_rendiconto" (p_ente_prop_id integer, p_anno varchar)
+  OWNER TO siac;

@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_configura_indicatori_spesa (
+CREATE OR REPLACE FUNCTION siac.fnc_configura_indicatori_spesa (
   p_ente_prop_id integer,
   p_anno_ini_rend_prev varchar,
   p_anno varchar,
@@ -639,6 +639,14 @@ loop
                   LEFT JOIN pagamenti_residui on pagamenti_residui.elem_id = capitoli.elem_id        
                   LEFT JOIN residui_pass on residui_pass.elem_id = capitoli.elem_id            
                   LEFT JOIN riacc_residui on riacc_residui.elem_id = capitoli.elem_id
+-- 20/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.   
+              where capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+                    from siac_t_bil_elem_escludi_indicatori escludi
+                    where escludi.ente_proprietario_id = p_ente_prop_id
+                        and escludi.validita_fine IS NULL
+                        and escludi.data_cancellazione IS NULL)                  
               GROUP BY id_missione, id_programma
               ORDER BY id_missione, id_programma;
         else
@@ -1096,6 +1104,11 @@ loop
                   LEFT JOIN riacc_residui on riacc_residui.elem_id = capitoli.elem_id
                   LEFT JOIN valori_indic on (valori_indic.classif_id_missione = strut_bilancio.missione_id
                     and valori_indic.classif_id_programma =  strut_bilancio.programma_id)               
+              where capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+                    from siac_t_bil_elem_escludi_indicatori escludi
+                    where escludi.ente_proprietario_id = p_ente_prop_id
+                        and escludi.validita_fine IS NULL
+                        and escludi.data_cancellazione IS NULL)
               GROUP BY id_missione, id_programma, valori_indic.conf_ind_id
               ORDER BY id_missione, id_programma) query_tot
              where siac_t_conf_indicatori_spesa.conf_ind_id=query_tot.conf_ind_id;

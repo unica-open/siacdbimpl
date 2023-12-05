@@ -2,16 +2,50 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
- CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_reimputa_popola(
-  p_faseBilElabId             integer,
-  p_enteProprietarioId     	integer,
-  p_annoBilancio           	integer,
-  p_loginOperazione        	varchar,
-  p_dataElaborazione       	timestamp,
-  p_movgest_tipo_code      	VARCHAR,
-  out outfaseBilElabRetId   integer,
-  out codiceRisultato    	integer,
-  out messaggioRisultato 	varchar
+-- FUNCTION: siac.fnc_fasi_bil_gest_reimputa_popola(integer, integer, integer, character varying, timestamp without time zone, character varying, character varying)
+
+-- DROP FUNCTION siac.fnc_fasi_bil_gest_reimputa_popola(integer, integer, integer, character varying, timestamp without time zone, character varying, character varying);
+
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+-- FUNCTION: siac.fnc_fasi_bil_gest_reimputa_popola(integer, integer, integer, character varying, timestamp without time zone, character varying, character varying)
+
+-- DROP FUNCTION siac.fnc_fasi_bil_gest_reimputa_popola(integer, integer, integer, character varying, timestamp without time zone, character varying, character varying);
+
+drop FUNCTION if exists siac.fnc_fasi_bil_gest_reimputa_popola 
+(
+  p_fasebilelabid integer,
+  p_enteproprietarioid integer,
+  p_annobilancio integer,
+  p_loginoperazione varchar,
+  p_dataelaborazione timestamp,
+  p_movgest_tipo_code varchar,
+  motivo varchar,
+  componentefittiziaid integer,
+  componentefrescoid integer,
+  componentefpvid integer,
+  out outfasebilelabretid integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_reimputa_popola (
+  p_fasebilelabid integer,
+  p_enteproprietarioid integer,
+  p_annobilancio integer,
+  p_loginoperazione varchar,
+  p_dataelaborazione timestamp,
+  p_movgest_tipo_code varchar,
+  motivo varchar,
+  componentefittiziaid integer,
+  componentefrescoid integer,
+  componentefpvid integer,
+  out outfasebilelabretid integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
 )
 RETURNS record AS
 $body$
@@ -23,6 +57,9 @@ DECLARE
     v_faseBilElabId    integer;
     v_bil_attr_id      integer;
     v_attr_code        varchar;
+-- SIAC-6997 ---------------- INIZIO --------------------
+    v_annobilancio     integer;
+-- SIAC-6997 ---------------- FINE --------------------
     MOVGEST_TS_T_TIPO  CONSTANT varchar:='T';
     MOVGEST_TS_S_TIPO  CONSTANT varchar:='S';
     CAP_UG_TIPO        CONSTANT varchar:='CAP-UG';
@@ -38,6 +75,17 @@ DECLARE
     recmovgest  record;
 
     attoAmmId integer:=null;
+
+    -- 05.06.2020 Sofia Jira SIAC-7593
+    totModCollegAcc numeric:=null;
+    codEsito       varchar(10):=null;
+    mod_rec        record;
+    faseReimpFrescoId integer:=null;
+    faseReimpFpvId integer:=null;
+
+
+    motivoREIMP   CONSTANT varchar:='REIMP';
+    motivoREANNO  CONSTANT varchar:='REANNO';
 BEGIN
 
     codiceRisultato:=null;
@@ -45,6 +93,13 @@ BEGIN
     strMessaggioFinale:='Inizio.';
 
     strMessaggio := 'prima del loop';
+
+-- SIAC-6997 ---------------- INIZIO --------------------
+    v_annobilancio := p_annoBilancio;
+    if motivo = motivoREIMP then
+       v_annobilancio := p_annoBilancio - 1;
+    end if;
+-- SIAC-6997 ----------------  FINE --------------------
 
     for recmovgest in (select
 					   --siac_t_bil_elem
@@ -106,19 +161,25 @@ BEGIN
 					 siac_d_bil_elem_tipo dbileltip,
                      siac_r_movgest_ts_stato rstato -- 07.02.2018 Sofia siac-5368
 				where bil.ente_proprietario_id=p_enteProprietarioId
-
 				and   bilel.elem_tipo_id = dbileltip.elem_tipo_id
 				-- da siac_t_bil_elem a siac_t_movgest
 				and   bilel.elem_id   = rbilel.elem_id
 				and   rbilel.movgest_id = movgest.movgest_id
 				and   per.periodo_id=bil.periodo_id
-				and   per.anno::integer=p_annoBilancio-1
+-- SIAC-6997 ---------------- INIZIO --------------------
+--				and   per.anno::integer=p_annoBilancio-1
+                and   per.anno::integer=v_annoBilancio
+-- SIAC-6997 ---------------- INIZIO --------------------
 				and   modifica.ente_proprietario_id=bil.ente_proprietario_id
 				and   rmodstato.mod_id=modifica.mod_id
 				and   dettsmod.mod_stato_r_id=rmodstato.mod_stato_r_id
 				and   modstato.mod_stato_id=rmodstato.mod_stato_id
 				and   modstato.mod_stato_code='V'
-                and   modifica.mod_tipo_id =  modificaTipo.mod_tipo_id
+                and   modifica.mod_tipo_id = modificaTipo.mod_tipo_id
+-- SIAC-6997 ----------------  INIZIO --------------------
+                and   modifica.elab_ror_reanno = FALSE
+                and   modificaTipo.mod_tipo_code = motivo
+-- SIAC-6997 ----------------  FINE --------------------
                 and   dettsmod.movgest_ts_det_importo<0
 				and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
 				and   detts.movgest_ts_det_id=dettsmod.movgest_ts_det_id
@@ -180,7 +241,6 @@ BEGIN
 					  ,tsmov.movgest_ts_scadenza_data
 					  ,tsmov.siope_tipo_debito_id
 					  ,tsmov.siope_assenza_motivazione_id
-
 					  --siac_t_movgest_ts_dett
 					  ,tipots.movgest_ts_tipo_code
 					  ,tipodet.movgest_ts_det_tipo_code
@@ -219,10 +279,199 @@ BEGIN
         and   r.data_cancellazione is null
         and   r.validita_fine is null;
 
-    	strMessaggio := 'Inserimento in fase_bil_t_reimputazione per movimento movgest_ts_id='||recmovgest.movgest_ts_id::varchar||'.';
-		raise notice 'strMessaggio=%',strMessaggio;
-        codResult:=null; -- 31.01.2018 Sofia siac-5368
-        insert into  fase_bil_t_reimputazione (
+        -- 05.06.2020 Sofia SIAC-7593
+		-- calcolo della quota di reimp che deve rimanere su componente Fresco
+        -- modifica di impegno collegata a modifiche di accertamento con Vincolo verso acc.
+        -- se esiste collegamento ma non il vincolo verso accertamento deve andare su
+        -- componente FPV
+        -- 23.07.2020 Sofia vedi commento successivo su componente Fresco anche in assenza di vincolo
+        -- basta la presenza di colleg. spesa-entrata
+        if p_movgest_tipo_code=MOVGEST_IMP_TIPO then
+          strMessaggio := 'Calcolo totale entrate collegate a impegno per calcolo Fresco '
+                        ||' prima di inserimento in fase_bil_t_reimputazione per movimento movgest_ts_id='
+                        ||recmovgest.movgest_ts_id::varchar
+                        ||' Componente '
+                        ||(case when componenteFittiziaId is not null then 'Fittizia' else 'Fresca'  end )
+                        ||' ID= '
+                        ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFrescoId::varchar  end )
+                        ||'.';
+          raise notice 'strMessaggio=%',strMessaggio;
+          totModCollegAcc:=0;
+          -- SIAC-8489 15.04.2022
+          faseReimpFrescoId:=null;
+          faseReimpFpvId :=null;
+         
+          /*select coalesce(sum(rmod.movgest_ts_det_mod_importo),0) into totModCollegAcc
+          from siac_t_bil bil ,
+               siac_t_periodo per,
+               siac_t_movgest mov,siac_d_movgest_tipo tipo,
+               siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+               siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+               siac_t_movgest_ts_det_mod  dettsmod,
+               siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+               siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+               siac_r_movgest_ts_det_mod rmod,
+               siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+               siac_t_modifica modAcc,
+               siac_r_movgest_Ts rvincAcc
+          where bil.ente_proprietario_id=p_enteProprietarioId  -- ente_proprietario
+          and   per.periodo_id=bil.periodo_id
+          and   per.anno::integer=v_annoBilancio              -- anno_bilancio
+          and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+          and   tipo.movgest_tipo_code=p_movgest_tipo_code     -- tipo_impegno
+          and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+          and   mov.bil_id=bil.bil_id
+          and   ts.movgest_id=mov.movgest_id
+          and   ts.movgest_ts_id=recmovgest.movgest_ts_id        -- impegno
+          and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+          and   detts.movgest_ts_id=ts.movgest_ts_id
+          and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+          and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+          and   dettsmod.movgest_ts_det_importo<0
+          and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+          and   modstato.mod_stato_id=rmodstato.mod_stato_id
+          and   modstato.mod_stato_code='V'
+          and   mod.mod_id=rmodstato.mod_id
+          and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+          and   mod.elab_ror_reanno = FALSE
+          and   tipomod.mod_tipo_code = motivo  -- motivo
+          and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code -- mod_tipo_code
+          and   dettsmod.mtdm_reimputazione_anno is not null
+          and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno -- anno_reimputazione
+          and   dettsmod.mtdm_reimputazione_flag is true -- ROR
+          and   rmod.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id   -- spesa_id collegata a entrata_id
+          and   detmodAcc.movgest_ts_det_mod_id=rmod.movgest_ts_det_mod_entrata_id
+          and   rsModAcc.mod_stato_r_id=detmodAcc.mod_stato_r_id
+          and   rsmodAcc.mod_stato_id=modstato.mod_stato_id -- V
+          and   modAcc.mod_id=rsModAcc.mod_id
+          and   modAcc.mod_tipo_id=tipomod.mod_tipo_id -- motivo entrata uguale spesa
+          and   modAcc.elab_ror_reanno = FALSE
+          and   detmodAcc.mtdm_reimputazione_anno is not null
+          and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno -- anno_reimputazione
+          and   detmodAcc.mtdm_reimputazione_flag is true -- ROR
+          and   rvincAcc.movgest_Ts_b_Id=recmovgest.movgest_ts_id
+          and   rvincacc.movgest_ts_a_id=detmodAcc.movgest_ts_id
+          and   rmodstato.validita_fine is null
+          and   mov.data_cancellazione is null
+          and   mov.validita_fine is null
+          and   ts.data_cancellazione is null
+          and   ts.validita_fine is null
+          and   detts.data_cancellazione is null
+          and   detts.validita_fine is null
+          and   dettsmod.data_cancellazione is null
+          and   dettsmod.validita_fine is null
+          and   rmodstato.data_cancellazione is null
+          and   rmodstato.validita_fine is null
+          and   mod.data_cancellazione is null
+          and   mod.validita_fine is null
+          and   rmod.data_cancellazione is null
+          and   rmod.validita_fine is null
+          and   detmodAcc.data_cancellazione is null
+          and   detmodAcc.validita_fine is null
+          and   rsModAcc.data_cancellazione is null
+          and   rsModAcc.validita_fine is null
+          and   modacc.data_cancellazione is null
+          and   modAcc.validita_fine is null
+          and   rvincacc.data_cancellazione is null
+          and   rvincacc.validita_fine is null;*/
+
+          -- 23.07.2020 Sofia SIAC-7593 in seguito a scambio mail con Gambino e test in collaudo
+          -- emerge che il fresco si calcola sul collegamento tra modifiche spesa-entrata
+          -- anche in assenza di vincoli
+          select coalesce(sum(rmod.movgest_ts_det_mod_importo),0) into totModCollegAcc
+          from siac_t_bil bil ,
+               siac_t_periodo per,
+               siac_t_movgest mov,siac_d_movgest_tipo tipo,
+               siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+               siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+               siac_t_movgest_ts_det_mod  dettsmod,
+               siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+               siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+               siac_r_movgest_ts_det_mod rmod,
+               siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+               siac_t_modifica modAcc--,
+               --siac_r_movgest_Ts rvincAcc
+          where bil.ente_proprietario_id=p_enteProprietarioId  -- ente_proprietario
+          and   per.periodo_id=bil.periodo_id
+          and   per.anno::integer=v_annoBilancio              -- anno_bilancio
+          and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+          and   tipo.movgest_tipo_code=p_movgest_tipo_code     -- tipo_impegno
+          and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+          and   mov.bil_id=bil.bil_id
+          and   ts.movgest_id=mov.movgest_id
+          and   ts.movgest_ts_id=recmovgest.movgest_ts_id        -- impegno
+          and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+          and   detts.movgest_ts_id=ts.movgest_ts_id
+          and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+          and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+          and   dettsmod.movgest_ts_det_importo<0
+          and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+          and   modstato.mod_stato_id=rmodstato.mod_stato_id
+          and   modstato.mod_stato_code='V'
+          and   mod.mod_id=rmodstato.mod_id
+          and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+          and   mod.elab_ror_reanno = FALSE
+          and   tipomod.mod_tipo_code = motivo  -- motivo
+          and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code -- mod_tipo_code
+          and   dettsmod.mtdm_reimputazione_anno is not null
+          and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno -- anno_reimputazione
+          and   dettsmod.mtdm_reimputazione_flag is true -- ROR
+          and   rmod.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id   -- spesa_id collegata a entrata_id
+          and   detmodAcc.movgest_ts_det_mod_id=rmod.movgest_ts_det_mod_entrata_id
+          and   rsModAcc.mod_stato_r_id=detmodAcc.mod_stato_r_id
+          and   rsmodAcc.mod_stato_id=modstato.mod_stato_id -- V
+          and   modAcc.mod_id=rsModAcc.mod_id
+          and   modAcc.mod_tipo_id=tipomod.mod_tipo_id -- motivo entrata uguale spesa
+          and   modAcc.elab_ror_reanno = FALSE
+          and   detmodAcc.mtdm_reimputazione_anno is not null
+          and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno -- anno_reimputazione
+          and   detmodAcc.mtdm_reimputazione_flag is true -- ROR
+          --and   rvincAcc.movgest_Ts_b_Id=recmovgest.movgest_ts_id
+          --and   rvincacc.movgest_ts_a_id=detmodAcc.movgest_ts_id
+          and   rmodstato.validita_fine is null
+          and   mov.data_cancellazione is null
+          and   mov.validita_fine is null
+          and   ts.data_cancellazione is null
+          and   ts.validita_fine is null
+          and   detts.data_cancellazione is null
+          and   detts.validita_fine is null
+          and   dettsmod.data_cancellazione is null
+          and   dettsmod.validita_fine is null
+          and   rmodstato.data_cancellazione is null
+          and   rmodstato.validita_fine is null
+          and   mod.data_cancellazione is null
+          and   mod.validita_fine is null
+          and   rmod.data_cancellazione is null
+          and   rmod.validita_fine is null
+          and   detmodAcc.data_cancellazione is null
+          and   detmodAcc.validita_fine is null
+          and   rsModAcc.data_cancellazione is null
+          and   rsModAcc.validita_fine is null
+          and   modacc.data_cancellazione is null
+          and   modAcc.validita_fine is null;
+          --and   rvincacc.data_cancellazione is null
+          --and   rvincacc.validita_fine is null;
+
+        end if;
+
+        raise notice 'totModCollegAcc per componente fresc=%',totModCollegAcc;
+		-- COMPONENTE FRESCA
+        -- se il totale collegato a modifiche accertamenti !=0
+        -- si passa come importo reimputazione totModCollegAcc
+        -- se passata la componente Fittizia si passa Fittizia
+        -- diversamente si passa Fresco
+        if totModCollegAcc is not null and totModCollegAcc!=0 then
+          strMessaggio := 'Inserimento in fase_bil_t_reimputazione per movimento movgest_ts_id='
+                        ||recmovgest.movgest_ts_id::varchar
+                        ||' Componente '
+                        ||(case when componenteFittiziaId is not null then 'Fittizia' else 'Fresca'  end )
+                        ||' ID= '
+                        ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFrescoId::varchar  end )
+                        ||'.';
+          raise notice 'strMessaggio=%',strMessaggio;
+          --codResult:=null;
+          faseReimpFrescoId:=null;
+          insert into  fase_bil_t_reimputazione (
            --siac_t_bil_elem
            faseBilElabId
           ,bil_id
@@ -250,7 +499,7 @@ BEGIN
           ,livello
           ,movgest_ts_scadenza_data
           ,siope_tipo_debito_id
-		  ,siope_assenza_motivazione_id
+          ,siope_assenza_motivazione_id
           --siac_t_movgest_ts_dett
           ,tipo
           ,movgest_ts_det_tipo_code
@@ -263,14 +512,19 @@ BEGIN
           ,mtdm_reimputazione_flag
           , attoamm_id        -- 07.02.2018 Sofia siac-5368
           , movgest_stato_id  -- 07.02.2018 Sofia siac-5368
+          , importo_reimputato -- 05.06.2020 Sofia siac-7593
+          , importo_modifica_entrata -- 05.06.2020 Sofia siac-7593
+          , coll_mod_entrata      -- 05.06.2020 Sofia siac-7593
+          , coll_det_mod_entrata    -- 08.06.2020 Sofia siac-7593
+          ,elem_det_comp_tipo_id    -- 05.06.2020 Sofia siac-7593
           ,login_operazione
           ,ente_proprietario_id
           ,data_creazione
           ,fl_elab
-		  ,scarto_code
-		  ,scarto_desc
-      ) values (
-      --siac_t_bil_elem
+          ,scarto_code
+          ,scarto_desc
+          ) values (
+          --siac_t_bil_elem
           --siac_t_bil_elem
            p_faseBilElabId
           ,recmovgest.bil_id
@@ -278,7 +532,7 @@ BEGIN
           ,recmovgest.elem_code
           ,recmovgest.elem_code2
           ,recmovgest.elem_code3
-		  ,recmovgest.elem_tipo_code
+          ,recmovgest.elem_tipo_code
           -- siac_t_movgest
           ,recmovgest.movgest_id
           ,recmovgest.movgest_anno
@@ -298,7 +552,7 @@ BEGIN
           ,recmovgest.livello
           ,recmovgest.movgest_ts_scadenza_data
           ,recmovgest.siope_tipo_debito_id
-		  ,recmovgest.siope_assenza_motivazione_id
+          ,recmovgest.siope_assenza_motivazione_id
           --siac_t_movgest_ts_dett
           ,recmovgest.tipo
           ,recmovgest.movgest_ts_det_tipo_code
@@ -311,16 +565,2430 @@ BEGIN
           ,recmovgest.mtdm_reimputazione_flag
           , attoAmmId                    -- 07.02.2018 Sofia siac-5368
           , recmovgest.movgest_stato_id  -- 07.02.2018 Sofia siac-5368
+          , totModCollegAcc -- 05.06.2020 Sofia siac-7593 importo_reimputato
+          , totModCollegAcc -- 05.06.2020 Sofia siac-7593 importo_modifica_entrata
+          , true            -- 05.06.2020 Sofia siac-7593 colleg_mod_entrata
+          , true            -- 05.06.2020 Sofia siac-7593 colleg_det_mod_entrata
+          , (case when componenteFittiziaId is not null then componenteFittiziaId else componenteFrescoId  end ) -- 05.06.2020 Sofia siac-7593
           ,p_loginoperazione
           ,p_enteProprietarioId
           ,p_dataElaborazione
           ,'N'
-		  ,null
-		  ,null
-  	)
-    returning reimputazione_id into codResult; -- 31.01.2018 Sofia siac-5788
+          ,null
+          ,null
+          )
+          -- 09.06.2020 Sofia Jira SIAC-7593
+          --returning reimputazione_id into codResult;
+          --raise notice 'dopo inserimento codResult=%',codResult;
+		  returning reimputazione_id into faseReimpFrescoId;
+          raise notice 'dopo inserimento faseReimpFrescoId=%',faseReimpFrescoId;
+        end if;
 
-	raise notice 'dopo inserimento codResult=%',codResult;
+		-- 05.06.2020 Sofia SIAC-7593
+        -- COMPONENTE FPV
+        -- si passa come importo di reimputazione
+        -- l'importo di modifica - il totale collegato a modifiche accertamenti
+        -- se totModCollegAcc=0 o nullo e non ci sono collegamenti
+        -- l' importo di reimputazione resta importo di modifica
+        -- se passata la componente Fittizia si passa Fittizia
+        -- diversamente si passa FPV
+        -- 08.06.2020 Sofia siac-7593
+        -- se (-recmovgest.importoModifica-coalesce(totModCollegAcc,0))!=0 si procede con inserimento
+
+        if (-recmovgest.importoModifica-coalesce(totModCollegAcc,0))!=0 then
+          strMessaggio := 'Inserimento in fase_bil_t_reimputazione per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFPVId::varchar  end )
+                          ||'.';
+          raise notice 'strMessaggio=%',strMessaggio;
+          --codResult:=null; -- 31.01.2018 Sofia siac-5368
+          faseReimpFpvId:=null; -- 09.06.2020 Sofia SIAC-7593
+          insert into  fase_bil_t_reimputazione
+          (
+             --siac_t_bil_elem
+             faseBilElabId
+            ,bil_id
+            ,elemId_old
+            ,elem_code
+            ,elem_code2
+            ,elem_code3
+            ,elem_tipo_code
+            -- siac_t_movgest
+            ,movgest_id
+            ,movgest_anno
+            ,movgest_numero
+            ,movgest_desc
+            ,movgest_tipo_id
+            ,parere_finanziario
+            ,parere_finanziario_data_modifica
+            ,parere_finanziario_login_operazione
+            -- siac_t_movgest_ts
+            ,movgest_ts_id --tsmov.movgest_ts_code::integer numero_subimpegno -- se tipo='S' numero_subimpegno
+            ,movgest_ts_code --tsmov.movgest_ts_code::integer numero_subimpegno -- se tipo='S' numero_subimpegno
+            ,movgest_ts_desc
+            ,movgest_ts_tipo_id
+            ,movgest_ts_id_padre
+            ,ordine
+            ,livello
+            ,movgest_ts_scadenza_data
+            ,siope_tipo_debito_id
+            ,siope_assenza_motivazione_id
+            --siac_t_movgest_ts_dett
+            ,tipo
+            ,movgest_ts_det_tipo_code
+            ,mod_tipo_code
+            ,movgest_ts_det_tipo_id
+            ,impoInizImpegno
+            ,impoAttImpegno
+            ,importoModifica
+            ,mtdm_reimputazione_anno
+            ,mtdm_reimputazione_flag
+            , attoamm_id        -- 07.02.2018 Sofia siac-5368
+            , movgest_stato_id  -- 07.02.2018 Sofia siac-5368
+            , importo_reimputato -- 05.06.2020 Sofia siac-7593
+            , importo_modifica_entrata -- 05.06.2020 Sofia siac-7593
+            , coll_mod_entrata      -- 05.06.2020 Sofia siac-7593
+            , coll_det_mod_entrata    -- 08.06.2020 Sofia siac-7593
+            , elem_det_comp_tipo_id    -- 05.06.2020 Sofia siac-7593
+            ,login_operazione
+            ,ente_proprietario_id
+            ,data_creazione
+            ,fl_elab
+            ,scarto_code
+            ,scarto_desc
+        ) values (
+        --siac_t_bil_elem
+            --siac_t_bil_elem
+             p_faseBilElabId
+            ,recmovgest.bil_id
+            ,recmovgest.elem_id
+            ,recmovgest.elem_code
+            ,recmovgest.elem_code2
+            ,recmovgest.elem_code3
+            ,recmovgest.elem_tipo_code
+            -- siac_t_movgest
+            ,recmovgest.movgest_id
+            ,recmovgest.movgest_anno
+            ,recmovgest.movgest_numero
+            ,recmovgest.movgest_desc
+            ,recmovgest.movgest_tipo_id
+            ,recmovgest.parere_finanziario
+            ,recmovgest.parere_finanziario_data_modifica
+            ,recmovgest.parere_finanziario_login_operazione
+            -- siac_t_movgest_ts
+            ,recmovgest.movgest_ts_id
+            ,recmovgest.movgest_ts_code --tsmov.movgest_ts_code::integer numero_subimpegno -- se tipo='S' numero_subimpegno
+            ,recmovgest.movgest_ts_desc
+            ,recmovgest.movgest_ts_tipo_id
+            ,recmovgest.movgest_ts_id_padre
+            ,recmovgest.ordine
+            ,recmovgest.livello
+            ,recmovgest.movgest_ts_scadenza_data
+            ,recmovgest.siope_tipo_debito_id
+            ,recmovgest.siope_assenza_motivazione_id
+            --siac_t_movgest_ts_dett
+            ,recmovgest.tipo
+            ,recmovgest.movgest_ts_det_tipo_code
+            ,recmovgest.mod_tipo_code
+            ,recmovgest.movgest_ts_det_tipo_id
+            ,recmovgest.impoInizImpegno
+            ,recmovgest.impoAttImpegno
+            ,recmovgest.importoModifica
+            ,recmovgest.mtdm_reimputazione_anno
+            ,recmovgest.mtdm_reimputazione_flag
+            , attoAmmId                    -- 07.02.2018 Sofia siac-5368
+            , recmovgest.movgest_stato_id  -- 07.02.2018 Sofia siac-5368
+            , (-recmovgest.importoModifica-coalesce(totModCollegAcc,0))     -- 05.06.2020 Sofia siac-7593 importo_reimputato
+            , totModCollegAcc     -- 05.06.2020 Sofia siac-7593 importo_modifica_entrata
+            , (case when coalesce(totModCollegAcc,0)!=0 then true else false  end) -- 05.06.2020 Sofia siac-7593 colleg_mod_entrata
+            , false               -- 08.06.2020 Sofia siac-7593 colleg_det_mod_entrata
+            , (case when componenteFittiziaId is not null then componenteFittiziaId else componenteFPVId  end ) -- 05.06.2020 Sofia siac-7593
+            ,p_loginoperazione
+            ,p_enteProprietarioId
+            ,p_dataElaborazione
+            ,'N'
+            ,null
+            ,null
+      )
+      -- 09.06.2020 Sofia SIAC-7593
+      --returning reimputazione_id into codResult; -- 31.01.2018 Sofia siac-5788
+      --raise notice 'dopo inserimento codResult=%',codResult;
+      returning reimputazione_id into faseReimpFpvId;
+      raise notice 'dopo inserimento faseReimpFpvId=%',faseReimpFpvId;
+    end if;
+
+
+    -- 08.06.2020 Sofia Jira siac-7593 - inizio - aggiornamento vincoli non aggiornati da Contabilia
+    if p_movgest_tipo_code=MOVGEST_IMP_TIPO then
+      strMessaggio := 'Aggiornamento vincoli non aggiornati da contabilia - esec fnc_siac_riaccertamento_reimp - inizio.';
+      raise notice 'strMessaggio=%',strMessaggio;
+      for mod_rec in
+      (
+       select mod.mod_id
+       from  siac_t_bil bil ,
+             siac_t_periodo per,
+             siac_t_movgest mov,siac_d_movgest_tipo tipo,
+             siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+             siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+             siac_t_movgest_ts_det_mod  dettsmod,
+             siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+             siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato
+        where bil.ente_proprietario_id=p_enteProprietarioId  -- ente_proprietario
+        and   per.periodo_id=bil.periodo_id
+        and   per.anno::integer=v_annoBilancio              -- anno_bilancio
+        and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+        and   tipo.movgest_tipo_code=p_movgest_tipo_code     -- tipo_impegno
+        and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+        and   mov.bil_id=bil.bil_id
+        and   ts.movgest_id=mov.movgest_id
+        and   ts.movgest_ts_id=recmovgest.movgest_ts_id        -- impegno
+        and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+        and   detts.movgest_ts_id=ts.movgest_ts_id
+        and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+        and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+        and   dettsmod.movgest_ts_det_importo<0
+        and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+        and   modstato.mod_stato_id=rmodstato.mod_stato_id
+        and   modstato.mod_stato_code='V'
+        and   mod.mod_id=rmodstato.mod_id
+        and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+        and   mod.elab_ror_reanno = FALSE
+        and   tipomod.mod_tipo_code = motivo  -- motivo
+        and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code -- mod_tipo_code
+        and   dettsmod.mtdm_reimputazione_anno is not null
+        and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno -- anno_reimputazione
+        and   dettsmod.mtdm_reimputazione_flag is true -- ROR
+        and   rmodstato.validita_fine is null
+        and   mov.data_cancellazione is null
+        and   mov.validita_fine is null
+        and   ts.data_cancellazione is null
+        and   ts.validita_fine is null
+        and   detts.data_cancellazione is null
+        and   detts.validita_fine is null
+        and   dettsmod.data_cancellazione is null
+        and   dettsmod.validita_fine is null
+        and   rmodstato.data_cancellazione is null
+        and   rmodstato.validita_fine is null
+        and   mod.data_cancellazione is null
+        and   mod.validita_fine is null
+        order by 1
+      )
+      loop
+         codEsito:=null;
+         strMessaggio := 'Aggiornamento vincoli non aggiornati da contabilia - esec fnc_siac_riaccertamento_reimp mod_id='
+         ||mod_rec.mod_id::varchar||'.';
+         raise notice 'strMessaggio=%',strMessaggio;
+         select
+         fnc_siac_riaccertamento_reimp -- da implementare
+         (
+          mod_rec.mod_id,
+          p_loginoperazione||'-'||motivo,
+          'INSERIMENTO'
+         ) into codEsito;
+         strMessaggio:=strMessaggio||'Esito='||codEsito||'.';
+         raise notice 'strMessaggio=%',strMessaggio;
+         --codEsito:='ko';
+         if codEsito='ko' then
+         	raise exception '%',strMessaggio;
+         end if;
+     end loop;
+     strMessaggio := 'Aggiornamento vincoli non aggiornati da contabilia - esec fnc_siac_riaccertamento_reimp - fine.';
+     raise notice 'strMessaggio=%',strMessaggio;
+     end if;
+    -- 08.06.2020 Sofia Jira siac-7593 - fine
+
+
+    -- 08.06.2020 Sofia Jira siac-7593 - inizio
+    -- mod spesa collegata a mod entrata con quadratura ( importo_mod_spesa=tot.coll. importo_mod_entrata)
+    --- A
+    if ( faseReimpFrescoId is not null or faseReimpFpvId is not null ) and
+       p_movgest_tipo_code=MOVGEST_IMP_TIPO then
+        -- A.1
+        -- con o senza vincolo verso accertamento : si creano impegni reimputati su componente fresco,
+        -- con vincolo verso l'accertamento collegato tramite modifica
+        -- dall'acc collegato in partenza
+        -- impostare il caso di accertamento (come adesso ) per farlo andare al nuovo accertamento o FPV come adesso
+        -- caso A.2 non esiste 23.07.2020 Sofia
+        -- A.2
+        -- senza vincolo verso accertamento : si creano impegni reimputati su componente FPV
+        -- A.2.1 se ROR vincolo verso FPV ( anche se in partenza non esiste )
+        -- A.2.2 se REANNO vincolo verso accertamento reimputato da accertamento collegato
+        -- tramite modifica di importo
+        -- se AAM potrebbe andare a FPV ma al momento non gestire in quanto potrebbe non verificarsi mai
+        -- A.3 - annegato negli altri
+        -- senza vincolo si crea nuovo vincolo a FPV
+        -- gestito con A.2
+
+        if faseReimpFrescoId is not null then
+          strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'Fresca'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFrescoId::varchar  end )
+                          ||'. Caso A.1 modfica spesa-modifica entra e vincolo entrata.';
+          raise notice 'A.1 strMessaggio=%',strMessaggio;
+          codResult:=null;
+          -- A.1 faseReimpFrescoId
+          insert into   fase_bil_t_reimputazione_vincoli
+          (
+            reimputazione_id,
+            fasebilelabid,
+            bil_id,
+            mod_id,
+            mod_tipo_code,      -- 06.04.2018 Sofia JIRA SIAC-6054
+            reimputazione_anno, -- 06.04.2018 Sofia JIRA SIAC-6054
+            movgest_ts_r_id,
+            movgest_ts_b_id,
+            movgest_ts_a_id,
+            importo_vincolo,
+            avav_new_id,
+            importo_vincolo_new,
+            data_creazione,
+            login_operazione,
+            ente_proprietario_id
+          )
+          (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 --rts.movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id, -- movgest_ts_b_id
+                 detmodAcc.movgest_ts_id movgest_ts_a_id,    -- movgest_ts_a_id
+                 --rts.movgest_ts_a_id,            -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                 --coalesce(rts.movgest_ts_importo,0) importo_vincolo,
+                 -- abs(rvinc.importo_delta) importo_vincolo_new -- importo_vincolo_new
+                 rmodAcc.movgest_ts_det_mod_importo  importo_vincolo_new -- 23.07.2020 Sofia
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                    -- siac_r_movgest_ts rts,
+                     siac_r_movgest_ts_det_mod rmodAcc,
+                     siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+                     siac_t_modifica modAcc--,
+                     --siac_r_modifica_vincolo rvinc -- inserito da mod.entrata
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+  			    and   rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   detmodAcc.movgest_ts_det_mod_id=rmodAcc.movgest_ts_det_mod_entrata_id
+                and   detmodAcc.mtdm_reimputazione_anno is not null
+                and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   detmodAcc.mtdm_reimputazione_flag is true
+                and   rsmodAcc.mod_stato_r_id=detmodAcc.mod_stato_r_id
+                and   rsmodAcc.mod_stato_id=modstato.mod_stato_id
+                and   modAcc.mod_id=rsmodAcc.mod_id
+                and   modAcc.mod_tipo_id=mod.mod_tipo_id
+                and   modAcc.elab_ror_reanno = FALSE
+               -- and   rts.movgest_ts_a_id=detmodAcc.movgest_ts_id
+               -- and   rts.movgest_ts_b_id=ts.movgest_ts_id
+               -- and   rvinc.movgest_ts_r_id=rts.movgest_ts_r_id
+               -- and   rvinc.mod_Id=modAcc.mod_id
+               -- and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                --and   rvinc.data_cancellazione is null
+                --and   rvinc.validita_fine is null
+               -- and   rts.data_cancellazione is null
+               -- and   rts.validita_fine is null
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                and   rsmodAcc.data_cancellazione is null
+                and   rsmodAcc.validita_fine is null
+                and   detmodAcc.data_cancellazione is null
+                and   detmodAcc.validita_fine is null
+                and   modAcc.data_cancellazione is null
+                and   modAcc.validita_fine is null
+            )
+            select faseReimpFrescoId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo A.1=%',codResult;
+       end if;
+
+       /* 23.07.2020 Sofia vedasi confronto con Gambino per cui
+          se esiste collegamento tra modifica di spesa-entrata
+          sempre Fresco e vincolo verso accertamento
+          anche se non esiste vincolo in partenza
+       if faseReimpFpvId is not null then
+         -- A.2 faseReimpFpvId
+         -- senza vincolo verso accertamento : si creano impegni reimputati su componente FPV
+         -- A.2.1 se ROR vincolo verso FPV ( anche se in partenza non esiste )
+         if motivo=motivoREIMP then
+          strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                          ||'. Caso A.2.1 modfica spesa-modifica entra senza vincolo entrata '||motivoREIMP||'.';
+          raise notice 'A.2.1 strMessaggio=%',strMessaggio;
+          codResult:=null;
+          insert into   fase_bil_t_reimputazione_vincoli
+          (
+            reimputazione_id,
+            fasebilelabid,
+            bil_id,
+            mod_id,
+            mod_tipo_code,
+            reimputazione_anno,
+            movgest_ts_r_id,
+            movgest_ts_b_id,
+            movgest_ts_a_id,
+            importo_vincolo,
+            avav_new_id,
+            importo_vincolo_new,
+            data_creazione,
+            login_operazione,
+            ente_proprietario_id
+          )
+          (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 NULL::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,  -- movgest_ts_b_id
+                 NULL::integer movgest_ts_a_id,              -- movgest_ts_a_id
+                 NULL::numeric importo_vincolo,
+                 sum(rmodAcc.movgest_ts_det_mod_importo)  importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_r_movgest_ts_det_mod rmodAcc,
+                     siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+                     siac_t_modifica modAcc
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   detmodAcc.movgest_ts_det_mod_id=rmodAcc.movgest_ts_det_mod_entrata_id
+                and   rsmodAcc.mod_stato_r_id=detmodAcc.mod_stato_r_id
+                and   rsmodAcc.mod_stato_id=modstato.mod_stato_id
+                and   modAcc.mod_id=rsmodAcc.mod_id
+                and   modAcc.mod_tipo_id=mod.mod_tipo_id
+				and   modAcc.elab_ror_reanno = FALSE
+                and   detmodAcc.mtdm_reimputazione_anno is not null
+                and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   detmodAcc.mtdm_reimputazione_flag is true
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts rts
+                where rts.movgest_ts_b_id=ts.movgest_ts_id
+                and   rts.movgest_ts_a_id=detmodAcc.movgest_ts_id
+                and   rts.data_cancellazione is null
+                and   rts.validita_fine is null
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                and   rsmodAcc.data_cancellazione is null
+                and   rsmodAcc.validita_fine is null
+                and   detmodAcc.data_cancellazione is null
+                and   detmodAcc.validita_fine is null
+                and   modAcc.data_cancellazione is null
+                and   modAcc.validita_fine is null
+                group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new::numeric,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo A.2.1=%',codResult;
+        end if; -- motivo=motivoREIMP
+
+
+        -- A.2 faseReimpFpvId
+        -- senza vincolo verso accertamento : si creano impegni reimputati su componente FPV
+        -- A.2.2 se REANNO vincolo verso accertamento reimputato da accertamento collegato
+        if motivo=motivoREANNO then
+          strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                          ||'. Caso A.2.2 modfica spesa-modifica entra senza vincolo entrata '||motivoREANNO||'.';
+          raise notice 'A.2.2 strMessaggio=%',strMessaggio;
+		  codResult:=null;
+          insert into   fase_bil_t_reimputazione_vincoli
+          (
+            reimputazione_id,
+            fasebilelabid,
+            bil_id,
+            mod_id,
+            mod_tipo_code,
+            reimputazione_anno,
+            movgest_ts_r_id,
+            movgest_ts_b_id,
+            movgest_ts_a_id,
+            importo_vincolo,
+            avav_new_id,
+            importo_vincolo_new,
+            data_creazione,
+            login_operazione,
+            ente_proprietario_id
+          )
+          (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,                     -- movgest_ts_b_id
+                 detmodAcc.movgest_ts_id movgest_ts_a_id,              -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                 sum(rmodAcc.movgest_ts_det_mod_importo)  importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_r_movgest_ts_det_mod rmodAcc,
+                     siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+                     siac_t_modifica modAcc
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   detmodAcc.movgest_ts_det_mod_id=rmodAcc.movgest_ts_det_mod_entrata_id
+                and   rsmodAcc.mod_stato_r_id=detmodAcc.mod_stato_r_id
+                and   rsmodAcc.mod_stato_id=modstato.mod_stato_id
+                and   modAcc.mod_id=rsmodAcc.mod_id
+                and   modAcc.mod_tipo_id=mod.mod_tipo_id
+                and   modAcc.elab_ror_reanno = FALSE
+                and   detmodAcc.mtdm_reimputazione_anno is not null
+                and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   detmodAcc.mtdm_reimputazione_flag is true
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts rts
+                where rts.movgest_ts_b_id=ts.movgest_ts_id
+                and   rts.movgest_ts_a_id=detmodAcc.movgest_ts_id
+                and   rts.data_cancellazione is null
+                and   rts.validita_fine is null
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                and   rsmodAcc.data_cancellazione is null
+                and   rsmodAcc.validita_fine is null
+                and   detmodAcc.data_cancellazione is null
+                and   detmodAcc.validita_fine is null
+                and   modAcc.data_cancellazione is null
+                and   modAcc.validita_fine is null
+                group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id,
+                         detmodAcc.movgest_ts_id
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo A.2.2=%',codResult;
+        end if;
+      end if; --  faseReimpFpvId is not null */
+
+    end if; -- A fine
+
+
+    -- 08.06.2020 Sofia Jira siac-7593
+    -- mod spesa collegata a mod entrata con squadratura ( importo_mod_spesa!=tot.coll. importo_mod_entrata)
+    -- B
+    -- si creano impegni reimputati su componente FPV,  tutti i vincoli vengono reimputati a FPV
+    -- anche se avevano AAM, accertamento e se non avevano vincolo
+    -- quindi so ho creato sia fresco che FPV
+    -- collegamento a mod. entrata parziale
+    if faseReimpFrescoId is not null or faseReimpFpvId is not null  and
+       coalesce(totModCollegAcc,0)!=0 and
+       (-recmovgest.importoModifica-coalesce(totModCollegAcc,0))!=0 and
+       p_movgest_tipo_code=MOVGEST_IMP_TIPO then
+       -- 12.04.2022 Sofia Jira SIAC-8489 - inizio 
+       if motivo=motivoREIMP then 
+        strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                              ||recmovgest.movgest_ts_id::varchar
+                              ||' Componente '
+                              ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                              ||' ID= '
+                              ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                              ||'. Caso B modifica spesa-modifica entrata parte residua non collegata.';
+
+        raise notice 'B strMessaggio=%',strMessaggio;
+		codResult:=null;
+        insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,                     -- movgest_ts_b_id
+                 null::integer movgest_ts_a_id,              -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                -- -recmovgest.importoModifica - sum(rmodAcc.movgest_ts_det_mod_importo)  importo_vincolo_new
+                 -dettsmod.movgest_Ts_det_importo - coalesce(sum(query_entrata.movgest_ts_det_mod_importo),0)  importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts_det_mod  dettsmod left join
+                     (
+                     select rmodAcc.movgest_ts_det_mod_spesa_id, coalesce(sum(rmodAcc.movgest_ts_det_mod_importo),0) movgest_ts_det_mod_importo
+                     from siac_r_movgest_ts_det_mod rmodAcc,
+                          siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+                          siac_t_modifica modAcc,siac_d_modifica_stato statoAcc,siac_d_modifica_tipo tipoAcc
+                     where statoAcc.ente_proprietario_id=p_enteProprietarioId
+                     and   statoAcc.mod_stato_code!='A'
+                     and   rsmodAcc.mod_stato_id=statoAcc.mod_stato_id
+                     and   detmodAcc.mod_stato_r_id=rsmodAcc.mod_stato_r_id
+                     and   modAcc.mod_id=rsmodAcc.mod_id
+                     and   modAcc.elab_ror_reanno = FALSE
+                     and   detmodAcc.mtdm_reimputazione_anno is not null
+                     and   detmodAcc.mtdm_reimputazione_flag is true
+                     and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                    -- and   rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                     and   rmodAcc.movgest_ts_det_mod_entrata_id=detmodAcc.movgest_ts_det_mod_id
+                     and   tipoacc.mod_tipo_id=modAcc.mod_tipo_id
+                     and   tipoacc.mod_tipo_code=motivo
+                     and   rmodAcc.data_cancellazione is null
+                     and   rmodAcc.validita_fine is null
+                     and   rsmodAcc.data_cancellazione is null
+                     and   rsmodAcc.validita_fine is null
+                     and   detmodAcc.data_cancellazione is null
+                     and   detmodAcc.validita_fine is null
+                     and   modAcc.data_cancellazione is null
+                     and   modAcc.validita_fine is null
+                     group by rmodAcc.movgest_ts_det_mod_spesa_id
+                     ) query_entrata on (query_entrata.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id)
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                group by bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 ts.movgest_ts_id,
+                -- recmovgest.importoModifica
+                 dettsmod.movgest_Ts_det_importo
+               -- having -recmovgest.importoModifica - sum(rmodAcc.movgest_ts_det_mod_importo)!=0
+                having -dettsmod.movgest_Ts_det_importo - coalesce(sum(query_entrata.movgest_ts_det_mod_importo),0)!=0
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new, -- -recmovgest.importoModifica-coalesce(totModCollegAcc,0), -- vincolo nuovo per la quota di differenza
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo B=%',codResult;
+       end if;
+       -- 12.04.2022 Sofia Jira SIAC-8489 - fine 
+       -- 12.04.2022 Sofia Jira SIAC-8489 - inizio
+       if motivo=motivoREANNO then 
+        -- 19.04.2022 Sofia Jira SIAC-8489
+        -- la modifica che diff di collegamento rispetto a modif acc.
+        -- deve essere trattata come prima
+        -- quindi la differenza va a FPV
+       	strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                              ||recmovgest.movgest_ts_id::varchar
+                              ||' Componente '
+                              ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                              ||' ID= '
+                              ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                              ||'. Caso modifica spesa-modifica entrata parte residua non collegata.Vincolo verso fpv.';
+
+        raise notice 'strMessaggio=%',strMessaggio;
+		codResult:=null;
+        insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,                     -- movgest_ts_b_id
+--                 rr.movgest_ts_a_id movgest_ts_a_id,              -- movgest_ts_a_id
+                 null::numeric movgest_ts_a_id, 
+                 null::numeric importo_vincolo,
+                 -dettsmod.movgest_Ts_det_importo - coalesce(sum(query_entrata.movgest_ts_det_mod_importo),0) importo_residuo_vincolare,
+--                  coalesce(sum(-rvinc.importo_delta),0) importo_vincolo_new
+                 -dettsmod.movgest_Ts_det_importo - coalesce(sum(query_entrata.movgest_ts_det_mod_importo),0) importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts_det_mod  dettsmod  join
+                     (
+                     select rmodAcc.movgest_ts_det_mod_spesa_id, coalesce(sum(rmodAcc.movgest_ts_det_mod_importo),0) movgest_ts_det_mod_importo
+                     from siac_r_movgest_ts_det_mod rmodAcc,
+                          siac_t_movgest_ts_det_mod detmodAcc,siac_r_modifica_stato rsModAcc,
+                          siac_t_modifica modAcc,siac_d_modifica_stato statoAcc,siac_d_modifica_tipo tipoAcc
+                     where statoAcc.ente_proprietario_id=p_enteProprietarioId
+                     and   statoAcc.mod_stato_code!='A'
+                     and   rsmodAcc.mod_stato_id=statoAcc.mod_stato_id
+                     and   detmodAcc.mod_stato_r_id=rsmodAcc.mod_stato_r_id
+                     and   modAcc.mod_id=rsmodAcc.mod_id
+                     and   modAcc.elab_ror_reanno = FALSE
+                     and   detmodAcc.mtdm_reimputazione_anno is not null
+                     and   detmodAcc.mtdm_reimputazione_flag is true
+                     and   detmodAcc.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                     and   rmodAcc.movgest_ts_det_mod_entrata_id=detmodAcc.movgest_ts_det_mod_id
+                     and   tipoacc.mod_tipo_id=modAcc.mod_tipo_id
+                     and   tipoacc.mod_tipo_code=motivo
+                     and   rmodAcc.data_cancellazione is null
+                     and   rmodAcc.validita_fine is null
+                     and   rsmodAcc.data_cancellazione is null
+                     and   rsmodAcc.validita_fine is null
+                     and   detmodAcc.data_cancellazione is null
+                     and   detmodAcc.validita_fine is null
+                     and   modAcc.data_cancellazione is null
+                     and   modAcc.validita_fine is null
+                     group by rmodAcc.movgest_ts_det_mod_spesa_id
+                     ) query_entrata on (query_entrata.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id)
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                group by bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 ts.movgest_ts_id,
+                -- recmovgest.importoModifica
+                 dettsmod.movgest_Ts_det_importo
+                 --rr.movgest_ts_a_id
+                having -dettsmod.movgest_Ts_det_importo - coalesce(sum(query_entrata.movgest_ts_det_mod_importo),0)!=0
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new, 
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+             from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo B=%',codResult;
+         
+         -- il loop principale per emissione impegni
+         -- totalizza senza distinguere per mod_id
+         -- e inserisce i due impegni per totale fresco e non fresco
+         -- le insert per vincoli distinguono per mod_id quindi bisogna
+         -- ulteriormente distinguere i casi sotto
+         -- gestione casi di modifiche che non sono associate a modif. acc
+		 
+         -- Vincolo accertamento
+        strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                              ||recmovgest.movgest_ts_id::varchar
+                              ||' Componente '
+                              ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                              ||' ID= '
+                              ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                              ||'. Caso modifica spesa non collegata modifica entrata.Vincolo verso accertamento.';
+
+        raise notice 'strMessaggio=%',strMessaggio;
+		codResult:=null;
+        insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,                     -- movgest_ts_b_id
+                 rr.movgest_ts_a_id movgest_ts_a_id,              -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                 coalesce(sum(-rvinc.importo_delta),0) importo_vincolo_new
+                 from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_r_movgest_ts rr,siac_r_modifica_vincolo rvinc
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rr.movgest_ts_b_id=recmovgest.movgest_ts_id
+                and   rr.movgest_ts_a_id is not null
+                and   rvinc.movgest_ts_r_id=rr.movgest_ts_r_id 
+                and   rvinc.mod_id=mod.mod_id
+                and   rvinc.modvinc_tipo_operazione ='INSERIMENTO'
+                -- la specifica modifica di spesa non deve avere associazioni a entrata
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rmodAcc 
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id 
+                and   rmodAcc.data_cancellazione is null 
+                and   rmodAcc.validita_Fine is null 
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                and   rr.data_cancellazione is null
+                and   rr.validita_fine is null
+                and   rvinc.data_cancellazione is null
+                and   rvinc.validita_fine is null
+                group by bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 ts.movgest_ts_id,
+                -- recmovgest.importoModifica
+--                 dettsmod.movgest_Ts_det_importo,
+                 rr.movgest_ts_a_id
+                having coalesce(sum(-rvinc.importo_delta),0)!=0
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   -1,
+                   vincPrec.importo_vincolo_new, 
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+             from vincPrec
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo B=%',codResult;
+        
+         -- Vincolo AAM/FPV
+         strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                              ||recmovgest.movgest_ts_id::varchar
+                              ||' Componente '
+                              ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                              ||' ID= '
+                              ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                              ||'. Caso modifica spesa non collegata modifica entrata.Vincolo AAM/FPV.';
+
+         raise notice 'strMessaggio=%',strMessaggio;
+		 codResult:=null;
+         insert into   fase_bil_t_reimputazione_vincoli
+         (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('AAM','FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annobilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id, -- movgest_ts_b_id
+                 null::integer movgest_ts_a_id,    -- movgest_ts_a_id
+                 rr.avav_id avav_id,               -- avav_id
+                 null::numeric importo_vincolo,
+                 coalesce(sum(-rvinc.importo_delta),0) importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_r_movgest_ts rr,siac_r_modifica_vincolo rvinc
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rr.movgest_ts_b_id=recmovgest.movgest_ts_id
+                and   rr.avav_id is not null
+                and   rvinc.movgest_ts_r_id=rr.movgest_ts_r_id 
+                and   rvinc.mod_id=mod.mod_id
+                and   rvinc.modvinc_tipo_operazione ='INSERIMENTO'
+                -- la specifica modifica di spesa non deve avere associazioni a entrata
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rmodAcc 
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id 
+                and   rmodAcc.data_cancellazione is null 
+                and   rmodAcc.validita_Fine is null 
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                and   rr.data_cancellazione is null
+                and   rr.validita_fine is null
+                and   rvinc.data_cancellazione is null
+                and   rvinc.validita_fine is null
+                group by bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 ts.movgest_ts_id,
+                -- recmovgest.importoModifica
+                 dettsmod.movgest_Ts_det_importo,
+                 rr.avav_id
+                having coalesce(sum(-rvinc.importo_delta),0) !=0
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   vincPrec.avav_id,
+                   vincPrec.importo_vincolo_new, 
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec, avanzoTipo
+            where vincPrec.avav_id=avanzoTipo.avav_id
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo B=%',codResult;
+        
+         -- Nessun Vincolo o differenza ancora da caricare rispetto a 
+         -- tot modifica-tot.collegato-tot.inserito per vincoli
+         strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                              ||recmovgest.movgest_ts_id::varchar
+                              ||' Componente '
+                              ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                              ||' ID= '
+                              ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                              ||'. Caso modifica spesa non collegata modifica entrata.Nessun Vincolo.';
+
+         raise notice 'strMessaggio=%',strMessaggio;
+		 codResult:=null;
+         insert into   fase_bil_t_reimputazione_vincoli
+         (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annobilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id, -- movgest_ts_b_id
+                 null::integer movgest_ts_a_id,    -- movgest_ts_a_id
+                 null::integer avav_id,               -- avav_id
+                 null::numeric importo_vincolo,
+                 abs(dettsmod.movgest_Ts_det_importo) importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_modifica mod,siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts_det_mod  dettsmod
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   not exists 
+                (
+                select 1 
+                from siac_r_movgest_ts rr,siac_r_modifica_vincolo rvinc
+                where rr.movgest_ts_b_id=recmovgest.movgest_ts_id
+                and   rr.avav_id is not null
+                and   rvinc.movgest_ts_r_id=rr.movgest_ts_r_id 
+                and   rvinc.mod_id=mod.mod_id
+                and   rvinc.modvinc_tipo_operazione ='INSERIMENTO'
+                and   rr.data_cancellazione is null
+                and   rr.validita_fine is null
+                and   rvinc.data_cancellazione is null
+                and   rvinc.validita_fine is null
+                )
+                -- la specifica modifica di spesa non deve avere associazioni a entrata
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rmodAcc 
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id 
+                and   rmodAcc.data_cancellazione is null 
+                and   rmodAcc.validita_Fine is null 
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                 group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id,
+                         dettsmod.movgest_ts_det_importo
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new, 
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec, avanzoTipo, titoloNew
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+         );
+         GET DIAGNOSTICS codResult = ROW_COUNT;
+         raise notice 'Inserimeno quota vincolo B=%',codResult;
+        
+       end if;
+      -- 12.04.2022 Sofia Jira SIAC-8489 - fine 
+      
+	end if;
+
+
+    -- 08.06.2020 Sofia Jira siac-7593
+    -- mod spesa non collegata a mod entrata
+    -- in questo caso tutto come prima di questa jira
+    -- C
+    -- si creano impegni reimputati su componente FPV,  tutti i vincoli vengono reimputati a FPV
+    -- anche se avevano AAM, accertamento e se non avevano vincolo
+    if faseReimpFrescoId is null and faseReimpFpvId is not null  and
+       p_movgest_tipo_code=MOVGEST_IMP_TIPO then
+       
+       --- 12.04.2022 Sofia JIRA SIAC-8489 -- inizio
+       if motivo = motivoREIMP then 
+       strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                          ||'. Caso C modfica spesa-modifica entrata non collegata.';
+        raise notice 'C strMessaggio=%',strMessaggio;
+		codResult:=null;
+       insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,  -- movgest_ts_b_id
+                 null::integer movgest_ts_a_id,              -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                 (case when coalesce(sum(abs(rvinc.importo_delta)),0)!=0 then
+                            coalesce(sum(abs(rvinc.importo_delta)),0)
+                       else abs(dettsmod.movgest_ts_det_importo) end ) -- se non esiste neanche un vincolo lo crea per importo della modifica
+                  importo_vincolo_new -- importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts ts,
+                     siac_t_modifica mod
+                      left join  siac_r_modifica_vincolo rvinc -- se non esiste neanche un vincolo lo crea per importo della modifica
+                           join  siac_r_movgest_ts rr
+                           on (rr.movgest_ts_r_id=rvinc.movgest_ts_r_id
+                               and rr.data_cancellazione is null
+                               and rr.validita_fine is null )
+                      on (rvinc.mod_id=mod.mod_id and rvinc.modvinc_tipo_operazione='INSERIMENTO'
+                         and rvinc.data_cancellazione is null
+                         and rvinc.validita_fine is null)
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rModAcc
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id,
+                         dettsmod.movgest_ts_det_importo
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+        );
+        GET DIAGNOSTICS codResult = ROW_COUNT;
+        raise notice 'Inserimeno quota vincolo B=%',codResult;
+       end if;
+       --- 12.04.2022 Sofia JIRA SIAC-8489 -- fine
+      
+       --- 12.04.2022 Sofia JIRA SIAC-8489 -- inizio 
+       if motivo=motivoREANNO then 
+        raise notice '**REANNO SENZA ASSOCIAZIONI ***';
+       	-- vincolo accertamento 
+        strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                          ||'. Caso modifica spesa-modifica entrata non collegata - vincolo accertamento.';
+        raise notice 'strMessaggio=%',strMessaggio;
+		codResult:=null;
+        insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,  -- movgest_ts_b_id
+                 rr.movgest_ts_a_id,     -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                 coalesce(sum(abs(rvinc.importo_delta)),0) importo_vincolo_new -- importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts ts,
+                     siac_t_modifica mod,
+                     siac_r_modifica_vincolo rvinc,siac_r_movgest_ts rr
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rr.movgest_ts_b_id=ts.movgest_ts_id
+                and   rr.movgest_ts_a_id is not null
+                and   rvinc.movgest_ts_r_id=rr.movgest_ts_r_id
+                and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
+                and   rvinc.mod_id=mod.mod_id 
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rModAcc
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                and   rvinc.data_cancellazione is null
+                and   rvinc.validita_fine is null
+			    and   rr.data_cancellazione is null
+                and   rr.validita_fine is null                          
+                group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id,
+                         rr.movgest_ts_a_id
+                having coalesce(sum(abs(rvinc.importo_delta)),0)!=0
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   -1,--avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec
+        );
+        GET DIAGNOSTICS codResult = ROW_COUNT;
+        raise notice 'Inserimeno quota vincolo C=%',codResult;
+       
+        -- vincolo AAM ,FPV
+        strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                          ||'. Caso moodfica spesa non collegata a modifica entrata - AAM,FPV.';
+        raise notice 'strMessaggio=%',strMessaggio;
+		codResult:=null;
+        insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('AAM','FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annobilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,  -- movgest_ts_b_id
+                 null::integer movgest_ts_a_id,     -- movgest_ts_a_id
+                 rr.avav_id,  -- avav_id
+                 null::numeric importo_vincolo,
+                 coalesce(sum(abs(rvinc.importo_delta)),0) importo_vincolo_new -- importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts ts,
+                     siac_t_modifica mod,
+                     siac_r_modifica_vincolo rvinc,siac_r_movgest_ts rr
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   rr.movgest_ts_b_id=ts.movgest_ts_id
+                and   rr.avav_id is not null
+                and   rvinc.movgest_ts_r_id=rr.movgest_ts_r_id
+                and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
+                and   rvinc.mod_id=mod.mod_id 
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rModAcc
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                and   rvinc.data_cancellazione is null
+                and   rvinc.validita_fine is null
+			    and   rr.data_cancellazione is null
+                and   rr.validita_fine is null                          
+                group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id,
+                         rr.avav_id
+                having coalesce(sum(abs(rvinc.importo_delta)),0)!=0
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,avanzoTipo
+            where avanzoTipo.avav_id=vincPrec.avav_id
+        );
+        GET DIAGNOSTICS codResult = ROW_COUNT;
+        raise notice 'Inserimeno quota vincolo C=%',codResult;
+
+       -- nessun vincolo
+       strMessaggio := 'Inserimento in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='
+                          ||recmovgest.movgest_ts_id::varchar
+                          ||' Componente '
+                          ||(case when componenteFittiziaId is not null then 'Fittizia' else 'FPV'  end )
+                          ||' ID= '
+                          ||(case when componenteFittiziaId is not null then componenteFittiziaId::varchar else componenteFpvId::varchar  end )
+                          ||'. Caso modifica spesa non collegata a modifica di entrata. Nessun Vincolo.';
+        raise notice 'strMessaggio=%',strMessaggio;
+		codResult:=null;
+       insert into   fase_bil_t_reimputazione_vincoli
+        (
+          reimputazione_id,
+          fasebilelabid,
+          bil_id,
+          mod_id,
+          mod_tipo_code,
+          reimputazione_anno,
+          movgest_ts_r_id,
+          movgest_ts_b_id,
+          movgest_ts_a_id,
+          importo_vincolo,
+          avav_new_id,
+          importo_vincolo_new,
+          data_creazione,
+          login_operazione,
+          ente_proprietario_id
+        )
+        (
+            with
+            titoloNew as
+            (
+                select cTitolo.classif_code::integer titolo_uscita,
+                       ( case when cTitolo.classif_code::integer in (1,4)  -- titolo 1 e 4 - FPVSC corrente
+                          then 'FPVSC'
+                          when cTitolo.classif_code::integer in (2,3)  -- titolo 2 e 3 - FPVCC in conto capitale
+                          then 'FPVCC'
+                          else null end ) tipo_avanzo
+                from siac_t_bil_elem e, siac_d_bil_elem_tipo tipo,
+                     siac_r_bil_elem_class rc,siac_t_class cMacro, siac_d_class_tipo tipoMacro,
+                     siac_r_class_fam_tree rfam,
+                     siac_t_class cTitolo, siac_d_class_tipo tipoTitolo,
+                     siac_t_bil bil, siac_t_periodo per
+                where tipo.ente_proprietario_id=p_enteProprietarioId
+                and   tipo.elem_tipo_code=CAP_UG_TIPO
+                and   e.elem_tipo_id=tipo.elem_tipo_id
+                and   bil.bil_id=e.bil_id
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=p_annoBilancio
+                and   e.elem_code::integer=recmovgest.elem_code::integer
+                and   e.elem_code2::integer=recmovgest.elem_code2::integer
+                and   e.elem_code3::integer=recmovgest.elem_code3::integer
+                and   rc.elem_id=e.elem_id
+                and   cMacro.classif_id=rc.classif_id
+                and   tipoMacro.classif_tipo_id=cMacro.classif_tipo_id
+                and   tipomacro.classif_tipo_code=MACROAGGREGATO_TIPO
+                and   rfam.classif_id=cMacro.classif_id
+                and   cTitolo.classif_id=rfam.classif_id_padre
+                and   tipoTitolo.classif_tipo_id=cTitolo.classif_tipo_id
+                and   tipoTitolo.classif_tipo_code=TITOLO_SPESA_TIPO
+                and   e.data_cancellazione is null
+                and   e.validita_fine is null
+                and   rc.data_cancellazione is null
+                and   rc.validita_fine is null
+                and   rfam.data_cancellazione is null
+                and   rfam.validita_fine is null
+            ),
+            avanzoTipo as
+            (
+                select av.avav_id, avtipo.avav_tipo_code
+                from siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo avtipo
+                where avtipo.ente_proprietario_id=p_enteProprietarioId
+                and   avtipo.avav_tipo_code in ('FPVSC','FPVCC')
+                and   av.avav_tipo_id=avtipo.avav_tipo_id
+                and   extract('year' from av.validita_inizio::timestamp)::integer=p_annoBilancio
+            ),
+            vincPrec as
+            (
+                select
+                 bil.bil_id,
+                 mod.mod_id,
+                 tipomod.mod_tipo_code,
+                 dettsmod.mtdm_reimputazione_anno::integer,
+                 null::integer movgest_ts_r_id,
+                 ts.movgest_ts_id movgest_ts_b_id,  -- movgest_ts_b_id
+                 null::integer movgest_ts_a_id,              -- movgest_ts_a_id
+                 null::numeric importo_vincolo,
+                 abs(dettsmod.movgest_ts_det_importo) importo_vincolo_new -- importo_vincolo_new
+                from siac_t_bil bil ,
+                     siac_t_periodo per,
+                     siac_t_movgest mov,siac_d_movgest_tipo tipo,
+                     siac_d_movgest_ts_tipo tipots,
+                     siac_t_movgest_ts_det detts,siac_d_movgest_ts_det_tipo tipodet,
+                     siac_t_movgest_ts_det_mod  dettsmod,
+                     siac_d_modifica_tipo tipomod,
+                     siac_r_modifica_stato  rmodstato,siac_d_modifica_stato modstato,
+                     siac_t_movgest_ts ts,
+                     siac_t_modifica mod
+                where bil.ente_proprietario_id=p_enteProprietarioId
+                and   per.periodo_id=bil.periodo_id
+                and   per.anno::integer=v_annoBilancio
+                and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+                and   tipo.movgest_tipo_code=p_movgest_tipo_code
+                and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+                and   mov.bil_id=bil.bil_id
+                and   ts.movgest_id=mov.movgest_id
+                and   ts.movgest_ts_id=recmovgest.movgest_ts_id
+                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+                and   detts.movgest_ts_id=ts.movgest_ts_id
+                and   dettsmod.movgest_ts_det_id=detts.movgest_ts_det_id
+                and   tipodet.movgest_ts_det_tipo_id=dettsmod.movgest_ts_det_tipo_id
+                and   dettsmod.movgest_ts_det_importo<0
+                and   rmodstato.mod_stato_r_id=dettsmod.mod_stato_r_id
+                and   modstato.mod_stato_id=rmodstato.mod_stato_id
+                and   modstato.mod_stato_code='V'
+                and   mod.mod_id=rmodstato.mod_id
+                and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+                and   mod.elab_ror_reanno = FALSE
+                and   tipomod.mod_tipo_code = motivo
+                and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code
+                and   dettsmod.mtdm_reimputazione_anno is not null
+                and   dettsmod.mtdm_reimputazione_anno=recmovgest.mtdm_reimputazione_anno
+                and   dettsmod.mtdm_reimputazione_flag is true
+                and   not exists
+                (
+                select 1
+                from siac_r_movgest_ts_det_mod rModAcc
+                where rmodAcc.movgest_ts_det_mod_spesa_id=dettsmod.movgest_ts_det_mod_id
+                and   rmodAcc.data_cancellazione is null
+                and   rmodAcc.validita_fine is null
+                )
+                and   not exists 
+                (
+                select 1
+                from siac_r_movgest_ts rr ,siac_r_modifica_vincolo rvinc
+                where rr.movgest_ts_b_id=recmovgest.movgest_ts_id
+                and   rvinc.movgest_ts_r_id=rr.movgest_ts_r_id 
+                and   rvinc.mod_id=mod.mod_id 
+                and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
+                and   rr.data_cancellazione is null 
+                and   rr.validita_fine is null 
+                and   rvinc.data_cancellazione is null
+                and   rvinc.validita_fine is null
+                )
+                and   rmodstato.validita_fine is null
+                and   mov.data_cancellazione is null
+                and   mov.validita_fine is null
+                and   ts.data_cancellazione is null
+                and   ts.validita_fine is null
+                and   detts.data_cancellazione is null
+                and   detts.validita_fine is null
+                and   dettsmod.data_cancellazione is null
+                and   dettsmod.validita_fine is null
+                and   rmodstato.data_cancellazione is null
+                and   rmodstato.validita_fine is null
+                and   mod.data_cancellazione is null
+                and   mod.validita_fine is null
+                group by bil.bil_id,
+                         mod.mod_id,
+                         tipomod.mod_tipo_code,
+                         dettsmod.mtdm_reimputazione_anno::integer,
+                         ts.movgest_ts_id,
+                         dettsmod.movgest_ts_det_importo
+            )
+            select faseReimpFpvId,
+                   p_faseBilElabId,
+                   vincPrec.bil_id,
+                   vincPrec.mod_id,
+                   vincPrec.mod_tipo_code,
+                   vincPrec.mtdm_reimputazione_anno,
+                   vincPrec.movgest_ts_r_id,
+                   vincPrec.movgest_ts_b_id,
+                   vincPrec.movgest_ts_a_id,
+                   vincPrec.importo_vincolo,
+                   avanzoTipo.avav_id,
+                   vincPrec.importo_vincolo_new,
+                   clock_timestamp(),
+                   p_loginoperazione,
+                   p_enteProprietarioId
+            from vincPrec,titoloNew,avanzoTipo
+            where titoloNew.tipo_avanzo=avanzoTipo.avav_tipo_code
+        );
+        GET DIAGNOSTICS codResult = ROW_COUNT;
+        raise notice 'Inserimeno quota vincolo B=%',codResult;
+       
+       end if;
+      
+	end if;
+
+    -- 08.06.2020 Sofia Jira siac-7593 - fine
+
+/*  09.06.2020 Sofia SIAC-7593 - commentato tutta la parte di vincoli precedentemente implementata
+
     /* 31.01.2018 Sofia siac-5788 -
        inserimento in fase_bil_t_reimputazione_vincoli per traccia delle modifiche legata a vincoli
        con predisposizione dei dati utili per il successivo job di elaborazione dei vincoli riaccertati
@@ -329,7 +2997,8 @@ BEGIN
        p_movgest_tipo_code=MOVGEST_IMP_TIPO then
 
         /* caso 1
-   	       se il vincolo abbattuto era del tipo FPV -> creare analogo vincolo nel nuovo bilancio per la quote di vincolo
+   	       se il vincolo abbattuto era del tipo FPV ->
+           creare analogo vincolo nel nuovo bilancio per la quote di vincolo
            abbattuta */
     	strMessaggio := 'Inserimento caso 1 in fase_bil_t_reimputazione_vincoli per movimento movgest_ts_id='||recmovgest.movgest_ts_id::varchar||'.';
 	    raise notice 'strMessaggio=%',strMessaggio;
@@ -392,7 +3061,10 @@ BEGIN
 		     siac_t_avanzovincolo avnew
 		where bil.ente_proprietario_id=p_enteProprietarioId
 		and   per.periodo_id=bil.periodo_id
-		and   per.anno::integer=p_annoBilancio-1
+-- SIAC-6997 ---------------- INIZIO --------------------
+--		and   per.anno::integer=p_annoBilancio-1
+        and   per.anno::integer=v_annoBilancio
+-- SIAC-6997 ---------------- INIZIO --------------------
 		and   tipo.ente_proprietario_id=bil.ente_proprietario_id
 		and   tipo.movgest_tipo_code=p_movgest_tipo_code
 		and   mov.movgest_tipo_id=tipo.movgest_tipo_id
@@ -409,6 +3081,10 @@ BEGIN
 		and   modstato.mod_stato_code='V'
 		and   mod.mod_id=rmodstato.mod_id
 		and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+-- SIAC-6997 ----------------  INIZIO --------------------
+        and   mod.elab_ror_reanno = FALSE
+        and   tipomod.mod_tipo_code = motivo
+-- SIAC-6997 ----------------  FINE --------------------
         and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code  -- 06.04.2018 Sofia JIRA SIAC-6054 - filtro modifiche per mod_tipo
 		and   rvinc.mod_id=mod.mod_id
 		and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
@@ -540,8 +3216,11 @@ BEGIN
 		     siac_t_avanzovincolo av, siac_d_avanzovincolo_tipo tipoav
 		where bil.ente_proprietario_id=p_enteProprietarioId
 		and   per.periodo_id=bil.periodo_id
-		and   per.anno::integer=p_annoBilancio-1
-		and   tipo.ente_proprietario_id=bil.ente_proprietario_id
+-- SIAC-6997 ---------------- INIZIO --------------------
+--		and   per.anno::integer=p_annoBilancio-1
+        and   per.anno::integer=v_annoBilancio
+-- SIAC-6997 ---------------- INIZIO --------------------
+        and   tipo.ente_proprietario_id=bil.ente_proprietario_id
 		and   tipo.movgest_tipo_code=p_movgest_tipo_code
 		and   mov.movgest_tipo_id=tipo.movgest_tipo_id
 		and   mov.bil_id=bil.bil_id
@@ -557,6 +3236,10 @@ BEGIN
 		and   modstato.mod_stato_code='V'
 		and   mod.mod_id=rmodstato.mod_id
 		and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+-- SIAC-6997 ----------------  INIZIO --------------------
+        and   mod.elab_ror_reanno = FALSE
+        and   tipomod.mod_tipo_code = motivo
+-- SIAC-6997 ----------------  FINE --------------------
         and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code  -- 06.04.2018 Sofia JIRA SIAC-6054 - filtro modifiche per mod_tipo
 		and   rvinc.mod_id=mod.mod_id
 		and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
@@ -711,7 +3394,10 @@ BEGIN
 			     siac_r_movgest_ts rts
 			where bil.ente_proprietario_id=p_enteProprietarioId
 			and   per.periodo_id=bil.periodo_id
-			and   per.anno::integer=p_annoBilancio-1
+-- SIAC-6997 ---------------- INIZIO --------------------
+--			and   per.anno::integer=p_annoBilancio-1
+            and   per.anno::integer=v_annoBilancio
+-- SIAC-6997 ---------------- INIZIO --------------------
 			and   tipo.ente_proprietario_id=bil.ente_proprietario_id
 			and   tipo.movgest_tipo_code=p_movgest_tipo_code
 			and   mov.movgest_tipo_id=tipo.movgest_tipo_id
@@ -728,6 +3414,10 @@ BEGIN
 			and   modstato.mod_stato_code='V'
 			and   mod.mod_id=rmodstato.mod_id
 			and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+-- SIAC-6997 ----------------  INIZIO --------------------
+            and   mod.elab_ror_reanno = FALSE
+            and   tipomod.mod_tipo_code = motivo
+-- SIAC-6997 ----------------  FINE --------------------
             and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code  -- 06.04.2018 Sofia JIRA SIAC-6054 - filtro modifiche per mod_tipo
 			and   rvinc.mod_id=mod.mod_id
 			and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
@@ -829,7 +3519,10 @@ BEGIN
 			     siac_r_movgest_ts rts
 			where bil.ente_proprietario_id=p_enteProprietarioId
 			and   per.periodo_id=bil.periodo_id
-			and   per.anno::integer=p_annoBilancio-1
+-- SIAC-6997 ---------------- INIZIO --------------------
+--			and   per.anno::integer=p_annoBilancio-1
+            and   per.anno::integer=v_annoBilancio
+-- SIAC-6997 ---------------- INIZIO --------------------
 			and   tipo.ente_proprietario_id=bil.ente_proprietario_id
 			and   tipo.movgest_tipo_code=p_movgest_tipo_code
 			and   mov.movgest_tipo_id=tipo.movgest_tipo_id
@@ -846,6 +3539,10 @@ BEGIN
 			and   modstato.mod_stato_code='V'
 			and   mod.mod_id=rmodstato.mod_id
 			and   tipomod.mod_tipo_id =  mod.mod_tipo_id
+-- SIAC-6997 ----------------  INIZIO --------------------
+            and   mod.elab_ror_reanno = FALSE
+            and   tipomod.mod_tipo_code = motivo
+-- SIAC-6997 ----------------  FINE --------------------
             and   tipomod.mod_tipo_code=recmovgest.mod_tipo_code  -- 06.04.2018 Sofia JIRA SIAC-6054 - filtro modifiche per mod_tipo
 			and   rvinc.mod_id=mod.mod_id
 			and   rvinc.modvinc_tipo_operazione='INSERIMENTO'
@@ -885,6 +3582,7 @@ BEGIN
 
 
     end if;
+09.06.2020 Sofia SIAC-7593 - fine */
 
 
 
@@ -926,3 +3624,20 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+ALTER FUNCTION siac.fnc_fasi_bil_gest_reimputa_popola 
+(
+  integer,
+  integer,
+  integer,
+  varchar,
+  timestamp,
+  varchar,
+  varchar,
+  integer,
+  integer,
+  integer,
+  out integer,
+  out integer,
+  out varchar
+) OWNER TO siac;

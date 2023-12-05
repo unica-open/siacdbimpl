@@ -2,10 +2,48 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac."BILR024_Allegato_7_Allegato_delibera_variazione_su_spese"(p_ente_prop_id integer, p_anno character varying, p_numero_delibera integer, p_anno_delibera character varying, p_tipo_delibera character varying, p_anno_competenza character varying, p_ele_variazioni character varying)
- RETURNS TABLE(bil_anno character varying, missione_tipo_desc character varying, missione_code character varying, missione_desc character varying, programma_tipo_desc character varying, programma_code character varying, programma_desc character varying, titusc_tipo_desc character varying, titusc_code character varying, titusc_desc character varying, macroag_tipo_desc character varying, macroag_code character varying, macroag_desc character varying, bil_ele_code character varying, bil_ele_desc character varying, bil_ele_code2 character varying, bil_ele_desc2 character varying, bil_ele_id integer, bil_ele_id_padre integer, stanziamento numeric, cassa numeric, residuo numeric, variazione_aumento_stanziato numeric, variazione_diminuzione_stanziato numeric, variazione_aumento_cassa numeric, variazione_diminuzione_cassa numeric, variazione_aumento_residuo numeric, variazione_diminuzione_residuo numeric, display_error character varying)
- LANGUAGE plpgsql
-AS $function$
+CREATE OR REPLACE FUNCTION siac."BILR024_Allegato_7_Allegato_delibera_variazione_su_spese" (
+  p_ente_prop_id integer,
+  p_anno varchar,
+  p_numero_delibera integer,
+  p_anno_delibera varchar,
+  p_tipo_delibera varchar,
+  p_anno_competenza varchar,
+  p_ele_variazioni varchar,
+  p_organo_provv varchar
+)
+RETURNS TABLE (
+  bil_anno varchar,
+  missione_tipo_desc varchar,
+  missione_code varchar,
+  missione_desc varchar,
+  programma_tipo_desc varchar,
+  programma_code varchar,
+  programma_desc varchar,
+  titusc_tipo_desc varchar,
+  titusc_code varchar,
+  titusc_desc varchar,
+  macroag_tipo_desc varchar,
+  macroag_code varchar,
+  macroag_desc varchar,
+  bil_ele_code varchar,
+  bil_ele_desc varchar,
+  bil_ele_code2 varchar,
+  bil_ele_desc2 varchar,
+  bil_ele_id integer,
+  bil_ele_id_padre integer,
+  stanziamento numeric,
+  cassa numeric,
+  residuo numeric,
+  variazione_aumento_stanziato numeric,
+  variazione_diminuzione_stanziato numeric,
+  variazione_aumento_cassa numeric,
+  variazione_diminuzione_cassa numeric,
+  variazione_aumento_residuo numeric,
+  variazione_diminuzione_residuo numeric,
+  display_error varchar
+) AS
+$body$
 DECLARE
 
 
@@ -115,10 +153,19 @@ if p_tipo_delibera IS NOT NULL AND p_tipo_delibera <> '' THEN
 	contaParametriParz := contaParametriParz +1;
 end if;
 
-if contaParametriParz = 1 OR contaParametriParz = 2 then
+--SIAC-6864 09/04/2020.
+--Aggiunto in input il parametro p_organo_provv.
+--p_organo_provv puo' essere specificato da solo.
+if  contaParametriParz = 1 
+    OR contaParametriParz = 2 then
+--SIAC-7767 20/10/2021
+-- il parametro "organo che ha emesso il provvedimento" diventa facoltativo anche
+-- se sono stati specificati i dati del provvedimento.    
+    --OR (contaParametriParz = 3 and (p_organo_provv IS NULL OR
+	--			p_organo_provv = ''))     then
 	display_error:= 'ERRORE NEI PARAMETRI: Specificare tutti i dati relativi al parametro ''Provvedimento di variazione''';
     return next;
-    return;
+    return; 
 elsif contaParametriParz = 3 THEN -- parametro corretto
 	contaParametri := contaParametri + 1;
 end if;
@@ -213,7 +260,9 @@ from 		siac_t_bil_elem_det 		capitolo_importi,
       siac_d_variazione_stato cvar, siac_t_bil_elem_det_var dvar, siac_t_periodo periodo_importo_variazione
       where avar.variazione_id=bvar.variazione_id
       and bvar.variazione_stato_tipo_id=cvar.variazione_stato_tipo_id
-      and dvar.variazione_stato_id=bvar.variazione_stato_id         
+      and dvar.variazione_stato_id=bvar.variazione_stato_id    
+      	--SIAC-7229: mancava il legame sul periodo.
+      and periodo_importo_variazione.periodo_id =dvar.periodo_id      
       and cvar.variazione_stato_tipo_code=''D''                            
       and bvar.data_cancellazione is null
       and bvar.variazione_stato_id in (';
@@ -234,8 +283,11 @@ strQuery:=strQuery||'
               and     atto.attoamm_numero=  '||p_numero_delibera||'
               and     atto.attoamm_anno  =  '''||p_anno_delibera||'''                 
               and     tipo_atto.attoamm_tipo_code  = '''||p_tipo_delibera||'''
-              and     stato_atto.attoamm_stato_code   =   ''DEFINITIVO'') ';
-else        -- specificato l'elenco delle variazione.          
+              and     stato_atto.attoamm_stato_code   =   ''DEFINITIVO'')
+              	--SIAC-7729: mancava il legame con l''anno competenza.
+              and periodo_importo_variazione.periodo_id = dvar.periodo_id
+     		  and periodo_importo_variazione.anno =  '''||p_anno_competenza||'''';
+else        -- specificato l''elenco delle variazione.          
       	strQuery:=strQuery||'     
                 select max(var_stato.variazione_stato_id)
                 from siac_t_variazione t_var,
@@ -246,8 +298,8 @@ else        -- specificato l'elenco delle variazione.
                   and t_var.variazione_num in('||p_ele_variazioni||')
                   and t_var.data_cancellazione IS NULL
                   and var_stato.data_cancellazione IS NULL )
-                  and periodo_importo_variazione.periodo_id = dvar.periodo_id                     	--  SIAC-7311
-                  and periodo_importo_variazione.anno =  '''||p_anno_competenza||'''';              -- 	SIAC-7311  
+                  and periodo_importo_variazione.periodo_id = dvar.periodo_id         --  SIAC-7311
+                  and periodo_importo_variazione.anno =  '''||p_anno_competenza||''''; -- 	SIAC-7311  
 end if;                
 		
 strQuery:=strQuery||'),
@@ -270,13 +322,14 @@ strQuery:=strQuery||'),
                     and bvarsucc.data_cancellazione is null
           and dvarsucc.data_cancellazione IS NULL)
       select  varsuccess.elem_id_var, varsuccess.elem_det_tipo_id,
-              sum(varsuccess.importo_var) totale_var_succ
+              sum(varsuccess.importo_var) totale_var_succ              
       from varcurr
-            JOIN varsuccess
+         JOIN  varsuccess
               on (varcurr.elem_det_tipo_id = varsuccess.elem_det_tipo_id
                     and varcurr.periodo_id = varsuccess.periodo_id
                     and varsuccess.validita_inizio > varcurr.validita_inizio
-                    and varcurr.elem_id_var = varsuccess.elem_id_var)                                --  SIAC-7311
+                    and varcurr.elem_id_var = varsuccess.elem_id_var) --  SIAC-7311
+     -- where varsuccess.validita_inizio > varcurr.validita_inizio
       group by varsuccess.elem_id_var, varsuccess.elem_det_tipo_id  )    
                     INSERT INTO siac_rep_cap_ug_imp
                     select 	cap.elem_id, 
@@ -527,7 +580,9 @@ with strutt_bilancio as (select *
                         group by  a.elem_id), 
          variaz_residui_pos as (select a.elem_id, sum(a.importo) importo_var
                         from siac_rep_var_spese a
-                        where a.ente_proprietario =p_ente_prop_id                        and a.tipologia='''||TipoImpRes||''' -- ''STR''
+                        where a.ente_proprietario =p_ente_prop_id   
+--INC000003829353 13/03/2020 corretto un errore nella condizione sul campo tipologia.                                             
+                        and a.tipologia=TipoImpRes -- ''STR''
                         and a.importo > 0
                         and a.utente=user_table
                         group by  a.elem_id),
@@ -623,4 +678,9 @@ exception
  		RAISE EXCEPTION '% Errore : %-%.',RTN_MESSAGGIO,SQLSTATE,substring(SQLERRM from 1 for 500);
         return;
 END;
-$function$
+$body$
+LANGUAGE 'plpgsql'
+VOLATILE
+CALLED ON NULL INPUT
+SECURITY INVOKER
+COST 100 ROWS 1000;

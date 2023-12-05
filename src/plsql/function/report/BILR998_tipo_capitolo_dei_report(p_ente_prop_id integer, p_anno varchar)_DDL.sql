@@ -28,6 +28,7 @@ elemTipoCodeS varchar;
 RTN_MESSAGGIO varchar(1000):='';
 
 fase_bilancio varchar;
+tipoDisavanzoDanc varchar;
 
 BEGIN
 
@@ -41,6 +42,9 @@ tipoDisavanzo='DAM';
 tipoFpvcc='FPVCC';
 tipoFpvsc='FPVSC';
 tipoFCassaIni='FCI';
+--SIAC-7192 10/02/2020.
+--  Introdotta la categoria capitolo DDANC - DISAVANZO DERIVANTE DA DEBITO AUTORIZZATO E NON CONTRATTO 
+tipoDisavanzoDanc='DDANC';
 
 begin
 for classifBilRec in
@@ -134,7 +138,11 @@ end;
 		and	capitolo.elem_id					=	r_cat_capitolo.elem_id
 		and	r_cat_capitolo.elem_cat_id			=	cat_del_capitolo.elem_cat_id
 --		and	cat_del_capitolo.elem_cat_code		in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,tipoFpvsc,tipoFCassaIni)	
-        and	cat_del_capitolo.elem_cat_code		in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,tipoFpvsc)	
+        	-- SIAC-7192 10/02/2020.
+			--  Introdotta la categoria capitolo DDANC - 
+            --  DISAVANZO DERIVANTE DA DEBITO AUTORIZZATO E NON CONTRATTO 
+        and	cat_del_capitolo.elem_cat_code	in (tipoAvanzo,tipoDisavanzo,
+        		tipoFpvcc,tipoFpvsc,tipoDisavanzoDanc)	
         and	capitolo_importi.data_cancellazione 	is null
         and	capitolo_imp_tipo.data_cancellazione 	is null
         and	capitolo_imp_periodo.data_cancellazione is null
@@ -212,7 +220,8 @@ loop
        codice_importo='';
 
 end loop;
-
+       
+       
 raise notice 'fine OK';
 exception
 	when no_data_found THEN

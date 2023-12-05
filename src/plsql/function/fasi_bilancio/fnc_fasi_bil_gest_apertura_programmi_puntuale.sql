@@ -2,12 +2,24 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_programmi_puntuale (
+drop FUNCTION if exists siac.fnc_fasi_bil_gest_apertura_programmi_puntuale (
   annobilancio integer,
   enteproprietarioid integer,
   tipoapertura varchar,
   loginoperazione varchar,
   dataelaborazione timestamp,
+  out fasebilelabidret integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi_puntuale (
+  annobilancio integer,
+  enteproprietarioid integer,
+  tipoapertura varchar,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  ribalta_coll_mov boolean default false,
   out fasebilelabidret integer,
   out codicerisultato integer,
   out messaggiorisultato varchar
@@ -137,8 +149,10 @@ $body$
     	  enteproprietarioid,
 	      annobilancio,
           tipoApertura,
+          --false,--   ribalta_coll_mov  -- 06.02.2020 Sofia jira siac -	SIAC-7386
           loginoperazione,
-          dataelaborazione
+          dataelaborazione,
+		  ribalta_coll_mov  -- 28.04.2023 Sofia 		  
          );
          if strRec.codiceRisultato!=0 then
             strMessaggio:=strRec.messaggioRisultato;
@@ -231,3 +245,16 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi_puntuale
+(
+integer, 
+integer, 
+varchar, 
+varchar, 
+timestamp without time zone, 
+boolean, 
+OUT integer, 
+OUT integer, 
+OUT  varchar
+) owner to siac;

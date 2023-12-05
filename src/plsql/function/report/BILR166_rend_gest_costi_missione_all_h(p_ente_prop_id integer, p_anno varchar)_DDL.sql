@@ -33,6 +33,10 @@ idBilancio integer;
 
 BEGIN
 
+/* 16/12/2021.
+	Il report BILR166 a partire dall'anno di bilancio 2021 e' sostituito dal report BILR258 (SIAC-8238).
+*/
+
 bil_ele_code:='';
 bil_ele_desc:='';
 bil_ele_code2:='';

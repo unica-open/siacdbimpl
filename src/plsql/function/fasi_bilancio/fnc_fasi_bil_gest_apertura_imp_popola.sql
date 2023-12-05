@@ -1,16 +1,16 @@
-/*
+﻿/*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
 ﻿
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_imp_popola(
-  enteProprietarioId     integer,
-  annoBilancio           integer,
-  loginOperazione        varchar,
-  dataElaborazione       timestamp,
-  out faseBilElabRetId   integer,
-  out codiceRisultato    integer,
-  out messaggioRisultato varchar
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_imp_popola (
+  enteproprietarioid integer,
+  annobilancio integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out fasebilelabretid integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
 )
 RETURNS record AS
 $body$
@@ -244,6 +244,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia Jira SIAC-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -257,6 +258,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id, -- 14.05.2020 Sofia Jira SIAC-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -304,6 +306,7 @@ BEGIN
        and   re.validita_fine is null
        and detm.movgest_ts_det_importo-fnc_siac_totale_ordinativi_movgest(mov.movgest_id,null)>0
        order by mov.movgest_anno::integer,mov.movgest_numero::integer
+--       LIMIT 100
       );
 
 
@@ -348,6 +351,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia Jira SIAC-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -361,6 +365,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id,  -- 14.05.2020 Sofia Jira SIAC-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -423,6 +428,7 @@ BEGIN
        and   re.data_cancellazione is null
        and   re.validita_fine is null
        order by mov.movgest_anno::integer,mov.movgest_numero::integer
+--       LIMIT 100
       );
 
 
@@ -472,6 +478,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia Jira SIAC-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -485,6 +492,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id,  -- 14.05.2020 Sofia Jira SIAC-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -539,10 +547,12 @@ BEGIN
                 detm.movgest_ts_det_importo,
                 mov.bil_id,
                 re.elem_id,
+                re.elem_det_comp_tipo_id,
                 bilancioId,
    			    mov.ente_proprietario_id
        having detm.movgest_ts_det_importo-sum(det.ord_ts_det_importo)>0
        order by mov.movgest_anno::integer,mov.movgest_numero::integer,movts.movgest_ts_code::integer
+---       LIMIT 100
       );
 
 
@@ -590,6 +600,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia Jira SIAC-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -603,6 +614,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id, -- 14.05.2020 Sofia Jira SIAC-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -656,6 +668,7 @@ BEGIN
        and   re.data_cancellazione is null
        and   re.validita_fine is null
        order by mov.movgest_anno::integer,mov.movgest_numero::integer,movts.movgest_ts_code::integer
+---       LIMIT 100
       );
 
 
@@ -777,9 +790,9 @@ BEGIN
      	raise exception ' Errore in inserimento LOG.';
      end if;
 
-
      update fase_bil_t_gest_apertura_liq_imp liq
-     set  elem_id=e.elem_id
+     set  elem_id=e.elem_id,
+          elem_det_comp_tipo_id=liq.elem_orig_det_comp_tipo_id -- 14.05.2020 Sofia Jira SIAC-7593
      from siac_t_bil_elem eprec, siac_t_bil_elem e, siac_r_bil_elem_stato r
      where liq.fase_bil_elab_id=faseBilElabId
      and   liq.fl_elab='N'
@@ -799,6 +812,8 @@ BEGIN
      and   liq.validita_fine is null
      and   eprec.data_cancellazione is null
 	 and   eprec.validita_fine is null;
+
+
 
      -- commentare
 	 update fase_bil_t_gest_apertura_liq_imp liq

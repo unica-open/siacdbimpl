@@ -1,16 +1,29 @@
-/*
+﻿/*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_pagopa_t_elaborazione_riconc_esegui
+
+drop function if exists 
+siac.fnc_pagopa_t_elaborazione_riconc_esegui 
 (
-  filePagoPaElabId                integer,
-  annoBilancioElab                integer,
-  enteProprietarioId              integer,
-  loginOperazione                 varchar,
-  dataElaborazione                timestamp,
-  out codicerisultato             integer,
-  out messaggiorisultato          varchar
+  filepagopaelabid integer,
+  annobilancioelab integer,
+  enteproprietarioid integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_pagopa_t_elaborazione_riconc_esegui 
+(
+  filepagopaelabid integer,
+  annobilancioelab integer,
+  enteproprietarioid integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
 )
 RETURNS record AS
 $body$
@@ -57,6 +70,8 @@ DECLARE
 
 	ESERCIZIO_PROVVISORIO_ST CONSTANT  varchar :='E'; -- esercizio provvisorio
     ESERCIZIO_GESTIONE_ST    CONSTANT  varchar :='G'; -- esercizio gestione
+    -- 18.01.2021 Sofia Jira SIAC-7962
+    ESERCIZIO_CONSUNTIVO_ST    CONSTANT  varchar :='O'; -- esercizio consuntivo
 
 	-- errori di elaborazione su dettagli
 	PAGOPA_ERR_1	CONSTANT  varchar :='1'; --ANNULLATO
@@ -116,7 +131,10 @@ DECLARE
 
     -- 22.07.2019 Sofia siac-6963 - inizio
 	PAGOPA_ERR_51   CONSTANT  varchar :='51';--DATI RICONCILIAZIONE CON ACCERTAMENTO PRIVO DI SOGGETTO O INESISTENTE
-
+    
+	-- 07.07.2021 Sofia jira SIAC-8221
+    PAGOPA_ERR_52	CONSTANT  varchar :='52';--DATI DI RICONCILIAZIONE ASSOCIATI A PROVVISORIO DI CASSA ANNULLATO O CON DATA DI REGOLARIZZAZIONE
+	
     DOC_STATO_VALIDO    CONSTANT  varchar :='V';
 	DOC_TIPO_IPA    CONSTANT  varchar :='IPA';
     --- 12.06.2019 SIAC-6720
@@ -194,6 +212,10 @@ DECLARE
     movgestStatoId integer:=null;
     provvisorioTipoId integer:=null;
 	movgestTsDetTipoId integer:=null;
+
+    -- 12.10.2021 Sofia JIRA SIAC-8371
+	movgestTsDetTipoUId integer:=null;
+
 	dnumQuote integer:=0;
     movgestTsId integer:=null;
     subdocMovgestTsId integer:=null;
@@ -218,6 +240,8 @@ DECLARE
 
 	-- 12.08.2019 Sofia SIAC-6978 - fine
     docIUV varchar(150):=null;
+    -- 06.02.2020 Sofia jira siac-7375
+    docDataOperazione timestamp:=null;
 BEGIN
 
 	strMessaggioFinale:='Elaborazione rinconciliazione PAGOPA per '||
@@ -246,8 +270,8 @@ BEGIN
      clock_timestamp()
     );
     GET DIAGNOSTICS codResult = ROW_COUNT;
---    raise notice '2222%',strMessaggioLog;
---    raise notice '2222-codResult- %',codResult;
+    raise notice '2222%',strMessaggioLog;
+    raise notice '2222-codResult- %',codResult;
     codResult:=null;
     codiceRisultato:=0;
     messaggioRisultato:='';
@@ -263,7 +287,8 @@ BEGIN
     and   stato.ente_proprietario_id=enteProprietarioId
     and   elab.data_cancellazione is null
     and   elab.validita_fine  is null;
---    raise notice '2222strMessaggio%',strMessaggio;
+    raise notice '2222strMessaggio  %',strMessaggio;
+    raise notice '2222strMessaggio CodResult %',codResult;
 
 --	if filePagoPaId is null or filePagoPaFileXMLId is null then
     if codResult is null then
@@ -505,6 +530,25 @@ BEGIN
 	        bElabora:=false;
         end if;
     end if;
+ 
+   
+    -- 12.10.2021 Sofia JIRA SIAC-8371
+   	if codResult is null then
+    	strMessaggio:='Lettura identificativo tipo importo UTILIZZABILE accertamento.';
+		select tipo.movgest_ts_det_tipo_id into movgestTsDetTipoUId
+		from siac_d_movgest_ts_det_tipo tipo
+		where tipo.ente_proprietario_id=enteProprietarioId
+		and   tipo.movgest_ts_det_tipo_code='U';
+        if movgestTsDetTipoUId is null then
+	        pagoPaCodeErr:=PAGOPA_ERR_29;
+    	    strErrore:=' Non esistente.';
+        	codResult:=-1;
+	        bElabora:=false;
+        end if;
+    end if;
+
+   
+   
 
 
 
@@ -524,7 +568,7 @@ BEGIN
 
 	if codResult is null then
      strMessaggio:='Gestione scarti di elaborazione. Verifica annoBilancio indicato su dettagli di riconciliazione.';
---    raise notice '2222@@%',strMessaggio;
+    raise notice '22229998@@%',strMessaggio;
 
      select  distinct doc.pagopa_ric_doc_anno_esercizio into annoBilancio
      from  pagopa_t_riconciliazione_doc doc, pagopa_t_elaborazione_flusso flusso
@@ -560,13 +604,15 @@ BEGIN
         	bElabora:=false;
         end if;
      end if;
---         raise notice '2222@@strErrore%',strErrore;
+         raise notice '2222@@strErrore%',strErrore;
 
 	end if;
 
 
     if codResult is null then
 	 strMessaggio:='Gestione scarti di elaborazione. Verifica fase bilancio per elaborazione.';
+         raise notice '22229997@@%',strMessaggio;
+
 	 select bil.bil_id, per.periodo_id into bilancioId , periodoId
      from siac_t_bil bil,siac_t_periodo per,
           siac_r_bil_fase_operativa r, siac_d_fase_operativa fase
@@ -575,7 +621,9 @@ BEGIN
      and   bil.periodo_id=per.periodo_id
      and   r.bil_id=bil.bil_id
      and   fase.fase_operativa_id=r.fase_operativa_id
-     and   fase.fase_operativa_code in (ESERCIZIO_PROVVISORIO_ST,ESERCIZIO_GESTIONE_ST);
+     -- 18.01.2021 Sofia Jira SIAC-7962
+--     and   fase.fase_operativa_code in (ESERCIZIO_PROVVISORIO_ST,ESERCIZIO_GESTIONE_ST);
+     and   fase.fase_operativa_code in (ESERCIZIO_PROVVISORIO_ST,ESERCIZIO_GESTIONE_ST,ESERCIZIO_CONSUNTIVO_ST);
      if bilancioId is null then
      	pagoPaCodeErr:=PAGOPA_ERR_18;
         strErrore:=' Fase non ammessa per elaborazione.';
@@ -727,6 +775,7 @@ BEGIN
 
    if codResult is null then
     strMessaggio:='Gestione scarti di elaborazione. Inserimento siac_t_registrounico_doc_num per anno='||annoBilancio::varchar||'.';
+    raise notice '22229996@@%',strMessaggio;
 
 	insert into  siac_t_registrounico_doc_num
     (
@@ -761,13 +810,14 @@ BEGIN
     if codResult is null then
 
  	 strMessaggio:='Gestione scarti di elaborazione PAGOPA_ERR_CODE='||PAGOPA_ERR_22||'.';
---     raise notice '2222@@strMessaggio PAGOPA_ERR_22 %',strMessaggio;
+     raise notice '2222999999@@strMessaggio PAGOPA_ERR_22 %',strMessaggio;
 
      update pagopa_t_riconciliazione_doc doc
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+              login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -783,8 +833,8 @@ BEGIN
      and   prov.provc_tipo_id=tipo.provc_tipo_id
      and   prov.provc_anno::integer=flusso.pagopa_elab_flusso_anno_provvisorio
      and   prov.provc_numero::integer=flusso.pagopa_elab_flusso_num_provvisorio
-     and   prov.provc_data_annullamento is null
-     and   prov.provc_data_regolarizzazione is null
+     /*and   prov.provc_data_annullamento is null -- 07.07.2021 Sofia Jira SIAC-8221 
+     and   prov.provc_data_regolarizzazione is null*/
      and   prov.data_cancellazione is null
      and   prov.validita_fine is null
      )
@@ -823,6 +873,62 @@ BEGIN
     end if;
 --    raise notice 'strErrore=%',strErrore;
 
+    -- 07.07.2021 Sofia Jira SIAC-8221 -- inizio 
+	-- provvisorio di cassa esistente ma con data_annullamento o data_regolarizzazione impostate 
+	if codResult is null then
+ 	 strMessaggio:='Gestione scarti di elaborazione PAGOPA_ERR_CODE='||PAGOPA_ERR_52||'.';
+     raise notice '2222999999@@strMessaggio PAGOPA_ERR_52 %',strMessaggio;
+
+     update pagopa_t_riconciliazione_doc doc
+     set    pagopa_ric_doc_stato_elab='X',
+            pagopa_ric_errore_id=err.pagopa_ric_errore_id,
+            data_modifica=clock_timestamp(),
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+              login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+     from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
+     where  flusso.pagopa_elab_id=filePagoPaElabId
+     and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
+     and    doc.pagopa_ric_doc_stato_elab='N'
+     and    doc.pagopa_ric_doc_subdoc_id is null
+     and    doc.pagopa_ric_doc_flag_con_dett=false -- 05.06.2019 SIAC-6720
+     and    exists
+     (
+     select 1
+     from siac_t_prov_cassa prov, siac_d_prov_cassa_tipo tipo
+     where tipo.ente_proprietario_id=doc.ente_proprietario_id
+     and   tipo.provc_tipo_code='E'
+     and   prov.provc_tipo_id=tipo.provc_tipo_id
+     and   prov.provc_anno::integer=flusso.pagopa_elab_flusso_anno_provvisorio
+     and   prov.provc_numero::integer=flusso.pagopa_elab_flusso_num_provvisorio
+     and   ( prov.provc_data_annullamento is not null  or prov.provc_data_regolarizzazione is not null )
+     and   prov.data_cancellazione is null
+     and   prov.validita_fine is null
+     )
+     and    not exists -- esclusione flussi ( per provvisorio ) con scarti
+     (
+     select 1
+     from pagopa_t_riconciliazione_doc doc1
+     where doc1.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
+     and   doc1.pagopa_ric_doc_stato_elab!='N'
+     and   doc1.data_cancellazione is null
+     and   doc1.validita_fine is null
+     )
+     and    err.ente_proprietario_id=flusso.ente_proprietario_id
+     and    err.pagopa_ric_errore_code=PAGOPA_ERR_52
+     and    flusso.data_cancellazione is null
+     and    flusso.validita_fine is null
+     and    doc.data_cancellazione is null
+     and    doc.validita_fine is null;
+     GET DIAGNOSTICS codResult = ROW_COUNT;
+
+     if coalesce(codResult,0)!=0 then
+     	pagoPaCodeErr:=PAGOPA_ERR_52;
+        strErrore:=' Provvisori di cassa annullati o regolarizzati [data impostata].';
+     end if;
+	 codResult:=null;
+    end if;
+    -- 07.07.2021 Sofia Jira SIAC-8221 -- fine 
+	
     --- provvisorio esistente , ma regolarizzato
     if codResult is null then
  	 strMessaggio:='Gestione scarti di elaborazione PAGOPA_ERR_CODE='||PAGOPA_ERR_38||'.';
@@ -831,7 +937,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -875,9 +983,11 @@ BEGIN
      if coalesce(codResult,0)=0 then
        update pagopa_t_riconciliazione_doc doc
        set    pagopa_ric_doc_stato_elab='X',
-        	   pagopa_ric_errore_id=err.pagopa_ric_errore_id,
-               data_modifica=clock_timestamp(),
-               login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+        	  pagopa_ric_errore_id=err.pagopa_ric_errore_id,
+              data_modifica=clock_timestamp(),
+--               login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+               login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
    	   from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
 	   where  flusso.pagopa_elab_id=filePagoPaElabId
        and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -935,7 +1045,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1004,7 +1116,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1046,7 +1160,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1057,19 +1173,25 @@ BEGIN
      and    doc.pagopa_ric_doc_subdoc_id is null
      and    not exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select  1
-     from  siac_t_soggetto sog
+     from  siac_t_soggetto sog,siac_d_ambito ambito
      where sog.ente_proprietario_id=enteProprietarioId
      and   sog.codice_fiscale=upper(doc.pagopa_ric_doc_codfisc_benef)
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
      and   sog.data_cancellazione is null
      and   sog.validita_fine is null
      )
      and    not exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select  1
-     from  siac_t_soggetto sog
+     from  siac_t_soggetto sog,siac_d_ambito ambito
      where sog.ente_proprietario_id=enteProprietarioId
      and   sog.partita_iva=upper(doc.pagopa_ric_doc_codfisc_benef)
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
      and   sog.data_cancellazione is null
      and   sog.validita_fine is null
      )
@@ -1106,7 +1228,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1117,13 +1241,17 @@ BEGIN
      and    doc.pagopa_ric_doc_subdoc_id is null
      and    not exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select  1
-     from  siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato
+     from  siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato,
+           siac_d_ambito ambito
      where sog.ente_proprietario_id=enteProprietarioId
      and   sog.codice_fiscale=upper(doc.pagopa_ric_doc_codfisc_benef)
      and   rs.soggetto_id=sog.soggetto_id
      and   stato.soggetto_stato_id=rs.soggetto_stato_id
      and   stato.soggetto_stato_code='VALIDO'
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
      and   sog.data_cancellazione is null
      and   sog.validita_fine is null
      and   rs.data_cancellazione is null
@@ -1131,13 +1259,17 @@ BEGIN
      )
      and    not exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select  1
-     from  siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato
+     from  siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato,
+           siac_d_ambito ambito
      where sog.ente_proprietario_id=enteProprietarioId
      and   sog.partita_iva=upper(doc.pagopa_ric_doc_codfisc_benef)
      and   rs.soggetto_id=sog.soggetto_id
      and   stato.soggetto_stato_id=rs.soggetto_stato_id
      and   stato.soggetto_stato_code='VALIDO'
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
      and   sog.data_cancellazione is null
      and   sog.validita_fine is null
      and   rs.data_cancellazione is null
@@ -1176,7 +1308,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1187,13 +1321,17 @@ BEGIN
      and    doc.pagopa_ric_doc_subdoc_id is null
      and    exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select (case when 1<count(*) then 1 else 0 end)
-	 from siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato
+	 from siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato,
+          siac_d_ambito ambito
 	 where sog.ente_proprietario_id=enteProprietarioId
 	 and   sog.codice_fiscale=upper(doc.pagopa_ric_doc_codfisc_benef)
 	 and   rs.soggetto_id=sog.soggetto_id
 	 and   stato.soggetto_stato_id=rs.soggetto_stato_id
 	 and   stato.soggetto_stato_code='VALIDO'
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
 	 and   sog.data_cancellazione is null
 	 and   sog.validita_fine is null
 	 and   rs.data_cancellazione is null
@@ -1233,7 +1371,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1244,13 +1384,17 @@ BEGIN
      and    doc.pagopa_ric_doc_subdoc_id is null
      and    exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select (case when 1<count(*) then 1 else 0 end)
-	 from siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato
+	 from siac_t_soggetto sog,siac_r_soggetto_stato rs,siac_d_soggetto_stato stato,
+          siac_d_ambito ambito
 	 where sog.ente_proprietario_id=enteProprietarioId
 	 and   sog.partita_iva=upper(doc.pagopa_ric_doc_codfisc_benef)
 	 and   rs.soggetto_id=sog.soggetto_id
 	 and   stato.soggetto_stato_id=rs.soggetto_stato_id
 	 and   stato.soggetto_stato_code='VALIDO'
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
 	 and   sog.data_cancellazione is null
 	 and   sog.validita_fine is null
 	 and   rs.data_cancellazione is null
@@ -1292,7 +1436,8 @@ BEGIN
      set    pagopa_ric_doc_soggetto_id=sog.soggetto_id,
             pagopa_ric_doc_codice_benef=sog.soggetto_code,
             data_modifica=clock_timestamp()
-     from pagopa_t_elaborazione_flusso flusso,siac_t_soggetto sog, siac_r_soggetto_stato rs,siac_d_soggetto_stato stato
+     from pagopa_t_elaborazione_flusso flusso,siac_t_soggetto sog, siac_r_soggetto_stato rs,siac_d_soggetto_stato stato,
+          siac_d_ambito ambito
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
      and    doc.pagopa_ric_doc_stato_elab='N'
@@ -1306,14 +1451,20 @@ BEGIN
 	 and    rs.soggetto_id=sog.soggetto_id
 	 and    stato.soggetto_stato_id=rs.soggetto_stato_id
 	 and    stato.soggetto_stato_code='VALIDO'
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
+     and   ambito.ambito_id=sog.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
      and    exists
      (
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
      select 1
-	 from siac_t_soggetto sog1,siac_r_soggetto_stato rs1
+	 from siac_t_soggetto sog1,siac_r_soggetto_stato rs1,siac_d_ambito ambito1
 	 where sog1.ente_proprietario_id=enteProprietarioId
 	 and   sog1.codice_fiscale=upper(doc.pagopa_ric_doc_codfisc_benef)
 	 and   rs1.soggetto_id=sog1.soggetto_id
 	 and   rs1.soggetto_stato_id=stato.soggetto_stato_id
+     and   ambito1.ambito_id=sog1.ambito_id
+     and   ambito1.ambito_code='AMBITO_FIN'
 	 and   sog1.data_cancellazione is null
 	 and   sog1.validita_fine is null
 	 and   rs1.data_cancellazione is null
@@ -1344,7 +1495,8 @@ BEGIN
      set    pagopa_ric_doc_soggetto_id=sog.soggetto_id,
             pagopa_ric_doc_codice_benef=sog.soggetto_code,
             data_modifica=clock_timestamp()
-     from pagopa_t_elaborazione_flusso flusso,siac_t_soggetto sog, siac_r_soggetto_stato rs,siac_d_soggetto_stato stato
+     from pagopa_t_elaborazione_flusso flusso,siac_t_soggetto sog, siac_r_soggetto_stato rs,siac_d_soggetto_stato stato,
+          siac_d_ambito ambito
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
      and    doc.pagopa_ric_doc_stato_elab='N'
@@ -1358,14 +1510,20 @@ BEGIN
 	 and    rs.soggetto_id=sog.soggetto_id
 	 and    stato.soggetto_stato_id=rs.soggetto_stato_id
 	 and    stato.soggetto_stato_code='VALIDO'
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
+     and    ambito.ambito_id=sog.ambito_id
+     and    ambito.ambito_code='AMBITO_FIN'
      and    exists
      (
      select 1
-	 from siac_t_soggetto sog1,siac_r_soggetto_stato rs1
+	 from siac_t_soggetto sog1,siac_r_soggetto_stato rs1,siac_d_ambito ambito
 	 where sog1.ente_proprietario_id=enteProprietarioId
 	 and   sog1.partita_iva=upper(doc.pagopa_ric_doc_codfisc_benef)
 	 and   rs1.soggetto_id=sog1.soggetto_id
 	 and   rs1.soggetto_stato_id=stato.soggetto_stato_id
+     -- 10.05.2021 Sofia Jira SIAC-	SIAC-8167 - AMBITO
+     and   ambito.ambito_id=sog1.ambito_id
+     and   ambito.ambito_code='AMBITO_FIN'
 	 and   sog1.data_cancellazione is null
 	 and   sog1.validita_fine is null
 	 and   rs1.data_cancellazione is null
@@ -1400,7 +1558,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1442,7 +1602,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1536,7 +1698,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1588,7 +1752,9 @@ BEGIN
      set    pagopa_ric_doc_stato_elab='X',
             pagopa_ric_errore_id=err.pagopa_ric_errore_id,
             data_modifica=clock_timestamp(),
-            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--            login_operazione=doc.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+            login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
      from pagopa_t_elaborazione_flusso flusso,pagopa_d_riconciliazione_errore err
      where  flusso.pagopa_elab_id=filePagoPaElabId
      and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1665,7 +1831,9 @@ BEGIN
    set    pagopa_ric_flusso_stato_elab='X',
   	      pagopa_ric_errore_id=doc.pagopa_ric_errore_id,
           data_modifica=clock_timestamp(),
-          login_operazione=ric.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--          login_operazione=ric.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+          login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
    from pagopa_t_elaborazione_flusso flusso,pagopa_t_riconciliazione_doc doc
    where flusso.pagopa_elab_id=filePagoPaElabId
    and   doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1716,7 +1884,7 @@ BEGIN
      -- aggiornare anche pagopa_t_riconciliazione e pagopa_t_riconciliazione_doc
      strmessaggioBck:=strMessaggio;
      strMessaggio:=strMessaggio||' '||strErrore||' Aggiornamento pagopa_t_elaborazione.';
---      raise notice 'strMessaggio=%',strMessaggio;
+     raise notice 'strMessaggioStrErrore=%',strMessaggio;
 	 update pagopa_t_elaborazione elab
      set    data_modifica=clock_timestamp(),
             validita_fine=(case when bElabora=false then clock_timestamp() else null end ),
@@ -1752,7 +1920,14 @@ BEGIN
         and   r.validita_fine is null;
 
      if bElabora= false then
-      codiceRisultato:=-1;
+      -- 10.05.2021 Sofia Jira SIAC-8167
+      if pagoPaCodeErr=PAGOPA_ERR_7  or 
+	     pagoPaCodeErr=PAGOPA_ERR_12 then -- SIAC-8585 24.01.2022 Sofia Jira 
+      	codiceRisultato:=0;
+      else
+        codiceRisultato:=-1;
+      end if;
+
       messaggioRisultato:= upper(strMessaggioFinale||' '||strmessaggioBck||' '||strErrore||'.');
       strMessaggioLog:='Uscita fnc_pagopa_t_elaborazione_riconc_esegui - '||messaggioRisultato;
       insert into pagopa_t_elaborazione_log
@@ -1818,7 +1993,9 @@ BEGIN
           doc.pagopa_ric_doc_anno_accertamento pagopa_anno_accertamento,
           doc.pagopa_ric_doc_num_accertamento  pagopa_num_accertamento,
           doc.pagopa_ric_doc_tipo_code pagopa_doc_tipo_code, -- siac-6720
-          doc.pagopa_ric_doc_tipo_id pagopa_doc_tipo_id -- siac-6720
+          doc.pagopa_ric_doc_tipo_id pagopa_doc_tipo_id,           -- siac-6720
+          doc.pagopa_ric_doc_iuv     pagopa_doc_iuv ,   -- 06.02.2020 Sofia siac-7375
+          doc.pagopa_ric_doc_data_operazione pagopa_doc_data_operazione -- 06.02.2020 Sofia siac-7375
    from pagopa_t_elaborazione_flusso flusso, pagopa_t_riconciliazione_doc doc
    where flusso.pagopa_elab_id=filePagoPaElabId
    and   doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -1857,7 +2034,9 @@ BEGIN
             doc.pagopa_ric_doc_anno_accertamento,
             doc.pagopa_ric_doc_num_accertamento,
             doc.pagopa_ric_doc_tipo_code, -- siac-6720
-            doc.pagopa_ric_doc_tipo_id -- siac-6720
+            doc.pagopa_ric_doc_tipo_id, -- siac-6720
+            doc.pagopa_ric_doc_iuv ,   -- 06.02.2020 Sofia siac-7375
+            doc.pagopa_ric_doc_data_operazione -- 06.02.2020 Sofia siac-7375
    ),
    sogg as
    (
@@ -1921,7 +2100,8 @@ BEGIN
            pagopa_sogg.pagopa_str_amm,
            pagopa_sogg.pagopa_voce_tematica,
            pagopa_sogg.pagopa_voce_code, pagopa_sogg.pagopa_voce_desc,
-           pagopa_sogg.pagopa_doc_tipo_code,pagopa_sogg.pagopa_doc_tipo_id -- siac-6720
+           pagopa_sogg.pagopa_doc_tipo_code,pagopa_sogg.pagopa_doc_tipo_id, -- siac-6720
+           pagopa_sogg.pagopa_doc_iuv, pagopa_sogg.pagopa_doc_data_operazione -- 06.02.2020 Sofia siac-7375
    from  pagopa_sogg, accertamenti_sogg
    where pagopa_sogg.pagopa_anno_accertamento=accertamenti_sogg.movgest_anno
    and   pagopa_sogg.pagopa_num_accertamento=accertamenti_sogg.movgest_numero
@@ -1931,7 +2111,8 @@ BEGIN
             pagopa_sogg.pagopa_str_amm,
             pagopa_sogg.pagopa_voce_tematica,
             pagopa_sogg.pagopa_voce_code, pagopa_sogg.pagopa_voce_desc,
-            pagopa_sogg.pagopa_doc_tipo_code,pagopa_sogg.pagopa_doc_tipo_id  -- siac-6720
+            pagopa_sogg.pagopa_doc_tipo_code,pagopa_sogg.pagopa_doc_tipo_id,  -- siac-6720
+            pagopa_sogg.pagopa_doc_iuv, pagopa_sogg.pagopa_doc_data_operazione -- 06.02.2020 Sofia siac-7375
    order by  ( case when pagopa_sogg.soggetto_id is not null then pagopa_sogg.pagopa_codice_benef else accertamenti_sogg.soggetto_code end ),
    			 pagopa_sogg.pagopa_str_amm,
              pagopa_sogg.pagopa_voce_tematica,
@@ -1973,9 +2154,13 @@ BEGIN
         dnumQuote:=0;
         bErrore:=false;
 		docIUV:=null;
+        -- 06.02.2020 Sofia jira siac-7375
+        docDataOperazione:=null;
 
 		-- 12.08.2019 Sofia SIAC-6978 - inizio
-		if pagoPaFlussoRec.pagopa_doc_tipo_code=DOC_TIPO_FAT then
+--		if pagoPaFlussoRec.pagopa_doc_tipo_code=DOC_TIPO_FAT then -- SIAC-8404 Sofia 03.03.2022
+	    if ( pagoPaFlussoRec.pagopa_doc_tipo_code=DOC_TIPO_FAT or 		-- SIAC-8404 Sofia 03.03.2022
+   		    ( pagoPaFlussoRec.pagopa_doc_tipo_code=DOC_TIPO_IPA and coalesce(pagoPaFlussoRec.pagopa_doc_iuv,'X')!='X' ) ) then -- SIAC-8404 Sofia 03.03.2022
           strMessaggio:='Inserimento documento per soggetto='||pagoPaFlussoRec.pagopa_soggetto_code--||'-'||pagoPaFlussoRec.pagopa_soggetto_desc
                         ||'. Voce '||pagoPaFlussoRec.pagopa_voce_code--||'-'||coalesce(pagoPaFlussoRec.pagopa_voce_desc, ' ')
                         ||'. Struttura amministrativa '||coalesce(pagoPaFlussoRec.pagopa_str_amm,' ')||' [siac_t_doc].'
@@ -2001,7 +2186,7 @@ BEGIN
            clock_timestamp()
           );
 
-          select distinct query.pagopa_ric_doc_iuv into docIUV
+         /* select distinct query.pagopa_ric_doc_iuv into docIUV
           from
           (
              with
@@ -2149,12 +2334,18 @@ BEGIN
           and   query.pagopa_voce_code=pagoPaFlussoRec.pagopa_voce_code
           and   coalesce(query.pagopa_voce_desc,'')=coalesce(pagoPaFlussoRec.pagopa_voce_desc,coalesce(query.pagopa_voce_desc,''))
           and   coalesce(query.pagopa_str_amm,'')=coalesce(pagoPaFlussoRec.pagopa_str_amm,coalesce(query.pagopa_str_amm,''))
-          and   query.pagopa_soggetto_id=pagoPaFlussoRec.pagopa_soggetto_id;
-raise notice 'IUUUUUUUUUV docIUV=%',docIUV;
+          and   query.pagopa_soggetto_id=pagoPaFlussoRec.pagopa_soggetto_id;*/
+
+        -- 06.02.2020 Sofia jira siac-7375
+        docIUV:=pagoPaFlussoRec.pagopa_doc_iuv;
+        raise notice 'IUUUUUUUUUV docIUV=%',docIUV;
        	if coalesce(docIUV,'')='' or docIUV is null then
         	bErrore:=true;
             strMessaggio:=strMessaggio||' Lettura non riuscita.';
         end if;
+        -- 06.02.2020 Sofia jira siac-7375
+        docDataOperazione:=pagoPaFlussoRec.pagopa_doc_data_operazione;
+        raise notice 'IUUUUUUUUUV docDataOperazione=%',docDataOperazione;
 
        end if;
  	   -- 12.08.2019 Sofia SIAC-6978 - fine
@@ -2213,7 +2404,10 @@ raise notice 'IUUUUUUUUUV docIUV=%',docIUV;
         -- 13.09.2019 Sofia SIAC-7034
         if numeroFattura is null then
            numeroFattura:= pagoPaFlussoRec.pagopa_voce_code||' '
-                          ||extract ( day from dataElaborazione)||'-'||lpad(extract ( month from dataElaborazione)::varchar,2,'0')||'-'||extract ( year from dataElaborazione)||' '
+                          ||extract ( day from dataElaborazione)||'-'
+                          ||lpad(extract ( month from dataElaborazione)::varchar,2,'0')
+                          ||'-'||extract ( year from dataElaborazione)
+                          -- ||' ' 20.04.2020 Sofia jira	SIAC-7586
                           ||' '||nProgressivoTemp::varchar;
         end if;
 
@@ -2242,7 +2436,8 @@ raise notice 'IUUUUUUUUUV docIUV=%',docIUV;
             login_modifica,
 			pcccod_id, -- null ??
 	        pccuff_id,
-            IUV -- null ??  -- 12.08.2019 Sofia SIAC-6978 - fine
+            IUV, -- null ??  -- 12.08.2019 Sofia SIAC-6978 - fine
+            doc_data_operazione -- 06.02.2020 Sofia jira siac-7375
         )
         select annoBilancio,
 --               pagoPaFlussoRec.pagopa_voce_code||' '||dataElaborazione||' '||nProgressivoTemp::varchar,
@@ -2252,19 +2447,23 @@ raise notice 'IUUUUUUUUUV docIUV=%',docIUV;
                      ||pagoPaFlussoRec.pagopa_voce_code||' '
                      ||substring(coalesce(pagoPaFlussoRec.pagopa_voce_desc,' '),1,30) ||' '||strElencoFlussi),
 			   dDocImporto,
-               dataElaborazione,
-               dataElaborazione,
+--               dataElaborazione,
+--               dataElaborazione,
+               date_trunc('DAY',dataElaborazione), -- 04.03.2022 SIAC-8404
+               date_trunc('DAY',dataElaborazione), -- 04.03.2022 SIAC-8404
 --			   docTipoId, siac-6720 28.05.2019 Sofia
                pagoPaFlussoRec.pagopa_doc_tipo_id, -- siac-6720 28.05.2019 Sofia
                codBolloId,
-               clock_timestamp(),
+--               clock_timestamp(),  -- 07.11.2022 Sofia SIAC-8823
+               now(), -- 07.11.2022 Sofia SIAC-8823
                enteProprietarioId,
                loginOperazione,
                loginOperazione,
                loginOperazione,
                null,
                null,
-               docIUV   -- 12.08.2019 Sofia SIAC-6978 - fine
+               docIUV,   -- 12.08.2019 Sofia SIAC-6978 - fine
+               docDataOperazione -- 06.02.2020 Sofia jira siac-7375
         returning doc_id into docId;
 --	    raise notice 'docid=%',docId;
 		if docId is null then
@@ -2317,7 +2516,8 @@ raise notice 'IUUUUUUUUUV docIUV=%',docIUV;
          )
          select docId,
                 docStatoValId,
-                clock_timestamp(),
+                --clock_timestamp(), 06.07.2021 Sofia Jira SIAC-8277
+                now(), -- 06.07.2021 Sofia Jira SIAC-8277
                 loginOperazione,
                 enteProprietarioId
          returning doc_stato_r_id into codResult;
@@ -2874,6 +3074,9 @@ raise notice 'prima di quote berrore=%',berrore;
 		   where flusso.pagopa_elab_id=filePagoPaElabId
 		   and   doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
            and   doc.pagopa_ric_doc_tipo_id=pagoPaFlussoRec.pagopa_doc_tipo_id -- 30.05.2019 siac-6720
+           and   coalesce(doc.pagopa_ric_doc_iuv,'')=coalesce(pagoPaFlussoRec.pagopa_doc_iuv,'') -- 06.02.2020 Sofia siac-7375
+           and   coalesce(doc.pagopa_ric_doc_data_operazione,'2020-01-01'::timestamp)=
+                 coalesce(pagoPaFlussoRec.pagopa_doc_data_operazione,'2020-01-01'::timestamp) -- 06.02.2020 Sofia siac-7375
            and   coalesce(doc.pagopa_ric_doc_voce_tematica,'')=coalesce(pagoPaFlussoRec.pagopa_voce_tematica,coalesce(doc.pagopa_ric_doc_voce_tematica,''))
            and   doc.pagopa_ric_doc_voce_code=pagoPaFlussoRec.pagopa_voce_code
            and   coalesce(doc.pagopa_ric_doc_voce_desc,'')=coalesce(pagoPaFlussoRec.pagopa_voce_desc,coalesce(doc.pagopa_ric_doc_voce_desc,''))
@@ -2989,7 +3192,15 @@ raise notice 'prima di quote berrore=%',berrore;
 		           pagopa_sogg.pagopa_num_accertamento
   	   )
        loop
-
+       -- 02.03.2023 Sofia SIAC-ISSUE-16 il test nel cursore di ciclo non funziona
+       -- quindi bisogna ritestare ad inizio ciclo se e stato intercettato qualche errore nel ciclo di elaborazione delle quote
+	   if bErrore=false then 
+       raise notice '@@@Inizio ciclo quote bErrore=false';
+      else
+       raise notice '@@@Inizio ciclo quote bErrore=true docId=% subdocId=% strMessaggio=%',docId::varchar,subdocId::varchar,strMessaggio;
+      continue;
+      end if;
+     
         codResult:=null;
         codResult1:=null;
         subdocId:=null;
@@ -2997,8 +3208,9 @@ raise notice 'prima di quote berrore=%',berrore;
 		strMessaggio:='Inserimento documento per soggetto='||pagoPaFlussoRec.pagopa_soggetto_code--||'-'||pagoPaFlussoRec.pagopa_soggetto_desc
                          ||'. Voce '||pagoPaFlussoRec.pagopa_voce_code--||'-'||pagoPaFlussoRec.pagopa_voce_desc
                          ||'. Struttura amministrativa '||coalesce(pagoPaFlussoRec.pagopa_str_amm,' ')
+                         ||'. Provvisorio ' ||coalesce(pagoPaFlussoQuoteRec.pagopa_anno_provvisorio::varchar,' ')||'/'||coalesce(pagoPaFlussoQuoteRec.pagopa_num_provvisorio::varchar,' ') -- 02.03.2023 Sofia SIAC-ISSUE-16
                          ||'. Inserimento quote documento numero='||(dnumQuote+1)::varchar||' [siac_t_subdoc].';
---        raise notice 'strMessagio=%',strMessaggio;
+        raise notice 'strMessagio=%',strMessaggio;
 		strMessaggioLog:='Continue fnc_pagopa_t_elaborazione_riconc_esegui - '||strMessaggioFinale||strMessaggio;
         insert into pagopa_t_elaborazione_log
         (
@@ -3018,7 +3230,9 @@ raise notice 'prima di quote berrore=%',berrore;
          loginOperazione,
          clock_timestamp()
         );
+       
 
+     
 		-- siac_t_subdoc
         insert into siac_t_subdoc
         (
@@ -3058,7 +3272,8 @@ raise notice 'prima di quote berrore=%',berrore;
             0,   --- 05.06.2019 SIAC-6893
   			docId,
             subDocTipoId,
-            clock_timestamp(),
+            --clock_timestamp(),
+            now(), -- 07.11.2022 Sofia SIAC-8823
             enteProprietarioId,
             loginOperazione,
             loginOperazione,
@@ -3325,7 +3540,7 @@ raise notice 'prima di quote berrore=%',berrore;
                           dataElaborazione,
                           modificaTipoId,
                           attoAmmId,
-                          loginOperazione,
+                          loginOperazione||'@ELAB_PAGOPA-'||filePagoPaElabId::varchar, -- 27.02.2020 Sofia jira SIAC-7449
                           clock_timestamp(),
                           enteProprietarioId
                       )
@@ -3361,7 +3576,7 @@ raise notice 'prima di quote berrore=%',berrore;
                           modifId,
                           modifStatoId,
                           clock_timestamp(),
-                          loginOperazione,
+                          loginOperazione||'@ELAB_PAGOPA'||filePagoPaElabId::varchar, -- 27.02.2020 Sofia jira SIAC-7449
                           enteProprietarioId
                       )
                       returning mod_stato_r_id into modStatoRId;
@@ -3388,7 +3603,7 @@ raise notice 'prima di quote berrore=%',berrore;
                              det.movgest_ts_det_tipo_id,
                              pagoPaFlussoQuoteRec.pagopa_sottovoce_importo-dispAccertamento,
                              clock_timestamp(),
-                             loginOperazione,
+                             loginOperazione||'@ELAB_PAGOPA'||filePagoPaElabId::varchar, -- 27.02.2020 Sofia jira SIAC-7449
                              det.ente_proprietario_id
                       from siac_t_movgest_ts_det det
                       where det.movgest_ts_id=movgestTsId
@@ -3413,12 +3628,32 @@ raise notice 'prima di quote berrore=%',berrore;
                       set    movgest_ts_det_importo=det.movgest_ts_det_importo+
                                                     (pagoPaFlussoQuoteRec.pagopa_sottovoce_importo-dispAccertamento),
                              data_modifica=clock_timestamp(),
-                             login_operazione=det.login_operazione||'-'||loginOperazione
+                             --login_operazione=det.login_operazione||'-'||loginOperazione -- 27.02.2020 Sofia jira SIAC-7449
+                             login_operazione=loginOperazione||'@ELAB_PAGOPA-'||filePagoPaElabId::varchar -- 27.02.2020 Sofia jira SIAC-7449
                       where det.movgest_ts_id=movgestTsId
                       and   det.movgest_ts_det_tipo_id=movgestTsDetTipoId
                       and   det.data_cancellazione is null
                       and   date_trunc('DAY',now())>=date_trunc('DAY',det.validita_inizio) and date_trunc('DAY',now())<=date_trunc('DAY',coalesce(det.validita_fine,date_trunc('DAY',now())))
                       returning det.movgest_ts_det_id into codResult;
+					  --- 29.11.2021 Sofia JIRA SIAC-8371
+					  if codResult is not null then 
+					   codResult:=null;
+					   update siac_t_movgest_ts_det det
+                       set    movgest_ts_det_importo=det.movgest_ts_det_importo+
+                                                    (pagoPaFlussoQuoteRec.pagopa_sottovoce_importo-dispAccertamento),
+                              data_modifica=clock_timestamp(),
+                              --login_operazione=det.login_operazione||'-'||loginOperazione -- 27.02.2020 Sofia jira SIAC-7449
+                              login_operazione=loginOperazione||'@ELAB_PAGOPA-'||filePagoPaElabId::varchar -- 27.02.2020 Sofia jira SIAC-7449
+                       where det.movgest_ts_id=movgestTsId
+--                      and   det.movgest_ts_det_tipo_id=movgestTsDetTipoId
+                        -- 12.10.2021 Sofia JIRA SIAC-8371
+                       and   det.movgest_ts_det_tipo_id=movgestTsDetTipoUId
+                       and   det.data_cancellazione is null
+                       and   date_trunc('DAY',now())>=date_trunc('DAY',det.validita_inizio) and date_trunc('DAY',now())<=date_trunc('DAY',coalesce(det.validita_fine,date_trunc('DAY',now())))
+                       returning det.movgest_ts_det_id into codResult;
+					  end if;
+					   --- 29.11.2021 Sofia JIRA SIAC-8371
+					  
                       if codResult is null then
                       	codResult:=-1;
                         strMessaggio:=strMessaggio||' Errore in aggiornamento siac_t_movgest_ts_det.';
@@ -3452,7 +3687,7 @@ raise notice 'prima di quote berrore=%',berrore;
                           modifId,
                           movgestTsId,
                           clock_timestamp(),
-                          loginOperazione,
+                          loginOperazione||'@ELAB_PAGOPA-'||filePagoPaElabId::varchar, -- 27.02.2020 Sofia jira SIAC-7449
                           enteProprietarioId
                       )
                       returning pagopa_modifica_elab_id into codResult;
@@ -3507,7 +3742,8 @@ raise notice 'prima di quote berrore=%',berrore;
         (
                subdocId,
                movgestTsId,
-               clock_timestamp(),
+--               clock_timestamp(), siac-8543 Sofia 10.01.2022
+               now(),-- siac-8543 Sofia 10.01.2022
                loginOperazione,
                enteProprietarioId
         )
@@ -3657,7 +3893,8 @@ raise notice 'prima di quote berrore=%',berrore;
         (
                subdocId,
                provvisorioId,
-               clock_timestamp(),
+--               clock_timestamp(), 06.07.2021 Sofia Jira SIAC-8277
+               now(), --06.07.2021 Sofia Jira SIAC-8277
                loginOperazione||'@PAGOPA-'||filePagoPaElabId::varchar,
                enteProprietarioId
         )
@@ -3683,7 +3920,9 @@ raise notice 'prima di quote berrore=%',berrore;
                pagopa_ric_doc_movgest_ts_id=movgestTsId,
                pagopa_ric_doc_provc_id=provvisorioId,
                data_modifica=clock_timestamp(),
-               login_operazione=docUPD.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--               login_operazione=docUPD.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+               login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
         from
         (
          with
@@ -3697,6 +3936,9 @@ raise notice 'prima di quote berrore=%',berrore;
             where  flusso.pagopa_elab_id=filePagoPaElabId
    	        and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
 			and    doc.pagopa_ric_doc_tipo_id=pagoPaFlussoRec.pagopa_doc_tipo_id -- 30.05.2019 siac-6720
+            and    coalesce(doc.pagopa_ric_doc_iuv,'')=coalesce(pagoPaFlussoRec.pagopa_doc_iuv,'') -- 06.02.2020 Sofia siac-7375
+            and    coalesce(doc.pagopa_ric_doc_data_operazione,'2020-01-01'::timestamp)=
+                   coalesce(pagoPaFlussoRec.pagopa_doc_data_operazione,'2020-01-01'::timestamp) -- 06.02.2020 Sofia siac-7375
             and    coalesce(doc.pagopa_ric_doc_str_amm,'')=
                    coalesce(pagoPaFlussoRec.pagopa_str_amm,coalesce(doc.pagopa_ric_doc_str_amm,''))
             and    coalesce(doc.pagopa_ric_doc_voce_tematica,'')=
@@ -3827,7 +4069,9 @@ raise notice 'prima di quote berrore=%',berrore;
         set    pagopa_ric_flusso_stato_elab='S',
 			   pagopa_ric_errore_id=null,
                data_modifica=clock_timestamp(),
-               login_operazione=ric.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+--               login_operazione=ric.login_operazione||'-'||loginOperazione||'@ELAB-'||filePagoPaElabId::varchar
+               login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
 		from pagopa_t_elaborazione_flusso flusso,pagopa_t_riconciliazione_doc doc
         where flusso.pagopa_elab_id=filePagoPaElabId
         and   doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
@@ -3946,7 +4190,9 @@ raise notice 'prima di quote berrore=%',berrore;
          set    pagopa_ric_flusso_stato_elab='X',
   			    pagopa_ric_errore_id=errore.pagopa_ric_errore_id,
                 data_modifica=clock_timestamp(),
-                login_operazione=split_part(ric.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+--                login_operazione=split_part(ric.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+                login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
    	     from pagopa_t_elaborazione_flusso flusso,pagopa_t_riconciliazione_doc doc,
               pagopa_d_riconciliazione_errore errore, siac_t_subdoc sub
          where flusso.pagopa_elab_id=filePagoPaElabId
@@ -4002,7 +4248,8 @@ raise notice 'prima di quote berrore=%',berrore;
          set    pagopa_ric_flusso_stato_elab='X',
   			    pagopa_ric_errore_id=errore.pagopa_ric_errore_id,
                 data_modifica=clock_timestamp(),
-                login_operazione=split_part(docUPD.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+                --login_operazione=split_part(docUPD.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+                login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar      -- 04.02.2020 Sofia SIAC-7375
          from
          (
 		  with
@@ -4017,6 +4264,9 @@ raise notice 'prima di quote berrore=%',berrore;
             where  flusso.pagopa_elab_id=filePagoPaElabId
    	        and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
             and    doc.pagopa_ric_doc_tipo_id=pagoPaFlussoRec.pagopa_doc_tipo_id -- 30.05.2019 siac-6720
+            and   coalesce(doc.pagopa_ric_doc_iuv,'')=coalesce(pagoPaFlussoRec.pagopa_doc_iuv,'') -- 06.02.2020 Sofia siac-7375
+            and   coalesce(doc.pagopa_ric_doc_data_operazione,'2020-01-01'::timestamp)=
+                  coalesce(pagoPaFlussoRec.pagopa_doc_data_operazione,'2020-01-01'::timestamp) -- 06.02.2020 Sofia siac-7375
             and    coalesce(doc.pagopa_ric_doc_str_amm,'')=
                    coalesce(pagoPaFlussoRec.pagopa_str_amm,coalesce(doc.pagopa_ric_doc_str_amm,''))
             and    coalesce(doc.pagopa_ric_doc_voce_tematica,'')=
@@ -4143,7 +4393,8 @@ raise notice 'prima di quote berrore=%',berrore;
                 pagopa_ric_doc_movgest_ts_id=null,
                 pagopa_ric_doc_provc_id=null,
                 data_modifica=clock_timestamp(),
-                login_operazione=split_part(doc.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+--                login_operazione=split_part(doc.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+                login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar             -- 04.02.2020 Sofia SIAC-7375
          from pagopa_t_elaborazione_flusso flusso,
               pagopa_d_riconciliazione_errore errore, siac_t_subdoc sub
          where flusso.pagopa_elab_id=filePagoPaElabId
@@ -4189,7 +4440,8 @@ raise notice 'prima di quote berrore=%',berrore;
                 pagopa_ric_doc_movgest_ts_id=null,
                 pagopa_ric_doc_provc_id=null,
                 data_modifica=clock_timestamp(),
-                login_operazione=split_part(docUPD.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+--                login_operazione=split_part(docUPD.login_operazione,'@ELAB-'||filePagoPaElabId::varchar, 1)||'@ELAB-'||filePagoPaElabId::varchar
+                login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar          -- 04.02.2020 Sofia SIAC-7375
          from
          (
 		  with
@@ -4204,6 +4456,9 @@ raise notice 'prima di quote berrore=%',berrore;
             where  flusso.pagopa_elab_id=filePagoPaElabId
    	        and    doc.pagopa_elab_flusso_id=flusso.pagopa_elab_flusso_id
             and    doc.pagopa_ric_doc_tipo_id=pagoPaFlussoRec.pagopa_doc_tipo_id -- 30.05.2019 siac-6720
+            and    coalesce(doc.pagopa_ric_doc_iuv,'')=coalesce(pagoPaFlussoRec.pagopa_doc_iuv,'') -- 06.02.2020 Sofia siac-7375
+            and    coalesce(doc.pagopa_ric_doc_data_operazione,'2020-01-01'::timestamp)=
+                   coalesce(pagoPaFlussoRec.pagopa_doc_data_operazione,'2020-01-01'::timestamp) -- 06.02.2020 Sofia siac-7375
             and    coalesce(doc.pagopa_ric_doc_str_amm,'')=
                    coalesce(pagoPaFlussoRec.pagopa_str_amm,coalesce(doc.pagopa_ric_doc_str_amm,''))
             and    coalesce(doc.pagopa_ric_doc_voce_tematica,'')=
@@ -4432,8 +4687,8 @@ raise notice 'prima di quote berrore=%',berrore;
   strMessaggio:='Aggiornamento numerazione su siac_t_registrounico_doc_num.';
   update siac_t_registrounico_doc_num num
   set    rudoc_registrazione_numero= coalesce(QUERY.rudoc_registrazione_numero,0),
-         data_modifica=clock_timestamp(),
-         login_operazione=num.login_operazione||'-'||loginOperazione
+         data_modifica=clock_timestamp()--, 26.08.2020 Sofia Jira SIAC-7747
+         -- login_operazione=num.login_operazione||'-'||loginOperazione 26.08.2020 Sofia Jira SIAC-7747
   from
   (
    select max(doc.rudoc_registrazione_numero::integer) rudoc_registrazione_numero
@@ -4706,7 +4961,9 @@ raise notice 'prima di quote berrore=%',berrore;
               validita_fine=(case when pagoPaCodeErr=ELABORATO_OK_ST then clock_timestamp() else null end),
               file_pagopa_stato_id=stato.file_pagopa_stato_id,
               file_pagopa_note=file.file_pagopa_note||upper(strMessaggioFinale),
-              login_operazione=file.login_operazione||'-'||loginOperazione
+--              login_operazione=file.login_operazione||'-'||loginOperazione
+              login_operazione=loginOperazione||'@ELAB-'||filePagoPaElabId::varchar  -- 04.02.2020 Sofia SIAC-7375
+
        from  siac_d_file_pagopa_stato stato,pagopa_d_riconciliazione_errore err
        where file.file_pagopa_id=elabRec.file_pagopa_id
        and   stato.ente_proprietario_id=file.ente_proprietario_id
@@ -4755,3 +5012,8 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter function siac.fnc_pagopa_t_elaborazione_riconc_esegui
+( integer, integer, integer , varchar , timestamp ,  
+  out integer,
+  out varchar) owner to siac;

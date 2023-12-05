@@ -2,7 +2,8 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_reimputa_vincoli_acc (
+create or replace function fnc_fasi_bil_gest_reimputa_vincoli_acc
+(
   enteproprietarioid integer,
   annobilancio integer,
   faseBilElabId integer,
@@ -182,29 +183,43 @@ BEGIN
 	   end if;
 
 	   if importoVinc>0 then
+
         codResult:=null;
-   		-- insert into siac_r_movgest_ts
-	    insert into siac_r_movgest_ts
-	    (
-    		movgest_ts_a_id,
-        	movgest_ts_b_id,
-	        movgest_ts_importo,
-    	   -- avav_id, 21.02.2018 Sofia
-    	    validita_inizio,
-	        login_operazione,
-	        ente_proprietario_id
-	    )
-    	values
-	    (
-    		movGestRec.movgest_ts_riacc_id,
-	        movgestTsImpNewId,
-	        importoVinc,
-	       -- avavRiaccImpId, 21.02.2018 Sofia
-    	    clock_timestamp(),
-	        loginOperazione,
-	        enteProprietarioId
-        )
+        update siac_r_movgest_ts rs
+        set    movgest_ts_importo=rs.movgest_ts_importo+importoVinc,
+               data_modifica=clock_timestamp()
+        where rs.movgest_ts_b_id=movgestTsImpNewId
+        and   rs.movgest_ts_a_id=movGestRec.movgest_ts_riacc_id
+        and   rs.data_cancellazione is null
+        and   rs.validita_fine is null
         returning movgest_ts_r_id into codResult;
+
+        if codResult is null then
+          --codResult:=null;
+          -- insert into siac_r_movgest_ts
+          insert into siac_r_movgest_ts
+          (
+              movgest_ts_a_id,
+              movgest_ts_b_id,
+              movgest_ts_importo,
+             -- avav_id, 21.02.2018 Sofia
+              validita_inizio,
+              login_operazione,
+              ente_proprietario_id
+          )
+          values
+          (
+              movGestRec.movgest_ts_riacc_id,
+              movgestTsImpNewId,
+              importoVinc,
+             -- avavRiaccImpId, 21.02.2018 Sofia
+              clock_timestamp(),
+              loginOperazione,
+              enteProprietarioId
+          )
+          returning movgest_ts_r_id into codResult;
+        end if;
+
         if codResult is null then
         	daCancellare:=true;
         else numeroVinc:=numeroVinc+1;
@@ -237,28 +252,40 @@ BEGIN
 	    if codResult is null then
     	 	raise exception ' Errore in inserimento LOG.';
 	    end if;
+
 		-- insert into
         codResult:=null;
-	    insert into siac_r_movgest_ts
-    	(
-	        movgest_ts_b_id,
-    	    avav_id,
-	        movgest_ts_importo,
-	        validita_inizio,
-	        login_operazione,
-	        ente_proprietario_id
-	    )
-	    values
-	    (
-	        movgestTsImpNewId,
-	        avavRiaccImpId,
-    	    daVincolare,
-	        clock_timestamp(),
-	        loginOperazione,
-	        enteProprietarioId
-	    )
+        update siac_r_movgest_ts rs
+        set    movgest_ts_importo=rs.movgest_ts_importo+daVincolare,
+               data_modifica=clock_timestamp()
+        where rs.movgest_ts_b_id=movgestTsImpNewId
+        and   rs.avav_id=avavRiaccImpId
+        and   rs.data_cancellazione is null
+        and   rs.validita_fine is null
         returning movgest_ts_r_id into codResult;
-               raise notice 'codResult=%',codResult;
+
+        if codResult is null then
+          insert into siac_r_movgest_ts
+          (
+              movgest_ts_b_id,
+              avav_id,
+              movgest_ts_importo,
+              validita_inizio,
+              login_operazione,
+              ente_proprietario_id
+          )
+          values
+          (
+              movgestTsImpNewId,
+              avavRiaccImpId,
+              daVincolare,
+              clock_timestamp(),
+              loginOperazione,
+              enteProprietarioId
+          )
+          returning movgest_ts_r_id into codResult;
+        end if;
+        raise notice 'codResult=%',codResult;
 
         if codResult is null then
 	       	daCancellare:=true;

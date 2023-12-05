@@ -232,7 +232,11 @@ for dati_movimenti in
                                 	and d_assenza_motiv.data_cancellazione IS NULL)
                             LEFT JOIN siac_r_movgest_ts r_movgest_ts
                             	ON (r_movgest_ts.movgest_ts_b_id=movgest_ts.movgest_ts_id
-                                	and r_movgest_ts.data_cancellazione IS NULL),                    	
+                                	and r_movgest_ts.data_cancellazione IS NULL
+                                    --06/10/2023 siac-task-issue #221:
+                                    --aggiunto controllo sulla data fine validita perche' l'applicativo non imposta
+                                    --la data cancellazione ma solo quella di fine validita'
+                                    and r_movgest_ts.validita_fine IS NULL),                    	
                         siac_t_movgest_ts_det		t_movgest_ts_det,                    
                         siac_d_movgest_ts_det_tipo 	d_movgest_ts_det_tipo,
                         siac_r_movgest_ts_stato		r_movgest_ts_stato,
@@ -493,4 +497,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR240_mov_cas_econ" (p_ente_prop_id integer, p_anno varchar, p_data_da date, p_data_a date, p_cassaecon_id integer, p_num_impegno numeric, p_ant_spese_missione varchar)
+  OWNER TO siac;

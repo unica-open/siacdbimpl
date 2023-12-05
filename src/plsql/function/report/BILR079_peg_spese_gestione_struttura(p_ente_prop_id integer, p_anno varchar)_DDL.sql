@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR079_peg_spese_gestione_struttura" (
@@ -985,7 +985,16 @@ having count(*)=1)
             	/* aggiunto questo join x estrarre l'eventuale riferimento all'ex capitolo */
             left 	join 	siac_r_bil_elem_rel_tempo rel_tempo on rel_tempo.elem_id 	=  t1.elem_id and rel_tempo.data_cancellazione is null
             left	join 	siac_t_bil_elem		bil_elem	on bil_elem.elem_id = rel_tempo.elem_id_old and bil_elem.data_cancellazione is null               
-            order by missione_code,programma_code,titusc_code,macroag_code   	
+	--01/06/2023 siac-task-issue #24.
+	--Sono restituiti i dati in cui almeno uno degli importi non e' 0.
+    where COALESCE(t1.stanziamento_prev_anno,0) <> 0 OR COALESCE(t1.stanziamento_prev_anno1,0) <> 0 OR
+    		COALESCE(t1.stanziamento_prev_anno2,0) <> 0 OR COALESCE(t1.stanziamento_prev_res_anno,0) <> 0 OR
+            COALESCE(t1.stanziamento_anno_prec,0) <> 0 OR COALESCE(t1.stanziamento_prev_cassa_anno,0) <> 0 OR
+            COALESCE(t1.stanziamento_fpv_anno_prec,0) <> 0 OR COALESCE(t1.stanziamento_fpv_anno,0) <> 0 OR
+            COALESCE(t1.stanziamento_fpv_anno1,0) <> 0 OR COALESCE(t1.stanziamento_fpv_anno2,0) <> 0 OR
+            COALESCE(t2.impegnato_anno,0) <> 0 OR COALESCE(t2.impegnato_anno1,0) <> 0 OR
+            COALESCE(t2.impegnato_anno2,0) <> 0
+	order by missione_code,programma_code,titusc_code,macroag_code   	
 loop
       missione_tipo_desc:= classifBilRec.missione_tipo_desc;
       missione_code:= classifBilRec.missione_code;
@@ -1176,4 +1185,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR079_peg_spese_gestione_struttura" (p_ente_prop_id integer, p_anno varchar)
+  OWNER TO siac;

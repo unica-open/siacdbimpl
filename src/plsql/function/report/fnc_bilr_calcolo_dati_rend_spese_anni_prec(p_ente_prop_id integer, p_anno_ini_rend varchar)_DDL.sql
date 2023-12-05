@@ -125,7 +125,7 @@ raise notice 'BilId dell''anno % = %', p_anno_ini_rend, bilId;
 
 	/* Leggo gli ID dei bilanci coinvolti (da 1 a 3) in modo da velocizzare le
     	query successive non usando il join con le tabelle siac_t_bil e siac_t_periodo.
-        Questo vale soprattito per la query degli impegni che e' piu' lenta.    
+        Questo vale soprattutto per la query degli impegni che e' piu' lenta.    
     */
 bilId1:=0; --anno precedente-2 quello del rendiconto
 bilId2:=0; --anno precedente-1 quello del rendiconto
@@ -407,7 +407,15 @@ where
 	and	stato_capitolo.data_cancellazione 			is null 
     and	r_capitolo_stato.data_cancellazione 		is null
 	and	cat_del_capitolo.data_cancellazione 		is null
-    and	r_cat_capitolo.data_cancellazione 			is null),
+    and	r_cat_capitolo.data_cancellazione 			is null
+-- 20/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un''esigenza di CMTO.   
+    and capitolo.elem_id NOT IN (select elem_id
+			from siac_t_bil_elem_escludi_indicatori escludi
+            where escludi.ente_proprietario_id = '||p_ente_prop_id	||'
+            	and escludi.validita_fine IS NULL
+                and escludi.data_cancellazione IS NULL)),
  impegni as (
     select-- t_periodo.anno anno_bil,     
         sum(t_movgest_ts_det.movgest_ts_det_importo) importo_impegno,

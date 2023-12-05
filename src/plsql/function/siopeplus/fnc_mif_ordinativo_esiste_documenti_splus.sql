@@ -2,7 +2,12 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION fnc_mif_ordinativo_esiste_documenti_splus( ordinativoId integer,
+drop function if exists siac.fnc_mif_ordinativo_esiste_documenti_splus( ordinativoId integer,
+                                                                      tipiDocumento   varchar,
+                                                   	                  enteProprietarioId integer
+                                                                      );
+                                                                     
+CREATE OR REPLACE FUNCTION siac.fnc_mif_ordinativo_esiste_documenti_splus( ordinativoId integer,
                                                                       tipiDocumento   varchar,
                                                    	                  enteProprietarioId integer
                                                                       )
@@ -20,6 +25,8 @@ tipoDocFPR   varchar(10):=null;
 tipoDocFAT   varchar(10):=null;
 tipoDocNCD   varchar(10):=null;
 
+-- 29.03.2023 Sofia Jira SIAC-8888
+tipoDocNTE   varchar(10):=null;
 BEGIN
 
  strMessaggio:='Lettura esistenza documenti collegati.';
@@ -30,6 +37,8 @@ BEGIN
  tipoDocFAT:=trim (both ' ' from split_part(tipiDocumento,'|',2));
  tipoDocNCD:=trim (both ' ' from split_part(tipiDocumento,'|',3));
 
+-- 29.03.2023 Sofia Jira SIAC-8880
+ tipoDocNTE:=trim (both ' ' from split_part(tipiDocumento,'|',4));
 
 
   select doc.doc_id into numeroDocs
@@ -40,7 +49,8 @@ BEGIN
   and   subdoc.subdoc_id=subdocts.subdoc_id
   and   doc.doc_id=subdoc.doc_id
   and   tipo.doc_tipo_id=doc.doc_tipo_id
-  and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoDocFAT,tipoDocNCD)=true
+--  and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoDocFAT,tipoDocNCD)=TRUE -- 29.03.2023 Sofia Jira SIAC-8880
+  and   fnc_mif_isDocumentoCommerciale_splus(doc.doc_id,tipoDocFPR,tipoDocFAT,tipoDocNCD,tipoDocNTE)=TRUE -- 29.03.2023 Sofia Jira SIAC-8880
   and   tipo.doc_tipo_code!=DOC_TIPO_ALG
   and   ordts.data_cancellazione is null and ordts.validita_fine is null
   and   subdocts.data_cancellazione is null AND subdocts.validita_fine is null
@@ -78,3 +88,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter FUNCTION siac.fnc_mif_ordinativo_esiste_documenti_splus (  integer,  varchar, integer) owner to siac;                                                                      

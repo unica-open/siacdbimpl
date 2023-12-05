@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE PCK_MIGRAZIONE_SOGGETTI_SIAC AS
     function fnc_migrazione_mod_accredito(pEnte number,pMsgRes out varchar2) return number;
     procedure migrazione_soggetto(pEnte number,pCodRes out number,pMsgRes out varchar2);

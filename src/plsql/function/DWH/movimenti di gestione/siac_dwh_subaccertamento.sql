@@ -1,8 +1,8 @@
-/*
+﻿/*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE TABLE siac.siac_dwh_subaccertamento (
+﻿CREATE TABLE siac.siac_dwh_subaccertamento (
   ente_proprietario_id INTEGER,
   ente_denominazione VARCHAR(500),
   bil_anno VARCHAR(4),
@@ -83,6 +83,7 @@ CREATE TABLE siac.siac_dwh_subaccertamento (
   numriaccertato VARCHAR(500),
   numorigineplur VARCHAR(500),
   flagdariaccertamento VARCHAR(1),
+  flagdareanno         VARCHAR(1), -- 19.02.2020 Sofia jira siac-7292
   anno_atto_amministrativo VARCHAR(4),
   num_atto_amministrativo VARCHAR(500),
   oggetto_atto_amministrativo VARCHAR(500),
@@ -104,8 +105,13 @@ CREATE TABLE siac.siac_dwh_subaccertamento (
   importo_quietanziato NUMERIC,
   importo_emesso NUMERIC,
   data_elaborazione TIMESTAMP WITHOUT TIME ZONE DEFAULT now(),
-  flagcollegamentoaccertamentofattura VARCHAR(1)
-) 
+  flagcollegamentoaccertamentofattura VARCHAR(1),
+   -- SIAC-7541 23.04.2020 Sofia
+  cod_cdr_struttura_comp       VARCHAR(200),
+  desc_cdr_struttura_comp      VARCHAR(500),
+  cod_cdc_struttura_comp       VARCHAR(200),
+  desc_cdc_struttura_comp      VARCHAR(500)
+)
 WITH (oids = false);
 
 COMMENT ON COLUMN siac.siac_dwh_subaccertamento.bil_anno

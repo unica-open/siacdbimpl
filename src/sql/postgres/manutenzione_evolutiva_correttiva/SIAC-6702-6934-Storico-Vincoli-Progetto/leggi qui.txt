@@ -1,1 +1,7 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 In questa cartella sono incluse le modifiche sia per SIAC-6702 SIAC-6934

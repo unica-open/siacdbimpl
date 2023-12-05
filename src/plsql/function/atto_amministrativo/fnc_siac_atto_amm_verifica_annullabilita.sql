@@ -2,7 +2,13 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_siac_atto_amm_verifica_annullabilita (
+
+drop function if exists siac.fnc_siac_atto_amm_verifica_annullabilita (
+  attoamm_id_in integer
+);
+
+
+CREATE OR REPLACE FUNCTION siac.fnc_siac_atto_amm_verifica_annullabilita (
   attoamm_id_in integer
 )
 RETURNS boolean AS
@@ -126,25 +132,13 @@ if annullabile = true THEN
 
 end if;
 
+
+/* 15.03.2024 Sofia SIAC-TASK-#44
 if annullabile = true THEN
 
-  for rec5 in
-  select * from siac_r_mutuo_atto_amm ra, siac_t_mutuo m, siac_r_mutuo_stato ms, siac_d_mutuo_stato sta
-  where
-  m.mut_id=ra.mut_id
-  and m.mut_id=ms.mut_id
-  and ms.mut_stato_id=sta.mut_stato_id
-  and sta.mut_stato_code<>'A'
-  and test_data between ms.validita_inizio and coalesce(ms.validita_fine,test_data)
- and test_data between ra.validita_inizio and coalesce(ra.validita_fine,test_data)
-  and ra.attoamm_id=attoamm_id_in
-   and ra.data_cancellazione is null limit 1
-  loop
-  annullabile:= false;
-  end loop;
 
 end if;
-
+*/
 
 if annullabile = true THEN
 
@@ -325,3 +319,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter function  siac.fnc_siac_atto_amm_verifica_annullabilita( integer) owner to siac;

@@ -36,7 +36,7 @@ BEGIN
 	Funzione che estrae i dati dei capitoli di spesa/previsione suddivisi per Missione 
     e Programma.
     Gli importi sono restituiti nei 3 anni di previsione.
-    Inoltre è anche restituito l'importo dei soli capitoli FPV relativi all'anno
+    Inoltre e' anche restituito l'importo dei soli capitoli FPV relativi all'anno
     precedente quello del bilancio.
     La funzione e' utilizzata dai report:
     	- BILR172 - Indicatori analitici di spesa per Organismi ed enti strumentali delle Regioni e delle Province aut.
@@ -132,7 +132,7 @@ importi_cap as  (
             sum(tab.importo_res_anno1) importo_res_anno1,
             sum(tab.importo_res_anno2) importo_res_anno2,
             sum(tab.importo_res_anno3) importo_res_anno3
-from (select 	capitolo_importi.elem_id,
+	from (select 	capitolo_importi.elem_id,
                 capitolo_imp_periodo.anno 			BIL_ELE_IMP_ANNO,
                 capitolo_imp_tipo.elem_det_tipo_code 	TIPO_IMP,
                 case when capitolo_imp_periodo.anno =annoCap1 and capitolo_imp_tipo.elem_det_tipo_code = 'STA'
@@ -153,7 +153,7 @@ from (select 	capitolo_importi.elem_id,
                 	then sum(capitolo_importi.elem_det_importo) end importo_res_anno2,      
                 case when capitolo_imp_periodo.anno =annoCap3 and capitolo_imp_tipo.elem_det_tipo_code = 'STR'
                 	then sum(capitolo_importi.elem_det_importo) end importo_res_anno3      
-    from 		siac_t_bil_elem_det 		capitolo_importi,
+    	from 		siac_t_bil_elem_det 		capitolo_importi,
                 siac_d_bil_elem_det_tipo 	capitolo_imp_tipo,
                 siac_t_periodo 				capitolo_imp_periodo,
                 siac_t_bil_elem 			capitolo,
@@ -212,7 +212,15 @@ SELECT  annoIniRend::varchar bil_anno,
 FROM strut_bilancio
 	LEFT JOIN capitoli on (strut_bilancio.programma_id =  capitoli.programma_id
         			AND strut_bilancio.macroag_id =  capitoli.macroaggregato_id)
-    LEFT JOIN importi_cap on importi_cap.elem_id = capitoli.elem_id;
+    LEFT JOIN importi_cap on importi_cap.elem_id = capitoli.elem_id
+-- 19/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+WHERE capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+			from siac_t_bil_elem_escludi_indicatori escludi
+            where escludi.ente_proprietario_id = p_ente_prop_id
+            	and escludi.validita_fine IS NULL
+                and escludi.data_cancellazione IS NULL);
                     
 EXCEPTION
 	when no_data_found THEN

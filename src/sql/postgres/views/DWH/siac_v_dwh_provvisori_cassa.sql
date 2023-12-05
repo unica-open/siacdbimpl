@@ -2,7 +2,8 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE VIEW siac.siac_v_dwh_provvisori_cassa(
+drop VIEW if exists siac.siac_v_dwh_provvisori_cassa;
+CREATE OR REPLACE VIEW siac.siac_v_dwh_provvisori_cassa(
     ente_proprietario_id,
     provc_tipo_code,
     provc_tipo_desc,
@@ -22,7 +23,11 @@
     provc_accettato,
     provc_note,
     provc_conto_evidenza, -- 28.05.2018 Sofia siac-6126
-    provc_descrizione_conto_evidenza) -- 28.05.2018 Sofia siac-6126
+    provc_descrizione_conto_evidenza, -- 28.05.2018 Sofia siac-6126
+    -- 17.02.2021 Sofia 	SIAC-8023
+    provc_data_invio_servizio, 
+    provc_data_rifiuto_err_attrib
+    )
 AS
 WITH provv AS(
   SELECT a.ente_proprietario_id,
@@ -41,7 +46,10 @@ WITH provv AS(
          a.provc_id,
          a.provc_data_trasmissione,
          a.provc_accettato,
-         a.provc_note
+         a.provc_note,
+         -- 17.02.2021 Sofia 	SIAC-8023
+         a.provc_data_invio_servizio  provc_data_invio_servizio, 
+         a.provc_data_rifiuto_errata_attribuzione provc_data_rifiuto_err_attrib
   FROM siac_t_prov_cassa a,
        siac_d_prov_cassa_tipo b
   WHERE a.provc_tipo_id = b.provc_tipo_id AND
@@ -130,8 +138,12 @@ WITH provv AS(
              provv.provc_accettato,
              provv.provc_note,
              provc_conto_evidenza.conto_evidenza, -- 28.05.2018 Sofia siac-6126
-             provc_conto_evidenza.descrizione_conto_evidenza -- 28.05.2018 Sofia siac-6126
+             provc_conto_evidenza.descrizione_conto_evidenza, -- 28.05.2018 Sofia siac-6126
+             -- 17.02.2021 Sofia 	SIAC-8023
+             provv.provc_data_invio_servizio, 
+             provv.provc_data_rifiuto_err_attrib
       FROM provv
            LEFT JOIN sac ON sac.provc_id = provv.provc_id
            left join provc_conto_evidenza on (provv.provc_id=provc_conto_evidenza.provc_id) -- 28.05.2018 Sofia siac-6126
       ORDER BY provv.ente_proprietario_id;
+alter VIEW siac.siac_v_dwh_provvisori_cassa owner to siac;

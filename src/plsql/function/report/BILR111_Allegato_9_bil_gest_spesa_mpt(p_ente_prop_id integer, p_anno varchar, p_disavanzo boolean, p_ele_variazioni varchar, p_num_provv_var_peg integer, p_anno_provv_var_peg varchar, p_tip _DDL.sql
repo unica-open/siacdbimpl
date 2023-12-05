@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR111_Allegato_9_bil_gest_spesa_mpt" (
@@ -140,6 +140,17 @@ IF p_ele_variazioni IS NOT NULL AND p_ele_variazioni <> '' THEN
   END LOOP;
   -- ALESSANDRO - SIAC-5208 - FINE
 END IF;
+
+--INC000004803136 10/03/2021.
+--Controllo aggiunto per ovviare ad un errato passaggio di parametri dal report.
+--Dovra' essere tolto quando il report sara' corretto.
+if p_code_sac_direz_peg = '99' then
+	p_code_sac_direz_peg:='999';
+end if;
+if p_code_sac_direz_bil = '99' then
+	p_code_sac_direz_bil:='999';
+end if;
+
 
 /* 25/09/2017: parametri nuovi, controllo che se e' passato uno tra numero/anno/tipo
     	provvedimento di variazione di PEG o di BILANCIO, siano passati anche
@@ -737,7 +748,14 @@ select  tb1.elem_id,
         and	tb6.utente	=	user_table;
 
 raise notice '6: %', clock_timestamp()::varchar; 
-     RTN_MESSAGGIO:='insert tabella siac_rep_cap_up_imp_riga FPV''.';  
+     RTN_MESSAGGIO:='insert tabella siac_rep_cap_up_imp_riga FPV''.'; 
+     
+     
+/* SIAC-8785 03/08/2022.
+   Per gli importi dei capitoli FPV occorre inserire anche la cassa e
+   i residui per prevenire eventuali errori di importi inseriti come FPV che poi
+   eventualmente potrebbero essere tolti tramite variazione */                    
+/*      
 insert into siac_rep_cap_up_imp_riga
 select  tb7.elem_id,      
     	0,
@@ -772,7 +790,44 @@ select  tb7.elem_id,
         and	tb8.utente	=	tb9.utente
         and	tb9.utente	=	tb10.utente	
         and	tb10.utente	=	user_table;
-        
+*/
+
+-- insert modificata per SIAC-8785: inseriti anche cassa e residui per PFV.
+insert into siac_rep_cap_up_imp_riga
+select  tb7.elem_id,      
+    	0,
+    	0,
+    	0,
+   	 	tb11.importo	as		stanziamento_prev_res_anno,
+    	0,
+    	tb12.importo 	as 		stanziamento_prev_cassa_anno,
+        tb7.importo		as		stanziamento_fpv_anno_prec,
+  		tb8.importo		as		stanziamento_fpv_anno,
+  		tb9.importo		as		stanziamento_fpv_anno1,
+  		tb10.importo	as		stanziamento_fpv_anno2,
+        tb7.ente_proprietario,
+        user_table utente 
+from 
+        siac_rep_cap_up_imp tb7, siac_rep_cap_up_imp tb8, siac_rep_cap_up_imp tb9,
+        siac_rep_cap_up_imp tb10, siac_rep_cap_up_imp tb11, siac_rep_cap_up_imp tb12
+where tb7.elem_id	=	tb8.elem_id 
+and tb8.elem_id	=	tb9.elem_id
+and  tb9.elem_id	=	tb10.elem_id 
+and  tb10.elem_id	=	tb11.elem_id 
+and  tb11.elem_id	=	tb12.elem_id 
+AND  -- 06/09/2016: aggiunto FPVC
+	tb7.periodo_anno = annoCapImp AND	tb7.tipo_imp = 	TipoImpstanzresidui	and	tb7.tipo_capitolo	IN ('FPV','FPVC')
+and tb8.periodo_anno = annoCapImp	AND	tb8.tipo_imp =	TipoImpComp			and	tb8.tipo_capitolo 		IN ('FPV','FPVC')
+AND tb9.periodo_anno = annoCapImp1	AND	tb9.tipo_imp =	tb8.tipo_imp 		and	tb9.tipo_capitolo		IN ('FPV','FPVC')
+and tb10.periodo_anno = annoCapImp2	AND	tb10.tipo_imp =	tb8.tipo_imp		and	tb10.tipo_capitolo		IN ('FPV','FPVC')
+and tb11.periodo_anno = annoCapImp	AND	tb11.tipo_imp =	TipoImpRes			and	tb11.tipo_capitolo 		IN ('FPV','FPVC')
+and tb12.periodo_anno = annoCapImp	AND	tb12.tipo_imp =	TipoImpCassa		and	tb12.tipo_capitolo 		IN ('FPV','FPVC')
+and tb7.utente 	= 	tb8.utente	
+and	tb8.utente	=	tb9.utente
+and	tb9.utente	=	tb10.utente	
+and	tb10.utente	=	tb11.utente	
+and	tb11.utente	=	tb12.utente	
+and	tb12.utente	=	user_table;              
 
      RTN_MESSAGGIO:='insert tabella siac_rep_mptm_up_cap_importi''.';  
 
@@ -939,7 +994,8 @@ IF (p_ele_variazioni IS NOT NULL AND p_ele_variazioni <> '') OR
   
     sql_query=sql_query || ' and testata_variazione.ente_proprietario_id	=  ' || p_ente_prop_id ||'     
     and		anno_eserc.anno			= 	'''||p_anno||'''
-    and		tipologia_stato_var.variazione_stato_tipo_code in (''B'',''G'', ''C'', ''P'')
+    --10/10/2022 SIAC-8827  Aggiunto lo stato BD.
+    and		tipologia_stato_var.variazione_stato_tipo_code in (''B'',''G'', ''C'', ''P'',''BD'')
     and		tipo_capitolo.elem_tipo_code = ''' || elemTipoCode|| '''    
     and		tipo_elemento.elem_det_tipo_code	in (''STA'',''SCA'',''STR'') ';
    
@@ -1720,4 +1776,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR111_Allegato_9_bil_gest_spesa_mpt" (p_ente_prop_id integer, p_anno varchar, p_disavanzo boolean, p_ele_variazioni varchar, p_num_provv_var_peg integer, p_anno_provv_var_peg varchar, p_tipo_provv_var_peg varchar, p_num_provv_var_bil integer, p_anno_provv_var_bil varchar, p_tipo_provv_var_bil varchar, p_code_sac_direz_peg varchar, p_code_sac_sett_peg varchar, p_code_sac_direz_bil varchar, p_code_sac_sett_bil varchar)
+  OWNER TO siac;

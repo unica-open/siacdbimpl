@@ -2,33 +2,24 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿-- 18.01.2016 Sofia
--- 30.06.2016 Sofia - gestione fase e gestione backup aggiornamento strutture senza cancellazione logica
--- 13.10.2016 Sofia - aggiunta faseBilancio per gestione provvisorio da previsione
 
---06.04.2016 Anto - predisposizione bilancio di previsione da gestione precedente
--- bilancio gestione annoBilancio-1
--- 07.07.2016 Anto - adeguamenti per backup
--- 04.11.2016 Anto JIRA-SIAC-4161- aggiunto esclusione dei capitoli annullati
--- 11.11.2016 Anto JIRA-SIAC-4167- gestione segnalazioni e ribaltamento anche se classificatori non validi
-
-/*DROP FUNCTION fnc_fasi_bil_prev_approva_struttura
-(
+drop function if exists siac.fnc_fasi_bil_prev_approva_struttura (
   annobilancio integer,
-  euElemTipo   varchar,
-  bilElemPrevTipo varchar,
-  bilElemGestTipo varchar,
-  checkGest       boolean, -- TRUE: il dato di  gestione viene aggiornato al dato di previsione, FALSE il dato di gestione non viene aggiornato.
+  fasebilancio varchar,
+  euelemtipo varchar,
+  bilelemprevtipo varchar,
+  bilelemgesttipo varchar,
+  checkgest boolean,
   enteproprietarioid integer,
   loginoperazione varchar,
   dataelaborazione timestamp,
-  out faseBilElabIdRet integer,
+  out fasebilelabidret integer,
   out codicerisultato integer,
   out messaggiorisultato varchar
-);*/
+);
 
 
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_prev_approva_struttura (
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_prev_approva_struttura (
   annobilancio integer,
   fasebilancio varchar,
   euelemtipo varchar,
@@ -126,6 +117,11 @@ DECLARE
     -- anto JIRA-SIAC-4167 15.11.2016
     dataInizioValClass timestamp:=null;
     dataFineValClass   timestamp:=null;
+   
+    -- 25.10.2021 Sofia SIAC-8383
+    bilancioPrecId     integer:=null;
+
+
 BEGIN
 
 
@@ -372,7 +368,16 @@ BEGIN
     and   per.periodo_id=bil.periodo_id
     and   per.anno::INTEGER=annoBilancio;
 
+    
+    -- 25.10.2021 Sofia SIAC-8383
+    strMessaggio:='Lettura bilancioId per annoBilancio-1='||(annoBilancio-1)::varchar||'.';
+    select bil.bil_id into strict bilancioPrecId
+    from siac_t_bil bil, siac_t_periodo per
+    where bil.ente_proprietario_id=enteProprietarioId
+    and   per.periodo_id=bil.periodo_id
+    and   per.anno::INTEGER=annoBilancio-1;
 
+   
 	codResult:=null;
 	insert into fase_bil_t_elaborazione_log
     (fase_bil_elab_id,fase_bil_elab_log_operazione,
@@ -496,7 +501,6 @@ BEGIN
      and   prev.elem_tipo_id=bilElemPrevTipoId
      and   prev.bil_id=bilancioId
      and   prev.data_cancellazione is null
-
      and   exists (select 1 from siac_r_bil_elem_stato rstato -- 15.11.2016 Anto JIRA-SIAC-4161
                   					 where rstato.elem_id=prev.elem_id
 				                     and   rstato.elem_stato_id!=bilElemStatoANId
@@ -885,16 +889,39 @@ BEGIN
         			    '.Elemento di bilancio '||elemBilPrev.elem_code||' '
                                                ||elemBilPrev.elem_code2||' '
                                                ||elemBilPrev.elem_code3||' : siac_r_bil_elem_rel_tempo.' ;
- 		  insert into siac_r_bil_elem_rel_tempo
+		-- siac-8383 Sofia 14.10.2021 
+		-- elem_id_old deve essere ricalcolato in base al suo stesso equivalente di gestione in annobilancio-1
+		-- attenzione anche al controllo dopo la insert o da commentare o da correggere											   
+/* 		  insert into siac_r_bil_elem_rel_tempo
           (elem_id, elem_id_old, validita_inizio, ente_proprietario_id,login_operazione)
           (select bilElemIdRet,v.elem_id_old, dataInizioVal,v.ente_proprietario_id, loginOperazione
            from siac_r_bil_elem_rel_tempo v
            where v.elem_id=elemBilPrev.elem_id
 	       and   v.data_cancellazione is null
            and   date_trunc('day',dataElaborazione)>=date_trunc('day',v.validita_inizio)
-	   	   and   ( date_trunc('day',dataElaborazione)<=date_trunc('day',v.validita_fine) or v.validita_fine is null));
+	   	   and   ( date_trunc('day',dataElaborazione)<=date_trunc('day',v.validita_fine) or v.validita_fine is null));*/
 
-          codResult:=null;
+	   	  -- siac-8383 Sofia 25.10.2021
+		  -- SIAC-8480 Sofia 22.11.2021
+	   	  insert into siac_r_bil_elem_rel_tempo
+          (elem_id, elem_id_old, validita_inizio, ente_proprietario_id,login_operazione)
+          (select bilElemIdRet,enew.elem_id, dataInizioVal,v.ente_proprietario_id, loginOperazione
+           from siac_r_bil_elem_rel_tempo v,siac_t_bil_elem e,siac_t_bil_elem enew
+           where v.elem_id=elemBilPrev.elem_id
+           and   e.elem_id=v.elem_id
+           AND   enew.elem_id=v.elem_id_old 
+           AND   enew.elem_tipo_id=bilElemGestTipoId
+           AND   enew.bil_id=bilancioPrecId
+           AND   enew.elem_code=e.elem_code 
+           AND   enew.elem_code2=e.elem_code2
+           AND   enew.elem_code3=e.elem_code3
+           AND   enew.data_cancellazione IS null
+	       and   v.data_cancellazione is null
+           and   date_trunc('day',dataElaborazione)>=date_trunc('day',v.validita_inizio)
+	   	   and   ( date_trunc('day',dataElaborazione)<=date_trunc('day',v.validita_fine) or v.validita_fine is null));
+	
+          /* 	   	  -- siac-8383 Sofia 25.10.2021
+           codResult:=null;
           strMessaggio:='Inserimento nuove strutture per tipo='||bilElemGestTipo||
         			    '.Elemento di bilancio '||elemBilPrev.elem_code||' '
                                                ||elemBilPrev.elem_code2||' '
@@ -915,7 +942,7 @@ BEGIN
                             )
           order by v.elem_id
           limit 1;
-          if codResult is not null then raise exception ' Non effettuato.'; end if;
+          if codResult is not null then raise exception ' Non effettuato.'; end if;*/
 
 
 	      codResult:=null;
@@ -2585,7 +2612,10 @@ select 1 into codResult
 */
        -- siac_r_bil_elem_rel_tempo
        strMessaggio:='Inserimento nuove strutture gestione esistenti da previsione equivalente [siac_r_bil_elem_rel_tempo].';
-       insert into siac_r_bil_elem_rel_tempo
+-- siac-8383 Sofia 14.10.2021 
+		-- elem_id_old deve essere ricalcolato in base al suo stesso equivalente di gestione in annobilancio-1
+		-- attenzione anche al controllo dopo la insert o da commentare o da correggere	   
+/*       insert into siac_r_bil_elem_rel_tempo
        (elem_id, elem_id_old, validita_inizio, ente_proprietario_id,login_operazione)
        ( select fase.elem_gest_id,v.elem_id_old,
                dataInizioVal,v.ente_proprietario_id, loginOperazione
@@ -2598,8 +2628,32 @@ select 1 into codResult
          and   fase.elem_prev_id is not null
          and   v.data_cancellazione is null
          and   v.validita_fine is null
-       );
+       );*/
 
+       -- siac-8383 Sofia 14.10.2021
+       insert into siac_r_bil_elem_rel_tempo
+       (elem_id, elem_id_old, validita_inizio, ente_proprietario_id,login_operazione)
+       ( select fase.elem_gest_id,enew.elem_id,
+               dataInizioVal,v.ente_proprietario_id, loginOperazione
+         from   siac_r_bil_elem_rel_tempo v,fase_bil_t_prev_approva_str_elem_gest_esiste fase,
+                siac_t_bil_elem e,siac_t_bil_elem enew
+         where v.elem_id=fase.elem_prev_id
+	     and   fase.ente_proprietario_id=enteProprietarioid
+         and   fase.bil_id=bilancioId
+         and   fase.fase_bil_elab_id=faseBilElabId
+         AND   e.elem_id=v.elem_id_old 
+         AND   enew.bil_id=bilancioPrecId
+         AND   enew.elem_tipo_id=bilElemGestTipoId
+         AND   enew.elem_code=e.elem_code
+         AND   enew.elem_code2=e.elem_code2
+         AND   enew.elem_code3=e.elem_code3
+  	     and   fase.data_cancellazione is null
+         and   fase.elem_prev_id is not null
+         and   v.data_cancellazione is null
+         and   v.validita_fine is NULL
+         AND   enew.data_cancellazione IS NULL 
+       );
+      
        codResult:=null;
        strMessaggio:='Fine inserimento nuove strutture gestione esistenti da previsione equivalente.';
        insert into fase_bil_t_elaborazione_log
@@ -2971,6 +3025,7 @@ select 1 into codResult
 31.07.2017 Sofia - chiusura
 */
 
+      /* 25.10.2021 Sofia SIAC-8380 
 	  codResult:=null;
       strMessaggio:='Inserimento nuove strutture gestione esistenti da previsione equivalente [siac_r_bil_elem_rel_tempo].Verifica esistenza relazioni.';
       select 1 into codResult
@@ -2997,7 +3052,7 @@ select 1 into codResult
 
       if codResult is not null then
     	raise exception ' Elementi di bilancio assenti di relazione.';
-      end if;
+      end if;**/
 
 
 	  if euElemTipo=TIPO_ELEM_EU then
@@ -4108,3 +4163,20 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter function 
+siac.fnc_fasi_bil_prev_approva_struttura 
+(
+   integer,
+   varchar,
+   varchar,
+   varchar,
+   varchar,
+   boolean,
+   integer,
+   varchar,
+   timestamp,
+   out  integer,
+   out  integer,
+   out varchar
+)   OWNER TO siac;

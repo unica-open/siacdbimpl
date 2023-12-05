@@ -57,12 +57,18 @@ perc2 numeric;
 perc3 numeric;
 perc4 numeric;
 perc5 numeric;
+fde_media_utente  numeric;
+fde_media_semplice_totali numeric;
+fde_media_semplice_rapporti  numeric;
+fde_media_ponderata_totali  numeric;
+fde_media_ponderata_rapporti  numeric;
+
 perc_delta numeric;
 perc_media numeric;
+afde_bilancioId integer;
+perc_massima numeric;
 
 h_count integer :=0;
-
-
 
 BEGIN
 
@@ -72,6 +78,12 @@ annoCapImp2:= ((p_anno::INTEGER)+2)::VARCHAR;
 
 flag_acc_cassa:= true;
 
+/*
+	SIAC-8154 20/07/2021
+    La tipologia di media non e' piu' un attributo ma e' un valore presente su
+    siac_t_acc_fondi_dubbia_esig.
+    Gli attributi sono sulla tabella siac_t_acc_fondi_dubbia_esig_bil.
+
 -- percentuale accantonamento bilancio
 if p_anno_competenza = annoCapImp then
    	strpercAccantonamento = 'percentualeAccantonamentoAnno';
@@ -80,7 +92,6 @@ elseif  p_anno_competenza = annoCapImp1 then
 else 
 	strpercAccantonamento = 'percentualeAccantonamentoAnno2';
 end if;
-
 
 
 
@@ -128,7 +139,28 @@ end if;
 if tipomedia is null then
 	tipomedia = 'SEMPLICE';
 end if;
+*/
 
+percAccantonamento:=0;
+select COALESCE(fondi_bil.afde_bil_accantonamento_graduale,0),
+	fondi_bil.afde_bil_id
+	into percAccantonamento, afde_bilancioId
+from siac_t_acc_fondi_dubbia_esig_bil fondi_bil,
+	siac_d_acc_fondi_dubbia_esig_tipo tipo,
+    siac_d_acc_fondi_dubbia_esig_stato stato,
+    siac_t_bil bil,
+    siac_t_periodo per
+where fondi_bil.afde_tipo_id =tipo.afde_tipo_id
+	and fondi_bil.afde_stato_id = stato.afde_stato_id
+	and fondi_bil.bil_id=bil.bil_id
+    and bil.periodo_id=per.periodo_id
+	and fondi_bil.ente_proprietario_id = p_ente_prop_id
+	and per.anno= p_anno
+    and tipo.afde_tipo_code ='PREVISIONE' 
+    and stato.afde_stato_code = 'DEFINITIVA'
+    and fondi_bil.data_cancellazione IS NULL
+    and tipo.data_cancellazione IS NULL
+    and stato.data_cancellazione IS NULL;
 
 TipoImpComp='STA';  -- competenza
 elemTipoCode:='CAP-EP'; -- tipo capitolo previsione
@@ -161,269 +193,10 @@ select fnc_siac_random_user()
 into	user_table;
 
 
-/*
-insert into  siac_rep_tit_tip_cat_riga_anni
-select v.*,user_table from
-(SELECT v3.classif_tipo_desc AS classif_tipo_desc1, v3.classif_id AS titolo_id,
-    v3.classif_code AS titolo_code, v3.classif_desc AS titolo_desc,
-    v3.validita_inizio AS titolo_validita_inizio,
-    v3.validita_fine AS titolo_validita_fine,
-    v2.classif_tipo_desc AS classif_tipo_desc2, v2.classif_id AS tipologia_id,
-    v2.classif_code AS tipologia_code, v2.classif_desc AS tipologia_desc,
-    v2.validita_inizio AS tipologia_validita_inizio,
-    v2.validita_fine AS tipologia_validita_fine,
-    v1.classif_tipo_desc AS classif_tipo_desc3, v1.classif_id AS categoria_id,
-    v1.classif_code AS categoria_code, v1.classif_desc AS categoria_desc,
-    v1.validita_inizio AS categoria_validita_inizio,
-    v1.validita_fine AS categoria_validita_fine, v1.ente_proprietario_id
-FROM (SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id 
-    AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v1,
--------------siac_v_tit_tip_cat_anni v1,
-(SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id 
-    AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v2, 
-----------siac_v_tit_tip_cat_anni v2,
-(SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id
-     AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v3
----------------    siac_v_tit_tip_cat_anni v3
-WHERE v1.classif_id_padre = v2.classif_id AND v1.classif_tipo_desc::text =
-    'Categoria'::text AND v2.classif_tipo_desc::text = 'Tipologia'::text 
-    AND v2.classif_id_padre = v3.classif_id AND v3.classif_tipo_desc::text = 'Titolo Entrata'::text 
-    AND v1.ente_proprietario_id = v2.ente_proprietario_id AND v2.ente_proprietario_id = v3.ente_proprietario_id) v
----------siac_v_tit_tip_cat_riga_anni 
-where v.ente_proprietario_id=p_ente_prop_id 
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.categoria_validita_inizio and
-COALESCE(v.categoria_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.tipologia_validita_inizio and
-COALESCE(v.tipologia_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.titolo_validita_inizio and
-COALESCE(v.titolo_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-order by titolo_code, tipologia_code,categoria_code;
-*/
-
--- 31/08/2016: sostituita la query di caricamento struttura del bilancio
---   per migliorare prestazioni
-with titent as 
-(select 
-e.classif_tipo_desc titent_tipo_desc,
-a.classif_id titent_id,
-a.classif_code titent_code,
-a.classif_desc titent_desc,
-a.validita_inizio titent_validita_inizio,
-a.validita_fine titent_validita_fine,
-a.ente_proprietario_id
-from siac_t_class a, siac_r_class_fam_tree b, siac_t_class_fam_tree c, siac_d_class_fam d,siac_d_class_tipo e
-where 
-a.ente_proprietario_id=p_ente_prop_id
-and a.classif_id=b.classif_id
-and b.classif_fam_tree_id=c.classif_fam_tree_id
-and c.classif_fam_id=d.classif_fam_id
-and d.classif_fam_code = v_fam_titolotipologiacategoria--'00003'
-and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') between b.validita_inizio and COALESCE(b.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and b.classif_id_padre is null
-and a.data_cancellazione is null
-and b.data_cancellazione is null
-and c.data_cancellazione is null
-and d.data_cancellazione is null
-and e.classif_tipo_id=a.classif_tipo_id
-),
-tipologia as
-(
-select 
-e.classif_tipo_desc tipologia_tipo_desc,
-b.classif_id_padre titent_id,
-a.classif_id tipologia_id,
-a.classif_code tipologia_code,
-a.classif_desc tipologia_desc,
-a.validita_inizio tipologia_validita_inizio,
-a.validita_fine tipologia_validita_fine,
-a.ente_proprietario_id
-from siac_t_class a, siac_r_class_fam_tree b, siac_t_class_fam_tree c, siac_d_class_fam d,siac_d_class_tipo e
-where 
-a.ente_proprietario_id=p_ente_prop_id
-and a.classif_id=b.classif_id
-and b.classif_fam_tree_id=c.classif_fam_tree_id
-and c.classif_fam_id=d.classif_fam_id
-and d.classif_fam_code = v_fam_titolotipologiacategoria--'00003'
-and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
-between b.validita_inizio and COALESCE(b.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and b.classif_id_padre is not null
-and b.livello=2
-and a.data_cancellazione is null
-and b.data_cancellazione is null
-and c.data_cancellazione is null
-and d.data_cancellazione is null
-and e.classif_tipo_id=a.classif_tipo_id
-),
-categoria as (
-select 
-e.classif_tipo_desc categoria_tipo_desc,
-b.classif_id_padre tipologia_id,
-a.classif_id categoria_id,
-a.classif_code categoria_code,
-a.classif_desc categoria_desc,
-a.validita_inizio categoria_validita_inizio,
-a.validita_fine categoria_validita_fine,
-a.ente_proprietario_id
-from siac_t_class a, siac_r_class_fam_tree b, siac_t_class_fam_tree c, siac_d_class_fam d,siac_d_class_tipo e
-where 
-a.ente_proprietario_id=p_ente_prop_id
-and a.classif_id=b.classif_id
-and b.classif_fam_tree_id=c.classif_fam_tree_id
-and c.classif_fam_id=d.classif_fam_id
-and d.classif_fam_code = v_fam_titolotipologiacategoria--'00003'
-and to_timestamp('31/12/'||p_anno,'dd/mm/yyyy') 
-between b.validita_inizio and COALESCE(b.validita_fine,to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and b.classif_id_padre is not null
-and b.livello=3
-and a.data_cancellazione is null
-and b.data_cancellazione is null
-and c.data_cancellazione is null
-and d.data_cancellazione is null
-and e.classif_tipo_id=a.classif_tipo_id
-)
-insert into  siac_rep_tit_tip_cat_riga_anni
-select 
-titent.titent_tipo_desc,
-titent.titent_id,
-titent.titent_code,
-titent.titent_desc,
-titent.titent_validita_inizio,
-titent.titent_validita_fine,
-tipologia.tipologia_tipo_desc,
-tipologia.tipologia_id,
-tipologia.tipologia_code,
-tipologia.tipologia_desc,
-tipologia.tipologia_validita_inizio,
-tipologia.tipologia_validita_fine,
-categoria.categoria_tipo_desc,
-categoria.categoria_id,
-categoria.categoria_code,
-categoria.categoria_desc,
-categoria.categoria_validita_inizio,
-categoria.categoria_validita_fine,
-categoria.ente_proprietario_id,
-user_table
- from titent,tipologia,categoria
-where 
-titent.titent_id=tipologia.titent_id
- and tipologia.tipologia_id=categoria.tipologia_id
- order by 
- titent.titent_code, tipologia.tipologia_code,categoria.categoria_code
- ;
+insert into siac_rep_tit_tip_cat_riga_anni
+select  *
+from "fnc_bilr_struttura_cap_bilancio_entrate"(p_ente_prop_id, p_anno, 
+	user_table);
  
 
 insert into siac_rep_cap_ep
@@ -445,41 +218,26 @@ select 	cl.classif_id,
 		siac_d_bil_elem_stato stato_capitolo,
         siac_r_bil_elem_stato r_capitolo_stato,
 		siac_d_bil_elem_categoria cat_del_capitolo,
-        siac_r_bil_elem_categoria r_cat_capitolo--,
-       -- siac_r_bil_elem_acc_fondi_dubbia_esig r_cap_fcd
-where ct.classif_tipo_code			=	'CATEGORIA'
-and ct.classif_tipo_id				=	cl.classif_tipo_id
-and cl.classif_id					=	rc.classif_id 
-/*and e.ente_proprietario_id			= 	bilancio.ente_proprietario_id
-and e.ente_proprietario_id			= 	tipo_elemento.ente_proprietario_id
-and e.ente_proprietario_id			= 	anno_eserc.ente_proprietario_id
-and e.ente_proprietario_id			= 	rc.ente_proprietario_id
-and e.ente_proprietario_id			= 	ct.ente_proprietario_id
-and e.ente_proprietario_id			= 	cl.ente_proprietario_id
-and e.ente_proprietario_id			= 	r_capitolo_pdc.ente_proprietario_id
-and e.ente_proprietario_id			= 	pdc.ente_proprietario_id
-and e.ente_proprietario_id			= 	pdc_tipo.ente_proprietario_id
-and e.ente_proprietario_id			= 	stato_capitolo.ente_proprietario_id
-and e.ente_proprietario_id			= 	r_capitolo_stato.ente_proprietario_id
-and e.ente_proprietario_id			= 	cat_del_capitolo.ente_proprietario_id
-and e.ente_proprietario_id			= 	r_cat_capitolo.ente_proprietario_id*/
-and e.ente_proprietario_id			=	p_ente_prop_id
-and anno_eserc.anno					= 	p_anno
-and bilancio.periodo_id				=	anno_eserc.periodo_id 
+        siac_r_bil_elem_categoria r_cat_capitolo
+where bilancio.periodo_id				=	anno_eserc.periodo_id 
 and e.bil_id						=	bilancio.bil_id 
 and e.elem_tipo_id					=	tipo_elemento.elem_tipo_id 
-and tipo_elemento.elem_tipo_code 	= 	elemTipoCode
+and ct.classif_tipo_id				=	cl.classif_tipo_id
+and cl.classif_id					=	rc.classif_id 
 and e.elem_id						=	rc.elem_id
---and r_cap_fcd.elem_id= e.elem_id
 and r_capitolo_pdc.classif_id 		= 	pdc.classif_id
 and pdc.classif_tipo_id 			= 	pdc_tipo.classif_tipo_id
-and pdc_tipo.classif_tipo_code like 'PDC_%'
 and e.elem_id 						= 	r_capitolo_pdc.elem_id
 and	e.elem_id						=	r_capitolo_stato.elem_id
 and	r_capitolo_stato.elem_stato_id	=	stato_capitolo.elem_stato_id
-and	stato_capitolo.elem_stato_code	=	'VA'
 and	e.elem_id						=	r_cat_capitolo.elem_id
 and	r_cat_capitolo.elem_cat_id		=	cat_del_capitolo.elem_cat_id
+and e.ente_proprietario_id			=	p_ente_prop_id
+and anno_eserc.anno					= 	p_anno
+and ct.classif_tipo_code			=	'CATEGORIA' 
+and tipo_elemento.elem_tipo_code 	= 	elemTipoCode
+and pdc_tipo.classif_tipo_code like 'PDC_%'
+and	stato_capitolo.elem_stato_code	=	'VA'
 and	cat_del_capitolo.elem_cat_code	=	'STD'
 and e.data_cancellazione 				is null
 and rc.data_cancellazione 				is null
@@ -494,19 +252,7 @@ and pdc_tipo.data_cancellazione 		is null
 and stato_capitolo.data_cancellazione 	is null
 and r_capitolo_stato.data_cancellazione is null
 and cat_del_capitolo.data_cancellazione is null
-and r_cat_capitolo.data_cancellazione 	is null
---and r_cap_fcd.data_cancellazione 		is null
-/*and	now() between rc.validita_inizio and coalesce (rc.validita_fine, now())
-and	now() between e.validita_inizio and coalesce (e.validita_fine, now())
-and	now() between bilancio.validita_inizio and coalesce (bilancio.validita_fine, now())
-and	now() between anno_eserc.validita_inizio and coalesce (anno_eserc.validita_fine, now())
-and	now() between ct.validita_inizio and coalesce (ct.validita_fine, now())
-and	now() between cl.validita_inizio and coalesce (cl.validita_fine, now())
-and	now() between tipo_elemento.validita_inizio and coalesce (tipo_elemento.validita_fine, now())
-and	now() between stato_capitolo.validita_inizio and coalesce (stato_capitolo.validita_fine, now())
-and	now() between r_capitolo_stato.validita_inizio and coalesce (r_capitolo_stato.validita_fine, now())
-and	now() between cat_del_capitolo.validita_inizio and coalesce (cat_del_capitolo.validita_fine, now())
-and	now() between r_cat_capitolo.validita_inizio and coalesce (r_cat_capitolo.validita_fine, now())*/;
+and r_cat_capitolo.data_cancellazione 	is null;
 
 insert into siac_rep_cap_ep_imp
 select 		capitolo_importi.elem_id,
@@ -525,32 +271,29 @@ from 		siac_t_bil_elem_det capitolo_importi,
 			siac_d_bil_elem_stato stato_capitolo, 
             siac_r_bil_elem_stato r_capitolo_stato,
 			siac_d_bil_elem_categoria cat_del_capitolo, 
-            siac_r_bil_elem_categoria r_cat_capitolo
-    where 	capitolo_importi.ente_proprietario_id 	= 	p_ente_prop_id  
-    	/*and	capitolo_importi.ente_proprietario_id 	=	capitolo_imp_tipo.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id 	=	capitolo_imp_periodo.ente_proprietario_id
-        and capitolo_importi.ente_proprietario_id	=	capitolo.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	bilancio.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	anno_eserc.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	tipo_elemento.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	stato_capitolo.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	r_capitolo_stato.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	cat_del_capitolo.ente_proprietario_id
-        and	capitolo_importi.ente_proprietario_id	=	r_cat_capitolo.ente_proprietario_id*/
-        and	anno_eserc.anno							= 	p_anno 												
-    	and	bilancio.periodo_id						=	anno_eserc.periodo_id 								
+            siac_r_bil_elem_categoria r_cat_capitolo--,
+         --22/12/2021 SIAC-8254
+         --I capitoli devono essere presi tutti e non solo quelli
+         --coinvolti in FCDE per avere l'importo effettivo dello stanziato
+         --nella colonna (a).
+            --siac_t_acc_fondi_dubbia_esig fcde
+    where 	bilancio.periodo_id						=	anno_eserc.periodo_id 								
         and	capitolo.bil_id							=	bilancio.bil_id 			 
         and	capitolo.elem_id						=	capitolo_importi.elem_id 
-        and	capitolo.elem_tipo_id					=	tipo_elemento.elem_tipo_id 						
-        and	tipo_elemento.elem_tipo_code 			= 	elemTipoCode
+        and	capitolo.elem_tipo_id					=	tipo_elemento.elem_tipo_id
         and	capitolo_importi.elem_det_tipo_id		=	capitolo_imp_tipo.elem_det_tipo_id 		
         and	capitolo_imp_periodo.periodo_id			=	capitolo_importi.periodo_id 			  
-        and	capitolo_imp_periodo.anno in (p_anno_competenza)
         and	capitolo.elem_id					=	r_capitolo_stato.elem_id
 		and	r_capitolo_stato.elem_stato_id		=	stato_capitolo.elem_stato_id
-		and	stato_capitolo.elem_stato_code		=	'VA'
 		and	capitolo.elem_id					=	r_cat_capitolo.elem_id
 		and	r_cat_capitolo.elem_cat_id			=	cat_del_capitolo.elem_cat_id
+		--and   fcde.elem_id						= capitolo.elem_id
+        and capitolo_importi.ente_proprietario_id 	= 	p_ente_prop_id  
+    	and	anno_eserc.anno							= 	p_anno				
+        --and   fcde.afde_bil_id				=  afde_bilancioId
+        and	tipo_elemento.elem_tipo_code 			= 	elemTipoCode
+        and	capitolo_imp_periodo.anno in (p_anno_competenza)
+        and	stato_capitolo.elem_stato_code		=	'VA'
 		--and	cat_del_capitolo.elem_cat_code		=	'STD' 
         and	capitolo_importi.data_cancellazione 	is null
         and	capitolo_imp_tipo.data_cancellazione 	is null
@@ -562,18 +305,8 @@ from 		siac_t_bil_elem_det capitolo_importi,
         and	stato_capitolo.data_cancellazione 		is null
         and	r_capitolo_stato.data_cancellazione 	is null
         and	cat_del_capitolo.data_cancellazione 	is null
-        and	r_cat_capitolo.data_cancellazione 		is null      
-        /*and	now() between capitolo_importi.validita_inizio and coalesce (capitolo_importi.validita_fine, now())
-        and	now() between capitolo_imp_periodo.validita_inizio and coalesce (capitolo_imp_periodo.validita_fine, now())
-        and	now() between capitolo.validita_inizio and coalesce (capitolo.validita_fine, now())
-        and	now() between capitolo_imp_tipo.validita_inizio and coalesce (capitolo_imp_tipo.validita_fine, now())  
-    	and	now() between tipo_elemento.validita_inizio and coalesce (tipo_elemento.validita_fine, now())
-        and	now() between bilancio.validita_inizio and coalesce (bilancio.validita_fine, now())
-        and	now() between anno_eserc.validita_inizio and coalesce (anno_eserc.validita_fine, now())
-        and	now() between stato_capitolo.validita_inizio and coalesce (stato_capitolo.validita_fine, now())
-        and	now() between r_capitolo_stato.validita_inizio and coalesce (r_capitolo_stato.validita_fine, now())
-        and	now() between cat_del_capitolo.validita_inizio and coalesce (cat_del_capitolo.validita_fine, now())
-        and	now() between r_cat_capitolo.validita_inizio and coalesce (r_cat_capitolo.validita_fine, now())*/
+        and	r_cat_capitolo.data_cancellazione 		is null 
+       -- and fcde.data_cancellazione IS NULL     
     group by	capitolo_importi.elem_id,capitolo_imp_tipo.elem_det_tipo_code,capitolo_imp_periodo.anno,capitolo_importi.ente_proprietario_id, utente
     order by   	capitolo_imp_tipo.elem_det_tipo_code, capitolo_imp_periodo.anno;
 
@@ -594,9 +327,6 @@ from
     				AND	tb1.tipo_imp =	TipoImpComp	
                     and tb1.utente 	= 	user_table;
                
-
-
-
 for classifBilRec in
 select 	v1.classif_tipo_desc1    		titoloe_TIPO_DESC,
        	v1.titolo_id              		titoloe_ID,
@@ -677,6 +407,15 @@ IF flag_acc_cassa IS NULL THEN
 END IF;
 -- SIAC-5854 FINE
 
+/*
+	SIAC-8154 21/07/2021
+	Cambia la gestione dei dati per l'importo minimo del fondo:
+	- la relazione con i capitoli e' diretta sulla tabella 
+      siac_t_acc_fondi_dubbia_esig.
+    - la tipologia di media non e' più un attributo ma e' anch'essa sulla
+      tabella siac_t_acc_fondi_dubbia_esig con i relativi importi. 
+*/ 
+/*
 select COALESCE(datifcd.perc_acc_fondi,0), 
 COALESCE(datifcd.perc_acc_fondi_1,0), COALESCE(datifcd.perc_acc_fondi_2,0),
 COALESCE(datifcd.perc_acc_fondi_3,0), COALESCE(datifcd.perc_acc_fondi_4,0), 
@@ -705,22 +444,71 @@ end if;
 if perc_delta is null then
    perc_delta := 0;
 end if;
+*/
 
-raise notice 'tipomedia % - %', classifBilRec.bil_ele_code , perc_media ;
+raise notice 'bil_ele_id = %', classifBilRec.bil_ele_id;
+
+fde_media_utente:=0;
+fde_media_semplice_totali:=0; 
+fde_media_semplice_rapporti:=0;
+fde_media_ponderata_totali:=0; 
+fde_media_ponderata_rapporti:=0;
+perc_delta:=0;
+perc_media:=0;
+tipomedia:='';
+
+if classifBilRec.bil_ele_id IS NOT NULL then
+  select  datifcd.perc_delta, 1, tipo_media.afde_tipo_media_code,
+  COALESCE(datifcd.acc_fde_media_utente,0), 
+  COALESCE(datifcd.acc_fde_media_semplice_totali,0),
+  COALESCE(datifcd.acc_fde_media_semplice_rapporti,0), 
+  COALESCE(datifcd.acc_fde_media_ponderata_totali,0),
+  COALESCE(datifcd.acc_fde_media_ponderata_rapporti,0),
+  greatest (COALESCE(datifcd.acc_fde_media_semplice_totali,0),
+  	 COALESCE(datifcd.acc_fde_media_semplice_rapporti,0),
+  	COALESCE(datifcd.acc_fde_media_ponderata_totali,0),
+    COALESCE(datifcd.acc_fde_media_ponderata_rapporti,0))
+  into perc_delta, h_count, tipomedia,
+  fde_media_utente, fde_media_semplice_totali, fde_media_semplice_rapporti,
+  fde_media_ponderata_totali, fde_media_ponderata_rapporti, perc_massima
+   FROM siac_t_acc_fondi_dubbia_esig datifcd, 
+      siac_d_acc_fondi_dubbia_esig_tipo_media tipo_media
+  where tipo_media.afde_tipo_media_id=datifcd.afde_tipo_media_id
+    and datifcd.elem_id=classifBilRec.bil_ele_id 
+    and datifcd.afde_bil_id  = afde_bilancioId
+    and datifcd.data_cancellazione is null
+    and tipo_media.data_cancellazione is null;
+end if;
+
+if tipomedia = 'SEMP_RAP' then
+    perc_media = fde_media_semplice_rapporti;         
+elsif tipomedia = 'SEMP_TOT' then
+    perc_media = fde_media_semplice_totali;        
+elsif tipomedia = 'POND_RAP' then
+      perc_media = fde_media_ponderata_rapporti;  
+elsif tipomedia = 'POND_TOT' then
+      perc_media = fde_media_ponderata_totali;    
+elsif tipomedia = 'UTENTE' then  --Media utente
+      perc_media = fde_media_utente;   
+end if;
+
+raise notice 'tipomedia % - media: % - delta: % - massima %', tipomedia , perc_media, perc_delta, perc_massima ;
 
 --- colonna b del report = stanziamento capitolo * percentualeAccantonamentoAnno(1,2) * perc_media
 --- colonna c del report = stanziamento capitolo * perc_delta della tabella 
 
----if p_anno_competenza = annoCapImp then
-   	importo_collb:= round(classifBilRec.stanziamento_prev_anno * (1 - perc_media/100) * percAccantonamento/100,2);
-    importo_collc:= round(classifBilRec.stanziamento_prev_anno * (1 - perc_delta/100) * percAccantonamento/100,2);
---elseif  p_anno_competenza = annoCapImp1 then
---	importo_collb:= round(classifBilRec.stanziamento_prev_anno1 * (perc_media/100) * percAccantonamento/100,2);
---    importo_collc:= round(classifBilRec.stanziamento_prev_anno1 * perc_delta/100,2);
---else 
---	importo_collb:= round(classifBilRec.stanziamento_prev_anno2 * (perc_media/100) * percAccantonamento/100,2);
---    importo_collc:= round(classifBilRec.stanziamento_prev_anno2 * perc_delta/100,2);
---end if;
+--SIAC-8154 14/10/2021
+--la colonna C diventa quello che prima era la colonna B
+--la colonna B invece della percentuale media deve usa la percentuale 
+--che ha il valore massimo (esclusa quella utente).
+--importo_collb:= round(classifBilRec.stanziamento_prev_anno * (1 - perc_media/100) * percAccantonamento/100,2);
+--importo_collc:= round(classifBilRec.stanziamento_prev_anno * (1 - perc_delta/100) * percAccantonamento/100,2);   
+
+--SIAC-8579 17/01/2022 l'accantonamento obbligatorio (Colonna B) diventa uguale
+--all'accantonamento effettivo (Colonna C).
+--importo_collb:= round(classifBilRec.stanziamento_prev_anno * (1 - perc_massima/100) * percAccantonamento/100,2);
+importo_collc:= round(classifBilRec.stanziamento_prev_anno * (1 - perc_media/100) * percAccantonamento/100,2);
+importo_collb:=importo_collc;
 
 raise notice 'importo_collb % - %', classifBilRec.bil_ele_id , importo_collb;
 
@@ -734,8 +522,8 @@ END if;
 
 -- importi capitolo
 
-/*raise notice 'record';*/
 return next;
+
 bil_anno='';
 titoloe_tipo_code='';
 titoloe_TIPO_DESC='';

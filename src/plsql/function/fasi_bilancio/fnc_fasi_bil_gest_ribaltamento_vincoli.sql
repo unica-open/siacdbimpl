@@ -4,32 +4,19 @@
 */
 
 
---fnc_fasi_bil_gest_apertura_all
-----fnc_fasi_bil_gest_apertura
-------fnc_fasi_bil_provv_apertura_struttura
-------fnc_fasi_bil_provv_apertura_importi
+DROP  FUNCTION IF EXISTS
+fnc_fasi_bil_gest_ribaltamento_vincoli
+(
+  p_tipo_ribaltamento varchar, --'GEST-GEST' 'PREV-GEST'
+  p_annobilancio integer,
+  p_enteproprietarioid integer,
+  p_loginoperazione varchar,
+  p_dataelaborazione timestamp,
+  out faseBilElabIdRet integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
 
---fnc_fasi_bil_prev_approva_all
-----fnc_fasi_bil_prev_approva
-------fnc_fasi_bil_prev_approva_struttura
-------fnc_fasi_bil_prev_approva_importi
-
-/*
-Creazione di una function plSql che in seguito ad apertura del nuovo bilancio di gestione esegua le seguenti operazioni :
-
-- creazione delle anagrafiche dei vincoli di gestione per il nuovo annoBilancio partendo da
-  - vincoli di gestione presenti nell'annoBilancio-1
-  - vincoli di previsione presenti nell'annoBilancio
-
-- creazione dei legami tra i vincoli creati e i capitoli di gestione di annoBilancio partendo da
-  - capitoli equivalenti in gestione in annoBilancio-1 ( capitoli da cui il bilancio di gestione è stato creato )
-  - capitoli equivalenti in previsione in annoBilancio ( capitoli da cui il bilancio di gestione è stato creato )
-- agganciare la function creata alla function di
-  - creazione del bilancio di gestione fnc_fasi_bil_gest_apertura_all
-  - approvazione del bilancio di previsione fnc_fasi_bil_prev_approva_all ( in questo caso valutare se predisporre un paramentro per chiedere conferma )
-
-fare riferimento alla jira siac-5298 per gli sviluppi già effettuati relativamente all'apertura del bilancio di previsione
-*/
 CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_ribaltamento_vincoli (
   p_tipo_ribaltamento varchar, --'GEST-GEST' 'PREV-GEST'
   p_annobilancio integer,
@@ -262,6 +249,23 @@ AS
     and   r.data_cancellazione is null
     and   r.validita_fine is null;
 
+	-- 05.03.2021 Sofia Jira SIAC-790 - inizio
+	strMessaggio:='Pulizia vincoli di gestione. Cancellazione logica siac_r_vincolo_risorse_vincolate.';
+    update siac_r_vincolo_risorse_vincolate r
+    set    data_cancellazione=now(),
+           validita_fine=now(),
+           login_operazione=r.login_operazione||'-'||p_loginoperazione
+    from siac_t_vincolo v,siac_d_vincolo_tipo tipo
+    where tipo.ente_proprietario_id=p_enteproprietarioid
+    and   tipo.vincolo_tipo_code='G'
+    and   v.vincolo_tipo_id=tipo.vincolo_tipo_id
+    and   v.periodo_id=v_periodo_id
+    and   r.vincolo_id=v.vincolo_id
+    and   r.data_cancellazione is null
+    and   r.validita_fine is null;
+ 	-- 05.03.2021 Sofia Jira SIAC-790 - fine
+
+
     strMessaggio:='Pulizia vincoli di gestione. Cancellazione logica siac_r_vincolo_stato.';
     update siac_r_vincolo_stato r
     set    data_cancellazione=now(),
@@ -367,6 +371,31 @@ AS
                 and   r.validita_fine is null
                 );
 
+                -- 05.03.2021 Sofia Jira SIAC-790 - inizio
+                strmessaggio:='inserimento risorse.';
+                insert into siac_r_vincolo_risorse_vincolate
+                (vincolo_id,
+                 vincolo_risorse_vincolate_id,
+                 validita_inizio,
+                 ente_proprietario_id,
+                 data_creazione,
+                 login_operazione
+                )
+                (
+                select
+                   v_vincolo_id
+                  ,r.vincolo_risorse_vincolate_id
+                  ,now()
+                  ,p_enteproprietarioid
+                  ,now()
+                  ,p_loginoperazione
+                from siac_r_vincolo_risorse_vincolate r
+                where r.vincolo_id=rec_vincoli_gest.vincolo_id
+                and   r.data_cancellazione is null
+                and   r.validita_fine is null
+                );
+                -- 05.03.2021 Sofia Jira SIAC-790 - fine
+
                 strmessaggio:='inserimento attributi sul vincolo.';
                 insert into siac_r_vincolo_attr (vincolo_id,attr_id,tabella_id,boolean ,percentuale,testo,numerico,validita_inizio ,validita_fine,ente_proprietario_id,data_creazione,data_modifica,data_cancellazione,login_operazione)
                 select
@@ -415,7 +444,7 @@ AS
 
                 strmessaggio:='ciclo capitoli di gestione da ribaltare di  anno precedente .';
                 FOR rec_capitoli_gest IN(
-                  select siac_t_bil_elem.elem_id,siac_t_bil_elem.elem_code,siac_t_bil_elem.elem_code2,siac_t_bil_elem.elem_code3 ,siac_d_bil_elem_tipo.elem_tipo_code
+   /*               select siac_t_bil_elem.elem_id,siac_t_bil_elem.elem_code,siac_t_bil_elem.elem_code2,siac_t_bil_elem.elem_code3 ,siac_d_bil_elem_tipo.elem_tipo_code
                   from siac_r_vincolo_bil_elem , siac_t_bil_elem ,siac_d_bil_elem_tipo
                   where
                       siac_r_vincolo_bil_elem.elem_id =  siac_t_bil_elem.elem_id
@@ -425,8 +454,26 @@ AS
                   and siac_r_vincolo_bil_elem.validita_fine is null
                   and siac_r_vincolo_bil_elem.vincolo_id = rec_vincoli_gest.vincolo_id
                   and siac_r_vincolo_bil_elem.ente_proprietario_id = p_enteproprietarioid
-
-
+SIAC-8099 Sofia 22.04.2021                  */
+-- SIAC-8099 Sofia 22.04.2021
+                  select e.elem_id,e.elem_code,e.elem_code2,e.elem_code3 ,tipo.elem_tipo_code
+                  from siac_r_vincolo_bil_elem r,
+                       siac_t_bil_elem e,siac_d_bil_elem_tipo tipo,
+                       siac_r_bil_elem_stato rs,siac_d_bil_elem_stato stato
+                  where r.ente_proprietario_id = p_enteproprietarioid
+                  and   r.elem_id =  e.elem_id
+                  and   e.elem_tipo_id    =  tipo.elem_tipo_id
+                  and   e.bil_id          =  v_bilancio_id_prec
+                  and   r.vincolo_id = rec_vincoli_gest.vincolo_id
+                  and   rs.elem_id=e.elem_id
+                  and   stato.elem_stato_id=rs.elem_stato_id
+                  and   stato.elem_stato_code!='AN'
+                  and   r.data_cancellazione is null
+                  and   r.validita_fine is null
+                  and   rs.data_cancellazione is null
+                  and   rs.validita_fine is null
+                  and   e.data_cancellazione is null
+                  and   e.validita_fine is null
                 )LOOP
 
                     strmessaggio:='estraggo il tipo nuovo di prev.';
@@ -441,6 +488,7 @@ AS
                     v_elem_id:=null;
                     strmessaggio:='estraggo elem_id v_elem_tipo_id '|| v_elem_tipo_id::varchar||' rec_capitoli_gest.elem_code '||rec_capitoli_gest.elem_code||' rec_capitoli_gest.elem_code2 '||rec_capitoli_gest.elem_code2||' rec_capitoli_gest.elem_code3 '||rec_capitoli_gest.elem_code3||'.';
 --                    select siac_t_bil_elem.elem_id into strict v_elem_id
+/* 29.04.2021 Sofia Jira SIAC-8099
                     select siac_t_bil_elem.elem_id into v_elem_id
                     FROM   siac_t_bil_elem,siac_t_bil
                     where
@@ -450,7 +498,26 @@ AS
                     and siac_t_bil_elem.elem_code2     = rec_capitoli_gest.elem_code2
                     and siac_t_bil_elem.elem_code3     = rec_capitoli_gest.elem_code3
                     and siac_t_bil_elem.elem_tipo_id   = v_elem_tipo_id
-                    and siac_t_bil_elem.ente_proprietario_id = p_enteproprietarioid;
+                    and siac_t_bil_elem.ente_proprietario_id = p_enteproprietarioid;*/
+
+					-- 29.04.2021 Sofia Jira SIAC-8099
+					select e.elem_id into v_elem_id
+                    FROM   siac_t_bil_elem e,siac_r_bil_elem_stato rs,siac_d_bil_elem_stato stato,
+                           siac_t_bil bil
+                    where e.ente_proprietario_id = p_enteproprietarioid
+                    and   e.elem_tipo_id   = v_elem_tipo_id
+                    and   e.bil_id         = bil.bil_id
+                    and   bil.bil_code     = 'BIL_'||p_annobilancio
+                    and   e.elem_code      = rec_capitoli_gest.elem_code
+                    and   e.elem_code2     = rec_capitoli_gest.elem_code2
+                    and   e.elem_code3     = rec_capitoli_gest.elem_code3
+                    and   rs.elem_id       = e.elem_id
+                    and   stato.elem_stato_id=rs.elem_Stato_id
+                    and   stato.elem_stato_code!='AN'
+                    and   e.data_cancellazione is null
+                    and   e.validita_fine is null
+                    and   rs.data_cancellazione is null
+                    and   rs.validita_fine is null;
 
 					if v_elem_id is not null then
                      strmessaggio:='inizio inserimenti per i capitoli .';
@@ -552,6 +619,31 @@ AS
                   and   r.validita_fine is null
                   );
 
+				-- 20.04.2021 Sofia Jira 	SIAC-8099 - inizio
+                strmessaggio:='inserimento risorse.';
+                insert into siac_r_vincolo_risorse_vincolate
+                (vincolo_id,
+                 vincolo_risorse_vincolate_id,
+                 validita_inizio,
+                 ente_proprietario_id,
+                 data_creazione,
+                 login_operazione
+                )
+                (
+                select
+                   v_vincolo_id
+                  ,r.vincolo_risorse_vincolate_id
+                  ,now()
+                  ,p_enteproprietarioid
+                  ,now()
+                  ,p_loginoperazione
+                from siac_r_vincolo_risorse_vincolate r
+                where r.vincolo_id=rec_vincoli_prev.vincolo_id
+                and   r.data_cancellazione is null
+                and   r.validita_fine is null
+                );
+                -- 20.04.2021 Sofia Jira 	SIAC-8099 - fine
+
                   strmessaggio:='inserimento attributi sul vincolo.';
                   insert into siac_r_vincolo_attr (vincolo_id,attr_id,tabella_id,boolean ,percentuale,testo,numerico,validita_inizio ,validita_fine,ente_proprietario_id,data_creazione,data_modifica,data_cancellazione,login_operazione)
                   select
@@ -600,6 +692,7 @@ AS
 
                   strmessaggio:='ciclo capitoli di previsione da ribaltare dello stesso anno .';
                   FOR rec_capitoli_prev IN(
+/*
                     select siac_t_bil_elem.elem_id,siac_t_bil_elem.elem_code,siac_t_bil_elem.elem_code2,siac_t_bil_elem.elem_code3 ,siac_d_bil_elem_tipo.elem_tipo_code
                     from siac_r_vincolo_bil_elem , siac_t_bil_elem ,siac_d_bil_elem_tipo
                     where
@@ -610,7 +703,27 @@ AS
                     and siac_r_vincolo_bil_elem.validita_fine is null
                     and siac_r_vincolo_bil_elem.vincolo_id = rec_vincoli_prev.vincolo_id
                     and siac_r_vincolo_bil_elem.ente_proprietario_id = p_enteproprietarioid
-
+SIAC-8099 Sofia 22.04.2021                    */
+-- SIAC-8099 Sofia 22.04.2021
+                    select e.elem_id,e.elem_code,e.elem_code2,e.elem_code3 ,tipo.elem_tipo_code
+                    from siac_r_vincolo_bil_elem r, siac_t_bil_elem e,siac_d_bil_elem_tipo tipo,
+                         siac_r_bil_elem_stato rs,siac_d_bil_elem_stato stato
+                    where r.ente_proprietario_id = p_enteproprietarioid
+                    and   r.elem_id =  e.elem_id
+                    and   e.elem_tipo_id    =  tipo.elem_tipo_id
+                    and   e.bil_id          =  v_bilancio_id
+                    and   r.vincolo_id = rec_vincoli_prev.vincolo_id
+					--    02.01.2023 Sofia SIAC-8878
+                    --and   rs.elemid=e.elem_id
+					and   rs.elem_id=e.elem_id
+                    and   stato.elem_stato_id=rs.elem_stato_id
+                    and   stato.elem_stato_code!='AN'
+                    and   r.data_cancellazione is null
+                    and   r.validita_fine is null
+                    and   rs.data_cancellazione is null
+                    and   rs.validita_fine is null
+                    and   e.data_cancellazione is null
+                    and   e.validita_fine is null
                   )LOOP
 
                       strmessaggio:='deduco il codice del capitolo di gestione nuovo.';
@@ -633,6 +746,7 @@ AS
 
 --                      select siac_t_bil_elem.elem_id into strict v_elem_id
                       v_elem_id:=null;
+/* 29.04.2021 Sofia Jira SIAC-8099
                       select siac_t_bil_elem.elem_id into v_elem_id
                       FROM   siac_t_bil_elem,siac_t_bil
                       where
@@ -642,7 +756,31 @@ AS
                       and siac_t_bil_elem.elem_code2     = rec_capitoli_prev.elem_code2
                       and siac_t_bil_elem.elem_code3     = rec_capitoli_prev.elem_code3
                       and siac_t_bil_elem.elem_tipo_id   = v_elem_tipo_id
-                      and siac_t_bil_elem.ente_proprietario_id = p_enteproprietarioid;
+                      and siac_t_bil_elem.ente_proprietario_id = p_enteproprietarioid;*/
+					  -- 29.04.2021 Sofia Jira SIAC-8099
+                      --select siac_t_bil_elem.elem_id into v_elem_id
+					  -- 02.01.2023 Sofia Jira and   rs.elemid=e.elem_id
+					  select e.elem_id into v_elem_id
+                      FROM   siac_t_bil_elem e,siac_t_bil bil,
+                             siac_r_bil_elem_stato rs,siac_d_bil_elem_stato stato
+                      where e.ente_proprietario_id = p_enteproprietarioid
+                      and   e.elem_tipo_id   = v_elem_tipo_id
+                      and   e.bil_id         = bil.bil_id
+                      and   bil.bil_code     = 'BIL_'||p_annobilancio
+                      and   e.elem_code      = rec_capitoli_prev.elem_code
+                      and   e.elem_code2     = rec_capitoli_prev.elem_code2
+                      and   e.elem_code3     = rec_capitoli_prev.elem_code3
+                      and   rs.elem_id       =e.elem_id
+                      and   stato.elem_stato_id=rs.elem_stato_id
+					  -- 31.01.2023 Sofia Jira SIAC-8898
+                      --and   stato.elem_stato_code='AN'
+					  -- 31.01.2023 Sofia Jira SIAC-8898
+					  and   stato.elem_stato_code!='AN'
+                      and   rs.data_cancellazione is null
+                      and   rs.validita_fine is null
+                      and   e.data_cancellazione is null
+                      and   e.validita_fine is null;
+
 
 
                       if v_elem_id is not null then
@@ -714,3 +852,5 @@ AS
     RETURN;
   END;
   $body$ LANGUAGE 'plpgsql' volatile called ON NULL input security invoker cost 100;
+
+ alter function siac.fnc_fasi_bil_gest_ribaltamento_vincoli (  varchar,  integer,  integer,  varchar,  timestamp,  out integer,  out integer,  out varchar) owner to siac;

@@ -438,12 +438,16 @@ importi_variaz as (
               siac_t_variazione avar, siac_r_variazione_stato bvar,
               siac_d_variazione_stato cvarsucc,
               siac_d_variazione_stato cvar, siac_t_bil_elem_det_var dvarsucc,
-              siac_d_bil_elem_det_tipo tipoimp
+              siac_d_bil_elem_det_tipo tipoimp, siac_t_periodo per_variaz
           where bvarsucc.validita_inizio >= bvar.validita_inizio
               and avar.ente_proprietario_id=avarsucc.ente_proprietario_id
               and avarsucc.variazione_id= bvarsucc.variazione_id
               and avar.variazione_id=bvar.variazione_id
               and bvarsucc.variazione_stato_tipo_id=cvarsucc.variazione_stato_tipo_id
+               and dvarsucc.periodo_id=per_variaz.periodo_id
+--30/12/2021 SIAC-8539
+--occorre tenere conto dell''anno della variazione.              
+              and per_variaz.anno='''||p_anno_variazione||'''
               and cvarsucc.variazione_stato_tipo_code=''D''
               and bvar.variazione_stato_tipo_id=cvar.variazione_stato_tipo_id
               and cvar.variazione_stato_tipo_code=''D''

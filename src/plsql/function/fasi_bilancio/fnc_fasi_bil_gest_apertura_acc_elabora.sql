@@ -2,7 +2,21 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_acc_elabora (
+
+DROP FUNCTION IF EXISTS siac.fnc_fasi_bil_gest_apertura_acc_elabora 
+(
+  enteproprietarioid integer,
+  annobilancio integer,
+  fasebilelabid integer,
+  minid integer,
+  maxid integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_acc_elabora (
   enteproprietarioid integer,
   annobilancio integer,
   fasebilelabid integer,
@@ -15,6 +29,7 @@
 )
 RETURNS record AS
 $body$
+			 
 DECLARE
 	strMessaggio VARCHAR(1500):='';
     strMessaggioTemp VARCHAR(1000):='';
@@ -1041,6 +1056,20 @@ BEGIN
 		    	            and   rstato.data_cancellazione is null
 		        	        and   rstato.validita_fine is null
         		    	   )
+          -- SIAC-8551 Sofia - inizio 
+          and not exists 
+          (
+          select 1
+          from  siac_r_subdoc_prov_cassa  r ,siac_t_prov_cassa p 
+          where r.subdoc_id=sub.subdoc_id 
+          and   p.provc_id=r.provc_id 
+          and   p.provc_anno::integer=(annoBilancio-1)
+          and   p.data_cancellazione is null 
+          and   p.validita_fine  is null 
+          and   r.data_cancellazione is null 
+          and   r.validita_fine is null 
+          )
+     	  -- SIAC-8551 Sofia - fine
           and   sub.data_cancellazione is null
           and   sub.validita_fine is null
           and   r.data_cancellazione is null
@@ -1074,6 +1103,20 @@ BEGIN
 		    	            and   rstato.data_cancellazione is null
 		        	        and   rstato.validita_fine is null
         		    	   )
+        -- SIAC-8551 Sofia - inizio 
+        and not exists 
+        (
+          select 1
+          from  siac_r_subdoc_prov_cassa  r ,siac_t_prov_cassa p 
+          where r.subdoc_id=det1.subdoc_id 
+          and   p.provc_id=r.provc_id 
+          and   p.provc_anno::integer=(annoBilancio-1)
+          and   p.data_cancellazione is null 
+          and   p.validita_fine  is null 
+          and   r.data_cancellazione is null 
+          and   r.validita_fine is null 
+        )
+     	-- SIAC-8551 Sofia - fine        		    	   
         and   not exists (select 1 from siac_r_subdoc_movgest_ts det
 				          where det.movgest_ts_id=movGestTsIdRet
 					        and   det.data_cancellazione is null
@@ -1209,11 +1252,76 @@ BEGIN
 	    	else codResult:=null;
 	        end if;
        end if; **/
+      
+      -- 19.04.2023 SIAC-TASK-21
+      -- siac_r_mutuo_movgest_ts
+      if codResult is null then
+       strMessaggio:='Movimento movGestTsTipo='||movGestRec.movgest_ts_tipo||
+                       ' movgest_orig_id='||movGestRec.movgest_orig_id||
+                       ' movgest_orig_ts_id='||movGestRec.movgest_orig_ts_id||
+                       ' elem_orig_id='||movGestRec.elem_orig_id||
+                       ' elem_id='||movGestRec.elem_id||
+                      ' [siac_r_mutuo_movgest_ts].';
+      	insert into siac_r_mutuo_movgest_ts  
+      	(
+      		movgest_ts_id,
+      		mutuo_id,
+      		mutuo_movgest_ts_importo_iniziale,
+      		mutuo_movgest_ts_importo_finale,
+      		validita_inizio,
+      		ente_proprietario_id ,
+      		login_operazione,
+      		login_creazione,
+      		login_modifica
+      	)
+      	select  movGestTsIdRet,
+      	             r.mutuo_id,
+      	             det.movgest_ts_Det_importo,
+      	             det.movgest_ts_Det_importo,
+      	             dataInizioVal,
+		             enteProprietarioId,
+          		     loginOperazione,
+          		     loginOperazione,
+          		     loginOperazione
+      	from siac_r_mutuo_movgest_ts r,siac_t_mutuo mutuo,siac_d_mutuo_stato stato,
+      	           siac_t_movgest_ts_det det,siac_d_movgest_ts_det_tipo tipo 
+      	where r.movgest_ts_id=movGestRec.movgest_orig_ts_id
+      	and     mutuo.mutuo_id=r.mutuo_id 
+      	and     stato.mutuo_stato_id=mutuo.mutuo_stato_id 
+      	and     stato.mutuo_stato_code!='A'
+      	and     det.movgest_ts_id=movGestTsIdRet
+      	and     tipo.movgest_ts_det_tipo_id =det.movgest_ts_det_tipo_id 
+      	and     tipo.movgest_ts_det_tipo_code='I'
+      	and     mutuo.data_cancellazione is null 
+      	and     mutuo.validita_fine is null
+      	and     r.data_cancellazione is null 
+      	and     r.validita_fine is null;
+        
+		select 1  into codResult
+        from siac_r_mutuo_movgest_ts det1
+        where det1.movgest_ts_id=movGestRec.movgest_orig_ts_id
+        and   det1.data_cancellazione is null
+        and   det1.validita_fine is null
+        and   not exists (select 1 from siac_r_mutuo_movgest_ts det
+				          where det.movgest_ts_id=movGestTsIdRet
+					        and   det.data_cancellazione is null
+					        and   det.validita_fine is null
+					        and   det.login_operazione=loginOperazione);
 
+        raise notice 'dopo inserimento siac_r_mutuo_movgest_ts movGestTsIdRet=% codResult=%', movGestTsIdRet,codResult;
+
+        if codResult is not null then
+       	 codResult:=-1;
+         strMessaggioTemp:=strMessaggio;
+        else codResult:=null;
+        end if;
+      
+      end if;
+     
 	   -- 03.05.2019 Sofia siac-6255
        -- siac_r_movgest_ts_programma
        if codResult is null then
-	   	if faseOp=G_FASE then
+	   	--if faseOp=G_FASE then 17.05.2023 Sofia SIAC-8633
           strMessaggio:='Movimento movGestTsTipo='||movGestRec.movgest_ts_tipo||
                          ' movgest_orig_id='||movGestRec.movgest_orig_id||
                          ' movgest_orig_ts_id='||movGestRec.movgest_orig_ts_id||
@@ -1235,28 +1343,29 @@ BEGIN
              enteProprietarioId,
              loginOperazione
             from siac_r_movgest_ts_programma r,siac_t_programma prog,
-                 siac_t_programma pnew,siac_d_programma_tipo tipo,
-                 siac_r_programma_stato rs,siac_d_programma_stato stato
+                      siac_t_programma pnew,siac_d_programma_tipo tipo,
+                      siac_r_programma_stato rs,siac_d_programma_stato stato
             where r.movgest_ts_id=movGestRec.movgest_orig_ts_id
-            and   prog.programma_id=r.programma_id
-            and   tipo.ente_proprietario_id=prog.ente_proprietario_id
-            and   tipo.programma_tipo_code='G'
-            and   pnew.programma_tipo_id=tipo.programma_tipo_id
-            and   pnew.bil_id=bilancioId
-            and   pnew.programma_code=prog.programma_code
-            and   rs.programma_id=pnew.programma_id
-            and   stato.programma_stato_id=rs.programma_stato_id
-            and   stato.programma_stato_code='VA'
-            and   prog.data_cancellazione is null
-            and   prog.validita_fine is null
-            and   r.data_cancellazione is null
-            and   r.validita_fine is null
-            and   pnew.data_cancellazione is null
-            and   pnew.validita_fine is null
-            and   rs.data_cancellazione is null
-            and   rs.validita_fine is null
+            and     prog.programma_id=r.programma_id
+            and     tipo.ente_proprietario_id=prog.ente_proprietario_id
+            and     tipo.programma_tipo_code='G'
+            and     pnew.programma_tipo_id=tipo.programma_tipo_id
+            and     pnew.bil_id=bilancioId
+            and     pnew.programma_code=prog.programma_code
+            and     rs.programma_id=pnew.programma_id
+            and     stato.programma_stato_id=rs.programma_stato_id
+--            and     stato.programma_stato_code='VA'      17.05.2023 Sofia SIAC-8633
+            and     stato.programma_stato_code!='AN'  -- 17.05.2023 Sofia SIAC-8633           
+            and     prog.data_cancellazione is null
+            and     prog.validita_fine is null
+            and     r.data_cancellazione is null
+            and     r.validita_fine is null
+            and     pnew.data_cancellazione is null
+            and     pnew.validita_fine is null
+            and     rs.data_cancellazione is null
+            and     rs.validita_fine is null
            );
-        end if;
+        --end if;
        end if;
 
        -- pulizia dati inseriti
@@ -1314,7 +1423,13 @@ BEGIN
          strMessaggio:=strMessaggioTemp||
                       ' Non Effettuato. Cancellazione siac_r_movgest_ts_programma.';
          delete from siac_r_movgest_ts_programma   where movgest_ts_id=movGestTsIdRet;
-
+	     
+         -- 19.04.2023 Sofia SIAC-TASK-21
+         -- siac_r_mutuo_movgest_ts
+         strMessaggio:=strMessaggioTemp||
+                      ' Non Effettuato. Cancellazione siac_r_mutuo_movgest_ts.';
+         delete from siac_r_mutuo_movgest_ts   where movgest_ts_id=movGestTsIdRet;
+        
          -- siac_t_movgest_ts
  	     strMessaggio:=strMessaggioTemp||
                       ' Non Effettuato. Cancellazione siac_t_movgest_ts.';
@@ -1382,6 +1497,34 @@ BEGIN
 		    	            and   rstato.data_cancellazione is null
 		        	        and   rstato.validita_fine is null
         		    	   )
+        	-- SIAC-8551 Sofia - inizio  SIAC-8896 Sofia
+--	        and not exists 
+--    	    (
+--        	  select 1
+--	          from  siac_r_subdoc_prov_cassa  r ,siac_t_prov_cassa p 
+--    	      where r.subdoc_id=r.subdoc_id 
+--        	  and   p.provc_id=r.provc_id 
+--	          and   p.provc_anno::integer=(annoBilancio-1)
+--    	      and   p.data_cancellazione is null 
+--        	  and   p.validita_fine  is null 
+--	          and   r.data_cancellazione is null 
+--    	      and   r.validita_fine is null 
+--        	)
+     		-- SIAC-8551 Sofia - fine      	     SIAC-8896 Sofia	   
+            -- SIAC-8896 Sofia - inizio        		    	  
+   	        and not exists 
+    	    (
+        	  select 1
+	          from  siac_r_subdoc_prov_cassa  rp ,siac_t_prov_cassa p 
+    	      where rp.subdoc_id=r.subdoc_id 
+        	  and   p.provc_id=rp.provc_id 
+	          and   p.provc_anno::integer=(annoBilancio-1)
+    	      and   p.data_cancellazione is null 
+        	  and   p.validita_fine  is null 
+	          and   rp.data_cancellazione is null 
+    	      and   rp.validita_fine is null 
+        	)
+            -- SIAC-8896 Sofia - fine
     	    and   r.data_cancellazione is null
         	and   r.validita_fine is null
 			and   not exists (select 1
@@ -1413,6 +1556,34 @@ BEGIN
 		    	            and   rstato.data_cancellazione is null
 		        	        and   rstato.validita_fine is null
         		    	   )
+        	-- SIAC-8551 Sofia - inizio  SIAC-8896
+--    	    and not exists 
+--	        (
+--        	  select 1
+--	          from  siac_r_subdoc_prov_cassa  r ,siac_t_prov_cassa p 
+--    	      where r.subdoc_id=r.subdoc_id 
+--		      and   p.provc_id=r.provc_id 
+--        	  and   p.provc_anno::integer=(annoBilancio-1)
+--	          and   p.data_cancellazione is null 
+--    	      and   p.validita_fine  is null 
+--	          and   r.data_cancellazione is null 
+--    	      and   r.validita_fine is null 
+--	        )
+        	-- SIAC-8551 Sofia - fine    SIAC-8896
+        	-- SIAC-8896 Sofia - inizio 
+    	    and not exists 
+	        (
+        	  select 1
+	          from  siac_r_subdoc_prov_cassa  rp ,siac_t_prov_cassa p 
+    	      where rp.subdoc_id=r.subdoc_id 
+		      and   p.provc_id=rp.provc_id 
+        	  and   p.provc_anno::integer=(annoBilancio-1)
+	          and   p.data_cancellazione is null 
+    	      and   p.validita_fine  is null 
+	          and   rp.data_cancellazione is null 
+    	      and   rp.validita_fine is null 
+	        )
+        	-- SIAC-8896 Sofia - fine            	   	    	   
 	        and   r.data_cancellazione is null
     	    and   r.validita_fine is null
             and   not exists (select 1
@@ -1535,3 +1706,16 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+ALTER FUNCTION siac.fnc_fasi_bil_gest_apertura_acc_elabora 
+(
+  integer,
+  integer,
+  integer,
+  integer,
+  integer,
+  varchar,
+  timestamp,
+  out integer,
+  out varchar)
+OWNER TO siac;

@@ -1,13 +1,21 @@
-/*
+﻿/*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
---06.04.2016 Sofia - predisposizione bilancio di previsione da gestione precedente
--- bilancio gestione annoBilancio-1
--- 07.07.2016 Sofia - adeguamenti per backup
--- 04.11.2016 Sofia JIRA-SIAC-4161- aggiunto esclusione dei capitoli annullati
--- 11.11.2016 Sofia JIRA-SIAC-4167- gestione segnalazioni e ribaltamento anche se classificatori non validi
-CREATE OR replace FUNCTION fnc_fasi_bil_prev_apertura_struttura ( annobilancio      INTEGER,
+
+drop function if exists siac.fnc_fasi_bil_prev_apertura_struttura ( annobilancio      INTEGER,
+                                                                 euelemtipo         VARCHAR,
+                                                                 bilelemprevtipo    VARCHAR,
+                                                                 bilelemgesttipo    VARCHAR,
+                                                                 checkprev          BOOLEAN, -- TRUE: il dato di previsione esistente viene aggiornato al dato di gestione, FALSE il dato di previsione esistente non viene aggiornato.
+                                                                 enteproprietarioid INTEGER,
+                                                                 loginoperazione    VARCHAR,
+                                                                 dataelaborazione TIMESTAMP,
+                                                                 OUT fasebilelabidret   INTEGER,
+                                                                 OUT codicerisultato    INTEGER,
+                                                                 OUT messaggiorisultato VARCHAR);
+																 
+CREATE OR replace FUNCTION siac.fnc_fasi_bil_prev_apertura_struttura ( annobilancio      INTEGER,
                                                                  euelemtipo         VARCHAR,
                                                                  bilelemprevtipo    VARCHAR,
                                                                  bilelemgesttipo    VARCHAR,
@@ -1407,7 +1415,10 @@ if codResult is not null then raise exception ' Non effettuato.'; end if;
         ||' '
         ||elembil.elem_code3
         ||' : siac_r_bil_elem_rel_tempo.' ;
-        INSERT INTO siac_r_bil_elem_rel_tempo
+		-- siac-8383 Sofia 22.10.2021 
+		-- elem_id_old deve essere ricalcolato in base al suo stesso equivalente di gestione in annobilancio-1
+		-- attenzione anche al controllo dopo la insert o da commentare o da correggere
+        /*INSERT INTO siac_r_bil_elem_rel_tempo
                     (
                                 elem_id,
                                 elem_id_old,
@@ -1427,8 +1438,41 @@ if codResult is not null then raise exception ' Non effettuato.'; end if;
                            AND    date_trunc('day',dataelaborazione)>=date_trunc('day',v.validita_inizio)
                            AND    (
                                          date_trunc('day',dataelaborazione)<=date_trunc('day',v.validita_fine)
-                                  OR     v.validita_fine IS NULL));
+                                  OR     v.validita_fine IS NULL));*/
+        -- siac-8383 Sofia 22.10.2021                          
+        INSERT INTO siac_r_bil_elem_rel_tempo
+        (
+         elem_id,
+         elem_id_old,
+         validita_inizio,
+         ente_proprietario_id,
+         login_operazione
+        )
+        (
+                          SELECT bilelemidret,
+                                  enew.elem_id,
+                                  datainizioval,
+                                  v.ente_proprietario_id,
+                                  loginoperazione
+                           FROM   siac_r_bil_elem_rel_tempo v,siac_t_bil_elem e, 
+                                  siac_t_bil_elem enew 
+                           WHERE  v.elem_id=elembil.elem_id
+                           AND    e.elem_id=v.elem_id_old
+                           AND    enew.bil_id=bilancioprecid
+                           AND    enew.elem_tipo_id=bilelemgesttipoid
+                           AND    enew.elem_code=e.elem_code
+                           AND    enew.elem_code2=e.elem_code2
+                           AND    enew.elem_code3=e.elem_code3
+                           AND    v.data_cancellazione IS NULL
+                           AND    enew.data_cancellazione IS null
+                           AND    date_trunc('day',dataelaborazione)>=date_trunc('day',v.validita_inizio)
+                           AND    (
+                                         date_trunc('day',dataelaborazione)<=date_trunc('day',v.validita_fine)
+                                  OR     v.validita_fine IS NULL)
+        );
+                                 
 
+        /* siac-8383 Sofia 22.10.2021  controllo commentato in quanto il capitolo equivalente potrebbe anche non esistere
         codresult:=NULL;
         strmessaggio:='Inserimento nuove strutture per tipo='
         ||bilelemprevtipo
@@ -1465,7 +1509,8 @@ if codResult is not null then raise exception ' Non effettuato.'; end if;
           RAISE
         EXCEPTION
           ' Non effettuato.';
-        END IF;
+        END IF;*/
+       
         codresult:=NULL;
         -- siac_r_bil_elem_class
         strmessaggio:='Inserimento nuove strutture per tipo='
@@ -4338,7 +4383,10 @@ raise notice 'strmessaggio=%',strmessaggio;
 
         -- siac_r_bil_elem_rel_tempo
         strmessaggio:='Inserimento nuove strutture previsione esistenti da gestione equivalente anno precedente [siac_r_bil_elem_rel_tempo].';
-        INSERT INTO siac_r_bil_elem_rel_tempo
+		-- siac-8383 Sofia 22.10.2021 
+		-- elem_id_old deve essere ricalcolato in base al suo stesso equivalente di gestione in annobilancio-1
+		-- attenzione anche al controllo dopo la insert o da commentare o da correggere		
+        /*INSERT INTO siac_r_bil_elem_rel_tempo
                     (
                                 elem_id,
                                 elem_id_old,
@@ -4362,7 +4410,41 @@ raise notice 'strmessaggio=%',strmessaggio;
                            AND    fase.elem_gest_id IS NOT NULL
                            AND    v.data_cancellazione IS NULL
                            AND    v.validita_fine IS NULL );
-
+        */
+        -- siac-8383 Sofia 22.10.2021                  
+        INSERT INTO siac_r_bil_elem_rel_tempo
+                    (
+                                elem_id,
+                                elem_id_old,
+                                validita_inizio,
+                                ente_proprietario_id,
+                                login_operazione
+                    )
+                    (
+                           SELECT fase.elem_prev_id,
+                                  enew.elem_id,
+                                  datainizioval,
+                                  v.ente_proprietario_id,
+                                  loginoperazione
+                           FROM   siac_r_bil_elem_rel_tempo v,
+                                  fase_bil_t_prev_apertura_str_elem_prev_esiste fase,
+                                  siac_t_bil_elem e,siac_t_bil_elem enew
+                           WHERE  v.elem_id=fase.elem_gest_id
+                           AND    fase.ente_proprietario_id=enteproprietarioid
+                           AND    fase.bil_id=bilancioid
+                           AND    fase.fase_bil_elab_id=fasebilelabid
+                           AND    e.elem_id=v.elem_id_old
+                           AND    enew.bil_id=bilancioprecid
+                           AND    enew.elem_tipo_id=bilelemgesttipoid
+                           AND    enew.elem_code=e.elem_code
+                           AND    enew.elem_code2=e.elem_code2
+                           AND    enew.elem_code3=e.elem_code3
+                           AND    fase.data_cancellazione IS NULL
+                           AND    fase.elem_gest_id IS NOT NULL
+                           AND    v.data_cancellazione IS NULL
+                           AND    v.validita_fine IS NULL 
+                           AND    enew.data_cancellazione IS null
+                  );                   
         codresult:=NULL;
         strmessaggio:='Fine inserimento nuove strutture previsione esistenti da gestione equivalente anno precedente.';
         INSERT INTO fase_bil_t_elaborazione_log
@@ -4812,7 +4894,9 @@ raise notice 'strmessaggio=%',strmessaggio;
         EXCEPTION
           ' Elementi di bilancio assenti di relazione.';
         END IF;
-        codresult:=NULL;
+       
+        /* -- siac-8383 Sofia 22.10.2021 il capitolo equivalente potrebbe anche non esistere
+         codresult:=NULL;
         strmessaggio:='Inserimento nuove strutture previsione esistenti da gestione equivalente anno precedente [siac_r_bil_elem_rel_tempo].Verifica esistenza relazioni.';
         SELECT   1
         INTO     codresult
@@ -4840,7 +4924,7 @@ raise notice 'strmessaggio=%',strmessaggio;
           RAISE
         EXCEPTION
           ' Elementi di bilancio assenti di relazione.';
-        END IF;
+        END IF;*/
         IF euelemtipo=tipo_elem_eu THEN
           -- Classificatore necessario solo per capitolo di categoria STD
           -- CL_PROGRAMMA
@@ -6343,3 +6427,18 @@ raise notice 'strmessaggio=%',strmessaggio;
     RETURN;
   END;
   $body$ LANGUAGE 'plpgsql' volatile called ON NULL input security invoker cost 100;
+  
+  alter function 
+  siac.fnc_fasi_bil_prev_apertura_struttura 
+  ( INTEGER,
+    VARCHAR,
+	VARCHAR,
+    VARCHAR,
+    BOOLEAN,
+    INTEGER,
+    VARCHAR,
+    TIMESTAMP,
+    OUT INTEGER,
+    OUT INTEGER,
+    OUT VARCHAR) OWNER TO siac;
+																

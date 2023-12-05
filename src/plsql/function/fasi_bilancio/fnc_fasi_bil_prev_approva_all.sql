@@ -2,29 +2,39 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿--- ESEGUE
+--- ESEGUE
 --- STEP 1 -- CAP-UP
 --  STEP 2 -- CAP-EP
 --  valire stepPartenza ammessi 99, >=2
 --- stepPartenza -- 99  tutti e due gli step
 ---              -- >=2 entrata
 --- faseBilancio=G --> in gestione definitiva
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_prev_approva_all
+DROP FUNCTION IF EXISTS siac.fnc_fasi_bil_prev_approva_all
 (
   annobilancio           integer,
   faseBilancio           varchar,
   stepPartenza           integer,
   checkGest              boolean,
   impostaImporti         boolean,
-
-
-
-
   enteproprietarioid     integer,
   loginoperazione        varchar,
   dataelaborazione       timestamp,
   out faseBilElabIdRet   integer,
+  out codicerisultato    integer,
+  out messaggiorisultato varchar
+);
 
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_prev_approva_all
+(
+  annobilancio           integer,
+  faseBilancio           varchar,
+  stepPartenza           integer,
+  checkGest              boolean,
+  impostaImporti         boolean,
+  enteproprietarioid     integer,
+  loginoperazione        varchar,
+  dataelaborazione       timestamp,
+  out faseBilElabIdRet   integer,
   out codicerisultato    integer,
   out messaggiorisultato varchar
 )
@@ -147,7 +157,8 @@ BEGIN
 			  enteProprietarioId,
 			  'G',
 			  loginOperazione,
-			  dataElaborazione
+			  dataElaborazione,
+			  true -- 17.05.2023 Sofia SIAC-8633 in approvazione deve sempre riportare i collegamenti con i movimenti 
              );
        if strRec.codiceRisultato!=0 then
        	strMessaggio:=strRec.messaggioRisultato;
@@ -189,3 +200,19 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+
+ALTER FUNCTION siac.fnc_fasi_bil_prev_approva_all
+(
+  integer,
+  varchar,
+  integer,
+  boolean,
+  boolean,
+  integer,
+  varchar,
+  timestamp,
+  out integer,
+  out integer,
+  out varchar
+) OWNER TO siac;

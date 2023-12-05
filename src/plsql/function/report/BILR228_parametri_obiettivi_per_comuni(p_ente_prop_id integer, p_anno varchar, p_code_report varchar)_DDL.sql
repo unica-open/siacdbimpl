@@ -71,6 +71,12 @@ indic_13_3_app numeric;
 
 id_report_config integer;
 
+rend_accert_A_pdce_E_4_03_07 numeric;
+rend_accert_A_pdce_E_4_03_08 numeric;
+rend_accert_A_pdce_E_4_03_09 numeric;
+
+denominatore NUMERIC;
+
 BEGIN
 
 /*
@@ -200,6 +206,13 @@ rend_impegni_i_pdce_U_1_07_06_04:=0;
 --spese imp_impegnato_i titoli '1', '2'
 rend_impegni_I_titoli_1_2:=0;
 
+--entrate importo_accertato_a pdce   'E.4.03.07'
+rend_accert_A_pdce_E_4_03_07 :=0;
+--entrate importo_accertato_a pdce   'E.4.03.08'
+rend_accert_A_pdce_E_4_03_08 :=0;
+--entrate importo_accertato_a pdce   'E.4.03.09'
+rend_accert_A_pdce_E_4_03_09 :=0;
+
 	-- estraggo la parte relativa alle variabili.
 for variabiliRendiconto IN
   select t_voce_conf_indicatori_sint.voce_conf_ind_codice,
@@ -307,8 +320,32 @@ loop
         	COALESCE(entrataRendiconto.importo_risc_conto_comp_rc,0);
     end if;            
 
+	--13/10/2023 - siac-task issue #216.
+    --Aggiunti rend_accert_A_pdce_E_4_03_07, rend_accert_A_pdce_E_4_03_08 e rend_accert_A_pdce_E_4_03_09.
+    if left(entrataRendiconto.pdce_code,9) = 'E.4.03.07' then
+    	rend_accert_A_pdce_E_4_03_07:=rend_accert_A_pdce_E_4_03_07+
+        	COALESCE(entrataRendiconto.importo_accertato_a,0);            
+    end if;
+    
+    if left(entrataRendiconto.pdce_code,9) = 'E.4.03.08' then
+    	rend_accert_A_pdce_E_4_03_08:=rend_accert_A_pdce_E_4_03_08+
+        	COALESCE(entrataRendiconto.importo_accertato_a,0);            
+    end if;    
+    
+    if left(entrataRendiconto.pdce_code,9) = 'E.4.03.09' then
+    	rend_accert_A_pdce_E_4_03_09:=rend_accert_A_pdce_E_4_03_09+
+        	COALESCE(entrataRendiconto.importo_accertato_a,0);            
+    end if;      
     
 end loop;
+
+--rend_accert_A_pdce_E_4_03_07:=100000000;
+--rend_accert_A_pdce_E_4_03_08:=100000001;
+--rend_accert_A_pdce_E_4_03_09:=100000002;
+
+--raise notice 'rend_accert_A_pdce_E_4_03_07 = % - rend_accert_A_pdce_E_4_03_08 = % - rend_accert_A_pdce_E_4_03_09 = %',
+--	rend_accert_A_pdce_E_4_03_07, rend_accert_A_pdce_E_4_03_08, rend_accert_A_pdce_E_4_03_09;
+    
 
 	-- estraggo la parte relativa al rendiconto di SPESA e calcolo
     -- i singoli valori.
@@ -363,7 +400,7 @@ select COALESCE(sum(spese_fpv_anni_prec),0)
 	vengono effettuati all'interno dei report degli indicatori.
 */    
 
-/* IMPORTO P1 = Indicatore 1.2 = 
+/* IMPORTO P1 = Indicatore 1.1 = 
 	var Denom = row._outer["rend_accert_A_titoli_123"];
 
 	(dataSetRow["ripiano_disav_rnd"]+
@@ -375,6 +412,16 @@ select COALESCE(sum(spese_fpv_anni_prec),0)
  	 row._outer._outer._outer["rend_impegni_I_titolo_4"]) /
  	 Denom;
 */
+/*
+--13/10/2023 - siac-task issue #216.
+--Al denominatore devono essere aggiunti gli stanziamenti di competenza Categorie 4.03.07, 4.03.08, 4.03.09
+var Denom = 0;
+if(row._outer["rend_accert_A_titoli_123"] != null)  Denom = Denom + row._outer["rend_accert_A_titoli_123"];
+if(row._outer["rend_accert_A_pdce_E.4.03.07"] != null) Denom = Denom + row._outer["rend_accert_A_pdce_E.4.03.07"];
+if(row._outer["rend_accert_A_pdce_E.4.03.08"] != null) Denom = Denom + row._outer["rend_accert_A_pdce_E.4.03.08"];
+if(row._outer["rend_accert_A_pdce_E.4.03.09"] != null) Denom = Denom + row._outer["rend_accert_A_pdce_E.4.03.09"];
+
+Prima era:
 if rend_accert_A_titoli_123 != 0 then
 	importo_p1 :=
 		(ripiano_disav_rnd + rend_impegni_I_macroagg101
@@ -382,6 +429,21 @@ if rend_accert_A_titoli_123 != 0 then
         - rend_FPV_anno_prec_macroagg101 + rend_FPV_macroagg_101
         + rend_impegni_I_macroagg107 + rend_impegni_I_titolo_4) /
         rend_accert_A_titoli_123;
+end if;
+
+*/
+
+denominatore:=0;
+denominatore:=COALESCE(rend_accert_A_titoli_123,0) + COALESCE(rend_accert_A_pdce_E_4_03_07, 0) +
+	COALESCE(rend_accert_A_pdce_E_4_03_08,0) + COALESCE(rend_accert_A_pdce_E_4_03_09, 0);
+
+if denominatore != 0 then
+	importo_p1 :=
+		(ripiano_disav_rnd + rend_impegni_I_macroagg101
+        + rend_impegni_I_pdce_U_1_02_01_01 
+        - rend_FPV_anno_prec_macroagg101 + rend_FPV_macroagg_101
+        + rend_impegni_I_macroagg107 + rend_impegni_I_titolo_4) /
+        denominatore;
 end if;
 
 /* IMPORTO P2 = Indicatore 2.8 = 
@@ -417,6 +479,16 @@ end if;
 	  row._outer["rend_accert_A_pdce_E.4.03.04"])) /
 	  row._outer["rend_accert_A_titoli_123"];
 */
+/*
+--13/10/2023 - siac-task issue #216.
+--Al denominatore devono essere aggiunti gli stanziamenti di competenza Categorie 4.03.07, 4.03.08, 4.03.09
+var Denom = 0;
+if(row._outer["rend_accert_A_titoli_123"] != null)  Denom = Denom + row._outer["rend_accert_A_titoli_123"];
+if(row._outer["rend_accert_A_pdce_E.4.03.07"] != null) Denom = Denom + row._outer["rend_accert_A_pdce_E.4.03.07"];
+if(row._outer["rend_accert_A_pdce_E.4.03.08"] != null) Denom = Denom + row._outer["rend_accert_A_pdce_E.4.03.08"];
+if(row._outer["rend_accert_A_pdce_E.4.03.09"] != null) Denom = Denom + row._outer["rend_accert_A_pdce_E.4.03.09"];
+
+Prima era:
 
 if rend_accert_A_titoli_123 != 0 then
 	importo_p4 := 
@@ -426,6 +498,21 @@ if rend_accert_A_titoli_123 != 0 then
      - (rend_accert_A_pdce_E_4_02_06 + rend_accert_A_pdce_E_4_03_01
         + rend_accert_A_pdce_E_4_03_04)) /
     rend_accert_A_titoli_123;
+end if;
+
+*/
+denominatore:=0;
+denominatore:=COALESCE(rend_accert_A_titoli_123,0) + COALESCE(rend_accert_A_pdce_E_4_03_07, 0) +
+	COALESCE(rend_accert_A_pdce_E_4_03_08,0) + COALESCE(rend_accert_A_pdce_E_4_03_09, 0);
+    
+if denominatore != 0 then
+	importo_p4 := 
+    (rend_impegni_I_macroagg107 - rend_impegni_i_pdce_U_1_07_06_02
+     - rend_impegni_i_pdce_U_1_07_06_04 + rend_impegni_I_titolo_4
+     - impegni_estinz_anticip_rnd
+     - (rend_accert_A_pdce_E_4_02_06 + rend_accert_A_pdce_E_4_03_01
+        + rend_accert_A_pdce_E_4_03_04)) /
+    denominatore;
 end if;
 
 /* IMPORTO P5 = Indicatore 12.4 =
@@ -522,6 +609,11 @@ raise notice 'rend_FPV_anno_prec_macroagg101 = %', rend_FPV_anno_prec_macroagg10
 raise notice 'rend_impegni_i_pdce_U_1_07_06_02 = %', rend_impegni_i_pdce_U_1_07_06_02;
 raise notice 'rend_impegni_i_pdce_U_1_07_06_04 = %', rend_impegni_i_pdce_U_1_07_06_04;
 raise notice 'rend_impegni_I_titoli_1_2 = %', rend_impegni_I_titoli_1_2;
+raise notice 'rend_accert_A_pdce_E_4_03_07 = %', rend_accert_A_pdce_E_4_03_07;
+raise notice 'rend_accert_A_pdce_E_4_03_08 = %', rend_accert_A_pdce_E_4_03_08;
+raise notice 'rend_accert_A_pdce_E_4_03_09 = %', rend_accert_A_pdce_E_4_03_09;
+
+
 
 return next;
 
@@ -539,4 +631,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR228_parametri_obiettivi_per_comuni" (p_ente_prop_id integer, p_anno varchar, p_code_report varchar)
+  OWNER TO siac;

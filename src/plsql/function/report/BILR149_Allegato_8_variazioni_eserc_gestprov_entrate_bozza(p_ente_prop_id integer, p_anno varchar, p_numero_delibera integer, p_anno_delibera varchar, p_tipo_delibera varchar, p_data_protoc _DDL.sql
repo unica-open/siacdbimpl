@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR149_Allegato_8_variazioni_eserc_gestprov_entrate_bozza" (
@@ -478,7 +478,8 @@ and		tipo_atto.attoamm_tipo_code							=	p_tipo_delibera
 --and		stato_atto.attoamm_stato_code						=	'DEFINITIVO'
 -- 13/02/2017: aggiunto filtro su anno competenza  
 and     anno_importo.anno                                   =   p_anno_competenza 					
-and		tipologia_stato_var.variazione_stato_tipo_code		 in	('B','G', 'C', 'P')
+--10/10/2022 SIAC-8827  Aggiunto lo stato BD.
+and		tipologia_stato_var.variazione_stato_tipo_code		 in	('B','G', 'C', 'P','BD')
 and		tipo_capitolo.elem_tipo_code						=	elemTipoCode
 and		tipo_elemento.elem_det_tipo_code					= 'STA'
 and		atto.data_cancellazione						is null
@@ -532,8 +533,9 @@ and		dettaglio_variazione.elem_det_tipo_id				=	tipo_elemento.elem_det_tipo_id
 and		testata_variazione.ente_proprietario_id 			= 	'||p_ente_prop_id||'
 and		anno_eserc.anno										= 	'''||p_anno||'''
 and		testata_variazione.variazione_num					in ('||p_ele_variazioni||')
-and     anno_importo.anno                                   =   '''||p_anno_competenza||'''				
-and		tipologia_stato_var.variazione_stato_tipo_code		 in	(''B'',''G'', ''C'', ''P'')
+and     anno_importo.anno                                   =   '''||p_anno_competenza||'''	
+--10/10/2022 SIAC-8827  Aggiunto lo stato BD.			
+and		tipologia_stato_var.variazione_stato_tipo_code		 in	(''B'',''G'', ''C'', ''P'', ''BD'')
 and		tipo_capitolo.elem_tipo_code						=	'''||elemTipoCode||'''
 and		tipo_elemento.elem_det_tipo_code					= ''STA''
 and		r_variazione_stato.data_cancellazione		is null
@@ -791,4 +793,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR149_Allegato_8_variazioni_eserc_gestprov_entrate_bozza" (p_ente_prop_id integer, p_anno varchar, p_numero_delibera integer, p_anno_delibera varchar, p_tipo_delibera varchar, p_data_protocollo varchar, p_ele_variazioni varchar, p_anno_competenza varchar)
+  OWNER TO siac;

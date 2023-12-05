@@ -2,7 +2,21 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_reimputa_vincoli (
+-- FUNCTION: siac.fnc_fasi_bil_gest_reimputa_vincoli(integer, integer, character varying, timestamp without time zone)
+
+-- DROP FUNCTION siac.fnc_fasi_bil_gest_reimputa_vincoli(integer, integer, character varying, timestamp without time zone);
+
+drop FUNCTION if exists siac.fnc_fasi_bil_gest_reimputa_vincoli 
+(
+  enteproprietarioid integer,
+  annobilancio integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_reimputa_vincoli (
   enteproprietarioid integer,
   annobilancio integer,
   loginoperazione varchar,
@@ -144,6 +158,7 @@ BEGIN
     	return;
     end if;
 
+/* -- SIAC-6997 ---------------- INIZIO --------------------
 	strMessaggio:='Lettura bilancioId e periodoId  per annoBilancio-1='||(annoBilancio-1)::varchar||'.';
     select bil.bil_id , per.periodo_id into bilancioPrecId, periodoPrecId
     from siac_t_bil bil, siac_t_periodo per
@@ -165,6 +180,7 @@ BEGIN
 	    messaggioRisultato:=strMessaggioFinale||strMessaggio;
     	return;
     end if;
+*/ -- SIAC-6997 --------------- FINE ------------------------
 
 	codResult:=null;
     strMessaggio:='Verifica elaborazione fase='||APE_GEST_REIMP||' per impegni.';
@@ -181,7 +197,7 @@ BEGIN
     end if;
 
   	codResult:=null;
-    select fase.fase_bil_elab_id into codResult
+    select fase.fase_bil_elab_id, fasereimp.bil_id into codResult, bilancioPrecId
     from fase_bil_t_elaborazione fase, fase_bil_d_elaborazione_tipo tipo,
          fase_bil_t_reimputazione fasereimp
     where tipo.ente_proprietario_id=enteProprietarioId
@@ -191,7 +207,9 @@ BEGIN
     and   fasereimp.fasebilelabid=fase.fase_bil_elab_id
     and   fasereimp.movgest_tipo_id=tipoMovGestId
     and   fasereimp.fl_elab is not null and fasereimp.fl_elab='S'
-    and   fasereimp.bil_id=bilancioPrecId -- bilancio precedente per elaborazione reimputazione su annoBilancio
+-- SIAC-6997 --------------- INIZIO ------------------------
+--    and   fasereimp.bil_id=bilancioPrecId -- bilancio precedente per elaborazione reimputazione su annoBilancio
+-- SIAC-6997 --------------- FINE ------------------------
     and   fase.data_cancellazione is null
     and   fase.validita_fine is null
     and   tipo.data_cancellazione is null
@@ -346,7 +364,7 @@ BEGIN
               fasevinc.importo_vincolo,
               fasevinc.avav_id,
               fasevinc.avav_new_id,
-              fasevinc.importo_vincolo_new,
+              coalesce(fasevinc.importo_vincolo_new,0) importo_vincolo_new, -- 12.04.2022 Sofia Jira SIAC-8489
               mov.movgest_id,ts.movgest_ts_id,
               fasevinc.reimputazione_vinc_id
 	  from siac_t_movgest mov ,
@@ -357,6 +375,8 @@ BEGIN
 	  and   mov.movgest_tipo_id=tipoMovGestId
 	  and   ts.movgest_id=mov.movgest_id
 	  and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+	  --    25.05.2022 Sofia Jira SIAC-8433
+	  and   tipots.movgest_ts_tipo_code='T' -- solo impegni , no sub-impegni
 	  and   rs.movgest_ts_id=ts.movgest_ts_id
       and   rs.movgest_stato_id!=movGestStatoAId
 	  and   fase.fasebilelabid=faseBilElabReImpId
@@ -395,7 +415,7 @@ BEGIN
                       ' subnumero='||movGestRec.numero_subimpegno||
                       ' movgest_ts_new_id='||movGestRec.movgest_ts_id||
                       ' movgest_ts_id='||movGestRec.movgest_ts_b_id||
-                      ' movgest_ts_r_id='||movGestRec.movgest_ts_r_id||
+                      ' movgest_ts_r_id='||coalesce(movGestRec.movgest_ts_r_id,0)||
                       ' movgest_ts_a_id='||coalesce(movGestRec.movgest_ts_a_id,0)||'.';
 
         raise notice 'strMessaggio=%  movGestRec.movgest_new_id=%', strMessaggio, movGestRec.movgest_ts_id;
@@ -416,6 +436,12 @@ BEGIN
             bCreaVincolo:=true;
         end if;
 
+        -- JIRA SIAC-8489 12.04.2022 Sofia
+        -- caso REANNO di vincolo verso acceramento che deve essere mantenuto
+        if movGestRec.movgest_ts_a_id is NOT null AND  movGestRec.avav_new_id=-1 then
+            bCreaVincolo:=true;
+        end if;
+       
         /* caso 3
   		   se il vincolo abbattuto era legato ad un accertamento
 		   che non presenta quote riaccertate esso stesso:
@@ -428,7 +454,9 @@ BEGIN
 		 (utilizzabile - somma altri vincoli) del ogni nuovo acc. riaccertato con anno_accertamento<=anno_impegno
 		 Per la restante parte creare un vincolo di tipo FPV con tipo spesa corrente o conto capitale in base al titolo di
 		 spesa dell'impegno (vedi algoritmo a seguire) */
-        if movGestRec.movgest_ts_a_id is not null then
+        -- JIRA SIAC-8489 12.04.2022 Sofia - esclusione caso REANNO vi vincolo verso acceramento che deve essere mantenuto
+        if movGestRec.movgest_ts_a_id is not null AND bCreaVincolo=false then       
+--        if movGestRec.movgest_ts_a_id is not null then
             codResult:=null;
             strMessaggio:=strMessaggio||' - caso con accertamento verifica esistenza quota riacc.';
             raise notice 'strMessaggio=%',strMessaggio;
@@ -571,44 +599,117 @@ BEGIN
 
 
 	   if bCreaVincolo=true then
-            codResult:=null;
-            strMessaggio:=strMessaggio||' - inserimento vincolo senza accertamento vincolato.';
-        	insert into fase_bil_t_elaborazione_log
-	    	(fase_bil_elab_id,fase_bil_elab_log_operazione,
-	    	 validita_inizio, login_operazione, ente_proprietario_id
-		    )
-		    values
-	    	(faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
-		    returning fase_bil_elab_log_id into codResult;
+	    -- 12.04.2022 Sofia Jira SIAC-8489
+	   	if  movGestRec.avav_new_id is not null and movGestRec.avav_new_id<>-1 then 
+			codResult:=null;
+			strMessaggio:=strMessaggio||' - inserimento vincolo senza accertamento vincolato.';
+			insert into fase_bil_t_elaborazione_log
+			(fase_bil_elab_id,fase_bil_elab_log_operazione,
+			 validita_inizio, login_operazione, ente_proprietario_id
+			)
+			values
+			(faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+			returning fase_bil_elab_log_id into codResult;
+			
+			if codResult is null then
+			 	raise exception ' Errore in inserimento LOG.';
+			end if;
+			
+			movGestTsRIdRet:=null;
+			-- 17.06.2020 Sofia SIAC-7593
+			update  siac_r_movgest_ts r
+			set     movgest_ts_importo=r.movgest_ts_importo+movGestRec.importo_vincolo_new,
+			        data_modifica=clock_timestamp()
+			where r.movgest_ts_b_id=movGestRec.movgest_ts_id
+			and   r.avav_id=movGestRec.avav_new_id
+			and   r.data_cancellazione is null
+			and   r.validita_fine is null
+			returning r.movgest_ts_r_id into movGestTsRIdRet;
+			
+			
+			-- 17.06.2020 Sofia SIAC-7593
+			if movGestTsRIdRet is null and movGestRec.importo_vincolo_new !=0 then -- 12.04.2022 Sofia Jira SIAC-8489
+			
+			-- inserimento siac_t_movgest_ts_r nuovo con i dati presenti in fase_bil_t_reimputazione_vincoli
+			-- aggiornamento di fase_bil_t_reimputazione_vincoli
+			    insert into siac_r_movgest_ts
+			    (
+			        movgest_ts_b_id,
+				    movgest_ts_importo,
+			        avav_id,
+			        validita_inizio,
+			        login_operazione,
+			        ente_proprietario_id
+			    )
+			    values
+			    (
+			    	movGestRec.movgest_ts_id,
+			        movGestRec.importo_vincolo_new,
+			        movGestRec.avav_new_id,
+			        clock_timestamp(),
+			        loginOperazione,
+			        enteProprietarioId
+			    )
+			    returning movgest_ts_r_id into movGestTsRIdRet;
+			  end if;
 
-		    if codResult is null then
-    		 	raise exception ' Errore in inserimento LOG.';
-	    	end if;
-
-
-       		-- inserimento siac_t_movgest_ts_r nuovo con i dati presenti in fase_bil_t_reimputazione_vincoli
-            -- aggiornamento di fase_bil_t_reimputazione_vincoli
-            insert into siac_r_movgest_ts
-            (
-		        movgest_ts_b_id,
-			    movgest_ts_importo,
-                avav_id,
-                validita_inizio,
-                login_operazione,
-                ente_proprietario_id
-            )
-            values
-            (
-            	movGestRec.movgest_ts_id,
-                movGestRec.importo_vincolo_new,
-                movGestRec.avav_new_id,
-                clock_timestamp(),
-                loginOperazione,
-                enteProprietarioId
-            )
-            returning movgest_ts_r_id into movGestTsRIdRet;
-
-            if movGestTsRIdRet is null then
+	      
+	      else 
+	         if movGestRec.avav_new_id is not null and movGestRec.avav_new_id=-1 then 
+	         	codResult:=null;
+				strMessaggio:=strMessaggio||' - inserimento vincolo con accertamento vincolato - no reimp.';
+				insert into fase_bil_t_elaborazione_log
+				(fase_bil_elab_id,fase_bil_elab_log_operazione,
+				 validita_inizio, login_operazione, ente_proprietario_id
+				)
+				values
+				(faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+				returning fase_bil_elab_log_id into codResult;
+			
+				if codResult is null then
+				 	raise exception ' Errore in inserimento LOG.';
+				end if;
+			
+				movGestTsRIdRet:=null;
+				update  siac_r_movgest_ts r
+				set     movgest_ts_importo=r.movgest_ts_importo+movGestRec.importo_vincolo_new,
+				        data_modifica=clock_timestamp()
+				where r.movgest_ts_b_id=movGestRec.movgest_ts_id
+				and   r.movgest_ts_a_id=movGestRec.movgest_ts_a_id
+				and   r.data_cancellazione is null
+				and   r.validita_fine is null
+				returning r.movgest_ts_r_id into movGestTsRIdRet;
+				
+				if movGestTsRIdRet is null and movGestRec.importo_vincolo_new!=0 then
+			
+				-- inserimento siac_t_movgest_ts_r nuovo con i dati presenti in fase_bil_t_reimputazione_vincoli
+				-- aggiornamento di fase_bil_t_reimputazione_vincoli
+			    insert into siac_r_movgest_ts
+			    (
+			        movgest_ts_b_id,
+			        movgest_ts_a_id,			        
+				    movgest_ts_importo,
+			        validita_inizio,
+			        login_operazione,
+			        ente_proprietario_id
+			    )
+			    values
+			    (
+			    	movGestRec.movgest_ts_id,
+			    	movGestRec.movgest_ts_a_id,
+			        movGestRec.importo_vincolo_new,
+			        clock_timestamp(),
+			        loginOperazione,
+			        enteProprietarioId
+			    )
+			    returning movgest_ts_r_id into movGestTsRIdRet;
+			   end if;
+			  
+	        end if;
+	       
+	      end if;
+	      
+          if movGestTsRIdRet is null then
             	strMessaggio:='Aggiornamento fase_bil_t_reimputazione_vincoli per scarto in fase di reimputazione nuovo vincolo.';
             	update fase_bil_t_reimputazione_vincoli fase
                 set    fl_elab='X',
@@ -627,68 +728,7 @@ BEGIN
                        movgest_ts_r_new_id=movGestTsRIdRet,
                    	   bil_new_id=bilancioId
             	where fase.reimputazione_vinc_id=movGestRec.reimputazione_vinc_id;
-            end if;
-
-            --- 29.07.2019 Sofia SIAC-6702
-            if movGestRec.movgest_ts_a_id is not null then
-                codResult:=null;
-                strMessaggio:='Impegno anno='||movGestRec.anno_impegno||
-                      ' numero='||movGestRec.numero_impegno||
-                      ' subnumero='||movGestRec.numero_subimpegno||
-                      ' movgest_ts_new_id='||movGestRec.movgest_ts_id||
-                      ' movgest_ts_id='||movGestRec.movgest_ts_b_id||
-                      ' movgest_ts_r_id='||movGestRec.movgest_ts_r_id||
-                      ' movgest_ts_a_id='||coalesce(movGestRec.movgest_ts_a_id,0)||
-                      ' - inserimento vincolo senza accertamento vincolato - inserimento storico.';
-
-	        	insert into fase_bil_t_elaborazione_log
-		    	(fase_bil_elab_id,fase_bil_elab_log_operazione,
-	    		 validita_inizio, login_operazione, ente_proprietario_id
-			    )
-			    values
-	    		(faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
-			    returning fase_bil_elab_log_id into codResult;
-
-			    if codResult is null then
-    			 	raise exception ' Errore in inserimento LOG.';
-		    	end if;
-
-            	insert into SIAC_R_MOVGEST_TS_STORICO_IMP_ACC
-                (
-                    movgest_ts_id,
-                    movgest_anno_acc,
-                    movgest_numero_acc,
-                    movgest_subnumero_acc,
-                    validita_inizio,
-                    login_operazione,
-                    ente_proprietario_id
-                )
-                select movGestRec.movgest_ts_id,
-                       mov.movgest_anno::integer,
-                       mov.movgest_numero::integer,
-                       (case when tipots.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end),
-                       clock_timestamp(),
-               		   loginOperazione,
-	                   enteProprietarioId
-                from siac_t_movgest mov , siac_t_movgest_ts ts,siac_d_movgest_ts_tipo tipots
-                where ts.movgest_ts_id=movGestRec.movgest_ts_a_id
-                and   mov.movgest_id=ts.movgest_id
-                and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-                and   ts.data_cancellazione is null
-                and   ts.validita_fine is null
-                and   mov.data_cancellazione is null
-                and   mov.validita_fine is null
-                and   not exists
-                (
-                select 1 from SIAC_R_MOVGEST_TS_STORICO_IMP_ACC r
-                where r.movgest_ts_id=ts.movgest_ts_id
-                and   r.movgest_anno_acc=mov.movgest_anno::Integer
-                and   r.movgest_numero_acc=mov.movgest_numero::integer
-                and   r.movgest_subnumero_acc=(case when tipots.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)
-                and   r.data_cancellazione is null
-                and   r.validita_fine is null
-                );
-            end if;
+           end if;
        end if;
 
 
@@ -698,7 +738,7 @@ BEGIN
                       ' subnumero='||movGestRec.numero_subimpegno||
                       ' movgest_ts_new_id='||movGestRec.movgest_ts_id||
                       ' movgest_ts_id='||movGestRec.movgest_ts_b_id||
-                      ' movgest_ts_r_id='||movGestRec.movgest_ts_r_id||
+                      ' movgest_ts_r_id='||coalesce(movGestRec.movgest_ts_r_id,0)||
                       ' movgest_ts_a_id='||coalesce(movGestRec.movgest_ts_a_id,0)||'.';
 
         raise notice 'strMessaggio=%  movGestRec.movgest_new_id=%', strMessaggio, movGestRec.movgest_ts_id;
@@ -716,7 +756,189 @@ BEGIN
 
      end loop;
 
+    -- 23.06.2020 Sofia jira SIAC-SIAC-7663 - inizio
+    codResult:=null;
+    strMessaggioFinale:='Apertura bilancio gestione.Reimputazione vincoli. Anno bilancio='||annoBilancio::varchar||'.';
+    strMessaggio:=' Inserimento SIAC_R_MOVGEST_TS_STORICO_IMP_ACC.';
+	insert into fase_bil_t_elaborazione_log
+    (fase_bil_elab_id,fase_bil_elab_log_operazione,
+     validita_inizio, login_operazione, ente_proprietario_id
+    )
+    values
+    (faseBilElabId,strMessaggioFinale||strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+    returning fase_bil_elab_log_id into codResult;
 
+    if codResult is null then
+    	raise exception ' Errore in inserimento LOG.';
+    end if;
+
+    insert into SIAC_R_MOVGEST_TS_STORICO_IMP_ACC
+    (
+        movgest_ts_id,
+        movgest_anno_acc,
+        movgest_numero_acc,
+        movgest_subnumero_acc,
+        validita_inizio,
+        login_operazione,
+        ente_proprietario_id
+    )
+    select query.movgestnew_ts_id,
+           query.movgest_anno_acc,
+           query.movgest_numero_acc,
+           query.movgest_subnumero_acc,
+           clock_timestamp(),
+           loginOperazione,
+           enteProprietarioId
+    FROM
+    (
+    with
+    impegni_cur as
+    (
+    select mov.movgest_anno::integer, mov.movgest_numero::integer,
+           ( case when tipots.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+           ts.movgest_ts_id movgestnew_ts_id, fase.movgest_ts_id
+    from siac_t_movgest_Ts ts,siac_d_movgest_ts_tipo tipots,
+         fase_bil_t_reimputazione fase,siac_t_movgest mov
+    where fase.fasebilelabid=faseBilElabReimpId
+    and   fase.movgestnew_ts_id is not null
+    and   fase.fl_elab='S'
+    and   ts.movgest_ts_id=fase.movgestnew_ts_id
+    and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+    and   tipots.movgest_ts_tipo_code='T'
+    and   mov.movgest_id=ts.movgest_id
+    and   ts.data_cancellazione is null
+    and   ts.validita_fine is null
+    and   mov.data_cancellazione is null
+    and   mov.validita_fine is null
+    ),
+    impegni_prec as
+    (
+    select mov.movgest_anno::integer, mov.movgest_numero::integer,
+           ( case when tipots.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+           mov_a.movgest_anno::integer movgest_anno_acc, mov_a.movgest_numero::integer movgest_numero_acc,
+           ( case when tipots_a.movgest_ts_tipo_code='T' then 0 else ts_a.movgest_ts_code::integer end ) movgest_subnumero_acc,
+           ts.movgest_ts_id movgest_ts_b_id,
+           ts_a.movgest_ts_id movgest_ts_a_id
+    from siac_t_movgest mov,siac_d_movgest_tipo tipo,siac_t_movgest_Ts ts,siac_d_movgest_ts_tipo tipots,
+         siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+         siac_r_movgest_ts r,
+         siac_t_movgest mov_a,siac_d_movgest_tipo tipo_a,siac_t_movgest_Ts ts_a,siac_d_movgest_ts_tipo tipots_a,
+         siac_r_movgest_ts_stato rs_a,siac_d_movgest_stato stato_a,
+         fase_bil_t_reimputazione fase
+    where fase.fasebilelabid=faseBilElabReimpId
+    and   fase.movgestnew_ts_id is not null
+    and   fase.fl_elab='S'
+    and   ts.movgest_ts_id=fase.movgest_ts_id
+    and   tipo.ente_proprietario_id=enteProprietarioId
+    and   tipo.movgest_tipo_code='I'
+    and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+    and   mov.bil_id=bilancioPrecId
+    and   ts.movgest_id=mov.movgest_id
+    and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+    and   rs.movgest_ts_id=ts.movgest_ts_id
+    and   stato.movgest_stato_id=rs.movgest_stato_id
+    and   stato.movgest_stato_code!='A'
+    and   r.movgest_ts_b_id=ts.movgest_ts_id
+    and   ts_a.movgest_ts_id=r.movgest_ts_a_id
+    and   mov_a.movgest_id=ts_a.movgest_id
+    and   tipots_a.movgest_ts_tipo_id=ts_a.movgest_ts_tipo_id
+    and   tipo_a.movgest_tipo_id=mov_a.movgest_tipo_id
+    and   tipo_a.movgest_tipo_code='A'
+    and   mov_a.bil_id=bilancioPrecId
+    and   rs_a.movgest_ts_id=ts_a.movgest_ts_id
+    and   stato_a.movgest_stato_id=rs_a.movgest_stato_id
+    and   stato_a.movgest_stato_code!='A'
+    and   rs.data_cancellazione is null
+    and   rs.validita_fine is null
+    and   mov.data_cancellazione is null
+    and   mov.validita_fine is null
+    and   ts.data_cancellazione is null
+    and   ts.validita_fine is null
+    and   r.data_cancellazione is null
+    and   r.validita_fine is null
+    and   rs_a.data_cancellazione is null
+    and   rs_a.validita_fine is null
+    and   mov_a.data_cancellazione is null
+    and   mov_a.validita_fine is null
+    and   ts_a.data_cancellazione is null
+    and   ts_a.validita_fine is null
+    ),
+    acc_cur as
+    (
+    select mov.movgest_anno::integer, mov.movgest_numero::integer,
+           ( case when tipots.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+           r.movgest_ts_a_id,
+           r.movgest_ts_b_id
+    from siac_t_movgest mov,siac_d_movgest_tipo tipo,siac_t_movgest_Ts ts,siac_d_movgest_ts_tipo tipots,
+         siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+         siac_r_movgest_ts r
+    where tipo.ente_proprietario_id=enteProprietarioId
+    and   tipo.movgest_tipo_code='A'
+    and   mov.movgest_tipo_id=tipo.movgest_tipo_id
+    and   mov.bil_id=bilancioId
+    and   ts.movgest_id=mov.movgest_id
+    and   tipots.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+    and   rs.movgest_ts_id=ts.movgest_ts_id
+    and   stato.movgest_stato_id=rs.movgest_stato_id
+    and   stato.movgest_stato_code!='A'
+    and   r.movgest_ts_a_id=ts.movgest_ts_id
+    and   r.movgest_ts_b_id is not null
+    and   rs.data_cancellazione is null
+    and   rs.validita_fine is null
+    and   mov.data_cancellazione is null
+    and   mov.validita_fine is null
+    and   ts.data_cancellazione is null
+    and   ts.validita_fine is null
+    and   r.data_cancellazione is null
+    and   r.validita_fine is null
+    )
+    select distinct
+           impegni_cur.movgestnew_ts_id,
+           impegni_prec.movgest_anno_acc,
+           impegni_prec.movgest_numero_acc,
+           impegni_prec.movgest_subnumero_acc
+    from impegni_cur, impegni_prec
+    where impegni_cur.movgest_ts_id=impegni_prec.movgest_ts_b_id
+    and   not exists
+    (select 1
+     from acc_cur
+     where acc_cur.movgest_ts_b_id=impegni_cur.movgestnew_ts_id
+     and   acc_cur.movgest_anno=impegni_prec.movgest_anno_acc
+     and   acc_cur.movgest_numero=impegni_prec.movgest_numero_acc
+     and   acc_cur.movgest_subnumero=impegni_prec.movgest_subnumero_acc )
+     ) query
+     where
+     not exists
+     (select 1
+      from SIAC_R_MOVGEST_TS_STORICO_IMP_ACC rStorico
+      where rStorico.ente_proprietario_id=enteProprietarioId
+      and   rStorico.movgest_ts_id=query.movgestnew_ts_id
+      and   rStorico.movgest_anno_acc=query.movgest_anno_acc
+      and   rStorico.movgest_numero_acc=query.movgest_numero_acc
+      and   rStorico.movgest_subnumero_acc=query.movgest_subnumero_acc
+      and   rStorico.data_cancellazione is null
+      and   rStorico.validita_fine is null);
+    codResult:=null;
+    GET DIAGNOSTICS codResult = ROW_COUNT;
+    raise notice '% codResult=%',strMessaggio, codResult;
+    -- 23.06.2020 Sofia jira SIAC-SIAC-7663 - fine
+
+-- SIAC-6997 ---------------- INIZIO --------------------
+
+    strMessaggioFinale:='Apertura bilancio gestione.Reimputazione vincoli. Anno bilancio='||annoBilancio::varchar||'.';
+	insert into fase_bil_t_elaborazione_log
+    (fase_bil_elab_id,fase_bil_elab_log_operazione,
+     validita_inizio, login_operazione, ente_proprietario_id
+    )
+    values
+    (faseBilElabId,strMessaggioFinale||' - FINE.',clock_timestamp(),loginOperazione,enteProprietarioId)
+    returning fase_bil_elab_log_id into codResult;
+
+    if codResult is null then
+    	raise exception ' Errore in inserimento LOG.';
+    end if;
+
+-- SIAC-6997 ---------------- FINE --------------------
 
      strMessaggio:='Aggiornamento stato fase bilancio OK.';
      update fase_bil_t_elaborazione
@@ -770,3 +992,13 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+ALTER FUNCTION siac.fnc_fasi_bil_gest_reimputa_vincoli 
+(
+  integer,
+  integer,
+  varchar,
+  timestamp,
+  out integer,
+  out varchar
+) OWNER TO siac;

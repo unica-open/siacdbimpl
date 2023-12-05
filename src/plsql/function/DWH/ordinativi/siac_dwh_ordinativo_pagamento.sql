@@ -140,7 +140,10 @@ CREATE TABLE siac.siac_dwh_ordinativo_pagamento (
   cod_siope_assenza_motivazione VARCHAR(200),
   desc_siope_assenza_motivazione VARCHAR(500),
   desc_siope_assenza_motiv_bnkit VARCHAR(500),
-  ord_da_trasmettere boolean not null default true
+  ord_da_trasmettere boolean not null default true,
+  --  20.01.2023 Sofia Jira 	SIAC-8762
+  cod_conto_tes_vincolato VARCHAR(200),
+  descri_conto_tes_vincolato VARCHAR(500)
 )
 WITH (oids = false);
 

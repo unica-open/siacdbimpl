@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR024_Allegato_7_Allegato_delibera_variazione_variabili" (
@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION siac."BILR024_Allegato_7_Allegato_delibera_variazione
   p_anno_delibera varchar,
   p_tipo_delibera varchar,
   p_anno_competenza varchar,
-  p_ele_variazioni varchar
+  p_ele_variazioni varchar,
+  p_organo_provv varchar
 )
 RETURNS TABLE (
   id_capitolo integer,
@@ -42,7 +43,7 @@ intApp numeric;
 contaParametri integer;
 contaParametriParz integer;
 strQuery varchar;
-
+tipoFci varchar;
 
 BEGIN
 
@@ -53,7 +54,8 @@ tipoAvanzo='AAM';
 tipoDisavanzo='DAM';
 tipoFpvcc='FPVCC';
 tipoFpvsc='FPVSC';
-
+--SIAC-8335 16/11/2022. Aggiunto il tipo capitolo FCI.
+tipoFci='FCI';
 
 -- 21/07/2016: il report funziona solo per la gestione, tolta la query
 --  che legge la fase di bilancio.
@@ -92,10 +94,19 @@ if p_tipo_delibera IS NOT NULL AND p_tipo_delibera <> '' THEN
 	contaParametriParz := contaParametriParz +1;
 end if;
 
-if contaParametriParz = 1 OR contaParametriParz = 2 then
+--SIAC-6864 09/04/2020.
+--Aggiunto in input il parametro p_organo_provv.
+--p_organo_provv puo' essere specificato da solo.
+if  contaParametriParz = 1 
+    OR contaParametriParz = 2 then
+--SIAC-7767 20/10/2021
+-- il parametro "organo che ha emesso il provvedimento" diventa facoltativo anche
+-- se sono stati specificati i dati del provvedimento.
+   -- OR (contaParametriParz = 3 and (p_organo_provv IS NULL OR
+	--			p_organo_provv = ''))     then
 	display_error:= 'ERRORE NEI PARAMETRI: Specificare tutti i dati relativi al parametro ''Provvedimento di variazione''';
     return next;
-    return;
+    return; 
 elsif contaParametriParz = 3 THEN -- parametro corretto
 	contaParametri := contaParametri + 1;
 end if;
@@ -149,7 +160,7 @@ from 		siac_t_bil_elem_det capitolo_importi,
         and	capitolo.elem_tipo_id				=	tipo_elemento.elem_tipo_id 						
         and	tipo_elemento.elem_tipo_code 		in (elemTipoCodeE,elemTipoCodeS)
         and	capitolo_importi.elem_det_tipo_id	=	capitolo_imp_tipo.elem_det_tipo_id
-        and	capitolo_imp_tipo.elem_det_tipo_code	=	'STA' 		
+        and	capitolo_imp_tipo.elem_det_tipo_code	in('STA', 'SCA') 		
         and	capitolo_imp_periodo.periodo_id		=	capitolo_importi.periodo_id 			  
         and	capitolo_imp_periodo.anno in (annoCapImp)
         and	capitolo.elem_id					=	r_capitolo_stato.elem_id
@@ -157,7 +168,16 @@ from 		siac_t_bil_elem_det capitolo_importi,
 		and	stato_capitolo.elem_stato_code		=	'VA'
 		and	capitolo.elem_id					=	r_cat_capitolo.elem_id
 		and	r_cat_capitolo.elem_cat_id			=	cat_del_capitolo.elem_cat_id
-		and	cat_del_capitolo.elem_cat_code		in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,tipoFpvsc)	
+		--SIAC-8335 16/11/2022. Aggiunto il tipo capitolo FCI.
+        --Per i capitoli di tipo FCI deve essere preso l'importo di cassa e non
+  		-- quello stanziato.
+  --      and	cat_del_capitolo.elem_cat_code		in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,
+  --      	tipoFpvsc)	
+  		and	((cat_del_capitolo.elem_cat_code in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,
+        			tipoFpvsc)  	 
+               and	capitolo_imp_tipo.elem_det_tipo_code	in('STA')) OR
+             (cat_del_capitolo.elem_cat_code in (tipoFci) 
+              and capitolo_imp_tipo.elem_det_tipo_code	in('SCA')))         
         and	capitolo_importi.data_cancellazione 	is null
         and	capitolo_imp_tipo.data_cancellazione 	is null
         and	capitolo_imp_periodo.data_cancellazione is null
@@ -248,8 +268,16 @@ if p_numero_delibera is not null THEN
   and		anno_importi.anno									= 	annoCapImp 
   and		tipologia_stato_var.variazione_stato_tipo_code		=	'D'
   and		tipo_capitolo.elem_tipo_code						in (elemTipoCodeE,elemTipoCodeS)
-  and		tipo_elemento.elem_det_tipo_code					= 'STA'
-  and		cat_del_capitolo.elem_cat_code						in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,tipoFpvsc)	
+  --SIAC-8335 16/11/2022. Aggiunto il tipo capitolo FCI.
+  --L'importo per i capitoli FCI e' quello di cassa e non lo
+  --stanziato.  
+  --and		tipo_elemento.elem_det_tipo_code					= 'STA'
+  --and		cat_del_capitolo.elem_cat_code						in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,tipoFpvsc)	
+  and	((cat_del_capitolo.elem_cat_code in (tipoAvanzo,tipoDisavanzo,tipoFpvcc,
+        			tipoFpvsc)  	 
+            and	tipo_elemento.elem_det_tipo_code	in('STA')) OR
+          (cat_del_capitolo.elem_cat_code in (tipoFci) 
+           and tipo_elemento.elem_det_tipo_code	in('SCA')))  
   and		atto.data_cancellazione						is null
   and		tipo_atto.data_cancellazione				is null
   and		r_atto_stato.data_cancellazione				is null
@@ -303,8 +331,15 @@ and 	testata_variazione.variazione_num 					in ('||p_ele_variazioni||')
 and		anno_importi.anno									= 	 '''||annoCapImp||'''
 and		tipologia_stato_var.variazione_stato_tipo_code		=	''D''
 and		tipo_capitolo.elem_tipo_code						in ('''||elemTipoCodeE||''','''||elemTipoCodeS||''')
-and		tipo_elemento.elem_det_tipo_code					= ''STA''
-and		cat_del_capitolo.elem_cat_code						in ('''||tipoAvanzo||''','''||tipoDisavanzo||''','''||tipoFpvcc||''','''||tipoFpvsc||''')	
+ --SIAC-8335 16/11/2022. Aggiunto il tipo capitolo FCI.
+  --L''importo per i capitoli FCI e'' quello di cassa e non lo
+  --stanziato.  
+--and		tipo_elemento.elem_det_tipo_code					= ''STA''
+--and		cat_del_capitolo.elem_cat_code						in ('''||tipoAvanzo||''','''||tipoDisavanzo||''','''||tipoFpvcc||''','''||tipoFpvsc||''')	
+and	((cat_del_capitolo.elem_cat_code in ('''||tipoAvanzo||''','''||tipoDisavanzo||''','''||tipoFpvcc||''','''||tipoFpvsc||''')
+          and tipo_elemento.elem_det_tipo_code					= ''STA'') OR
+         (cat_del_capitolo.elem_cat_code in ('''||tipoFci||''') 
+          and tipo_elemento.elem_det_tipo_code					= ''SCA'')) 
 and		r_variazione_stato.data_cancellazione		is null
 and		testata_variazione.data_cancellazione		is null
 and		tipologia_variazione.data_cancellazione		is null
@@ -369,6 +404,14 @@ stanziato := classifBilRec.stanziato;
 variazione_aumento := classifBilRec.variazione_aumento;
 variazione_diminuzione := classifBilRec.variazione_diminuzione;
 
+/*
+if tipologia_capitolo ='FCI' THEN
+	stanziato:=1000;
+    variazione_aumento:=100;
+    variazione_diminuzione:=80;
+end if;
+*/
+
 return next;
 
 end loop;
@@ -409,4 +452,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR024_Allegato_7_Allegato_delibera_variazione_variabili" (p_ente_prop_id integer, p_anno varchar, p_numero_delibera integer, p_anno_delibera varchar, p_tipo_delibera varchar, p_anno_competenza varchar, p_ele_variazioni varchar, p_organo_provv varchar)
+  OWNER TO siac;

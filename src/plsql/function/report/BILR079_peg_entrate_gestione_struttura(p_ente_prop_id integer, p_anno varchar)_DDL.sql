@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR079_peg_entrate_gestione_struttura" (
@@ -583,7 +583,12 @@ from  	siac_rep_tit_tip_cat_riga_anni v1
             	/* aggiunto questo join x estrarre l'eventuale riferimento all'ex capitolo */
             left 	join 	siac_r_bil_elem_rel_tempo rel_tempo on rel_tempo.elem_id 	=  tb.elem_id and rel_tempo.data_cancellazione is null
             left	join 	siac_t_bil_elem		bil_elem	on bil_elem.elem_id = rel_tempo.elem_id_old and bil_elem.data_cancellazione is null
-			order by v1.titolo_code,v1.tipologia_code,v1.categoria_code,tb.elem_code::INTEGER,tb.elem_code2::INTEGER            
+	--01/06/2023 siac-task-issue #24.
+	--Sono restituiti i dati in cui almeno uno degli importi non e' 0.
+where COALESCE (tb1.stanziamento_prev_anno,0) <> 0 OR COALESCE (tb1.stanziamento_prev_anno1,0) <> 0 OR
+    COALESCE (tb1.stanziamento_prev_anno2,0) <> 0 OR COALESCE (tb1.residui_presunti,0) <> 0 OR
+    COALESCE (tb1.previsioni_anno_prec,0) <> 0 OR COALESCE (tb1.stanziamento_prev_cassa_anno,0) <> 0
+order by v1.titolo_code,v1.tipologia_code,v1.categoria_code,tb.elem_code::INTEGER,tb.elem_code2::INTEGER            
 
 loop
 
@@ -758,4 +763,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR079_peg_entrate_gestione_struttura" (p_ente_prop_id integer, p_anno varchar)
+  OWNER TO siac;

@@ -2,15 +2,13 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_capitolo_spesa (
-  p_anno_bilancio varchar,
-  p_ente_proprietario_id integer,
-  p_data timestamp
-)
-RETURNS TABLE (
-  esito varchar
-) AS
-$body$
+
+
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_capitolo_spesa(p_anno_bilancio character varying, p_ente_proprietario_id integer, p_data timestamp without time zone)
+ RETURNS TABLE(esito character varying)
+ LANGUAGE plpgsql
+ SECURITY DEFINER
+AS $function$
 DECLARE
 
   rec_elem_id record;
@@ -125,6 +123,8 @@ DECLARE
   v_classificatore_generico_15 VARCHAR := null;
   v_classificatore_generico_15_descrizione_valore VARCHAR := null;
   v_classificatore_generico_15_valore VARCHAR := null;
+  v_codice_risorse_accantonamento VARCHAR     := null;
+  v_descrizione_risorse_accantonamento VARCHAR := null;
   -- Variabili per attributi
   v_FlagEntrateRicorrenti VARCHAR := null;
   v_FlagFunzioniDelegate VARCHAR := null;
@@ -340,8 +340,287 @@ v_anno := rec_elem_id.anno;
 v_elem_code := rec_elem_id.elem_code;
 v_elem_code2 := rec_elem_id.elem_code2;
 v_elem_code3 := rec_elem_id.elem_code3;
-v_elem_desc := rec_elem_id.elem_desc;
-v_elem_desc2 := rec_elem_id.elem_desc2;
+
+-- 14.02.2020 Sofia jira SIAC-7329
+ --v_elem_desc := rec_elem_id.elem_desc;
+v_elem_desc := translate( rec_elem_id.elem_desc,
+chr(1)::varchar||
+chr(2)::varchar||
+chr(3)::varchar||
+chr(4)::varchar||
+chr(5)::varchar||
+chr(6)::varchar||
+chr(7)::varchar||
+chr(8)::varchar||
+chr(9)::varchar||
+chr(10)::varchar||
+chr(11)::varchar||
+chr(12)::varchar||
+chr(13)::varchar||
+chr(14)::varchar||
+chr(15)::varchar||
+chr(16)::varchar||
+chr(17)::varchar||
+chr(18)::varchar||
+chr(19)::varchar||
+chr(20)::varchar||
+chr(21)::varchar||
+chr(22)::varchar||
+chr(23)::varchar||
+chr(24)::varchar||
+chr(25)::varchar||
+chr(26)::varchar||
+chr(27)::varchar||
+chr(28)::varchar||
+chr(29)::varchar||
+chr(30)::varchar||
+chr(31)::varchar||
+chr(126)::varchar||
+chr(127)::varchar,
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar);
+
+/* sostuito con translate
+  v_elem_desc := replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+     replace(
+      replace(
+       replace(
+         replace(rec_elem_id.elem_desc::text,chr(1),' '),
+          chr(2),' '),
+          chr(3),' '),
+          chr(4),' '),
+          chr(5),' '),
+          chr(6),' '),
+          chr(6),' '),
+          chr(7),' '),
+          chr(8),' '),
+          chr(9),' '),
+          chr(10),' '),
+          chr(11),' '),
+          chr(12),' '),
+          chr(13),' '),
+          chr(14),' '),
+          chr(15),' '),
+          chr(16),' '),
+          chr(17),' '),
+          chr(18),' '),
+          chr(19),' '),
+          chr(20),' '),
+          chr(21),' '),
+          chr(22),' '),
+          chr(23),' '),
+          chr(24),' '),
+          chr(25),' '),
+          chr(26),' '),
+          chr(27),' '),
+          chr(28),' '),
+          chr(29),' '),
+          chr(30),' '),
+          chr(31),' '),
+          chr(126),' '),
+          chr(127),' ');*/
+
+-- 14.02.2020 Sofia jira SIAC-7329
+--v_elem_desc2 := rec_elem_id.elem_desc2;
+
+v_elem_desc2 :=
+translate( rec_elem_id.elem_desc2,
+chr(1)::varchar||
+chr(2)::varchar||
+chr(3)::varchar||
+chr(4)::varchar||
+chr(5)::varchar||
+chr(6)::varchar||
+chr(7)::varchar||
+chr(8)::varchar||
+chr(9)::varchar||
+chr(10)::varchar||
+chr(11)::varchar||
+chr(12)::varchar||
+chr(13)::varchar||
+chr(14)::varchar||
+chr(15)::varchar||
+chr(16)::varchar||
+chr(17)::varchar||
+chr(18)::varchar||
+chr(19)::varchar||
+chr(20)::varchar||
+chr(21)::varchar||
+chr(22)::varchar||
+chr(23)::varchar||
+chr(24)::varchar||
+chr(25)::varchar||
+chr(26)::varchar||
+chr(27)::varchar||
+chr(28)::varchar||
+chr(29)::varchar||
+chr(30)::varchar||
+chr(31)::varchar||
+chr(126)::varchar||
+chr(127)::varchar,
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar);
+
+/* sostituito con translate
+ v_elem_desc2 := replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+    replace(
+     replace(
+      replace(
+       replace(
+         replace(rec_elem_id.elem_desc2::text,chr(1),' '),
+          chr(2),' '),
+          chr(3),' '),
+          chr(4),' '),
+          chr(5),' '),
+          chr(6),' '),
+          chr(6),' '),
+          chr(7),' '),
+          chr(8),' '),
+          chr(9),' '),
+          chr(10),' '),
+          chr(11),' '),
+          chr(12),' '),
+          chr(13),' '),
+          chr(14),' '),
+          chr(15),' '),
+          chr(16),' '),
+          chr(17),' '),
+          chr(18),' '),
+          chr(19),' '),
+          chr(20),' '),
+          chr(21),' '),
+          chr(22),' '),
+          chr(23),' '),
+          chr(24),' '),
+          chr(25),' '),
+          chr(26),' '),
+          chr(27),' '),
+          chr(28),' '),
+          chr(29),' '),
+          chr(30),' '),
+          chr(31),' '),
+          chr(126),' '),
+          chr(127),' ');*/
+
 v_elem_tipo_code := rec_elem_id.elem_tipo_code;
 v_elem_tipo_desc := rec_elem_id.elem_tipo_desc;
 v_elem_stato_code := rec_elem_id.elem_stato_code;
@@ -444,6 +723,8 @@ v_classificatore_generico_14_valore:= null;
 v_classificatore_generico_15:= null;
 v_classificatore_generico_15_descrizione_valore:= null;
 v_classificatore_generico_15_valore:= null;
+v_codice_risorse_accantonamento      := null;
+v_descrizione_risorse_accantonamento := null;
 --SIAC-5895
 --v_elem_tipo_id := rec_elem_id.elem_tipo_id; COMMENTATO PER SIAC-6007
 v_ex_anno :=null;
@@ -519,6 +800,9 @@ IF NOT FOUND THEN
   ELSIF v_classif_tipo_code = 'PERIMETRO_SANITARIO_SPESA' THEN
      v_codice_perimetro_sanitario_spesa      := v_classif_code;
      v_descrizione_perimetro_sanitario_spesa := v_classif_desc;
+  ELSIF v_classif_tipo_code = 'RISACC' THEN
+     v_codice_risorse_accantonamento      := v_classif_code;
+     v_descrizione_risorse_accantonamento := v_classif_desc;   /*Haitham 22-05-2023 Issues #109*/
   ELSIF v_classif_tipo_code = 'CLASSIFICATORE_1' THEN
      v_classificatore_generico_1      :=  v_classif_tipo_desc;
      v_classificatore_generico_1_descrizione_valore := v_classif_desc;
@@ -903,7 +1187,7 @@ and   bil.periodo_id = per.periodo_id;
 
 IF NOT FOUND then
 --SIAC-6007 Indipendentemente dal tipo di capitolo, sia esso di previsione o gestione,
---il capitolo ricercato è di Gestione
+--il capitolo ricercato e di Gestione
   select
     v_anno_prec, elem.elem_code,elem.elem_code2
     into v_ex_anno, v_ex_capitolo, v_ex_articolo
@@ -912,7 +1196,8 @@ IF NOT FOUND then
   and   elem.elem_code2 = v_elem_code2
   and   elem.elem_code3 = v_elem_code3
   and   elem.elem_tipo_id = v_elem_tipo_id
-  and   elem.bil_id = v_bil_id_prec;
+  and   elem.bil_id = v_bil_id_prec
+  and   elem.data_cancellazione is null;  -- Haitham 10/02/2022 SIAC-8621
 END IF;
 
 esito:= '    Fine step dati ex capitolo - '||clock_timestamp();
@@ -978,6 +1263,8 @@ cod_politiche_regionali_unit,
 desc_politiche_regionali_unit,
 cod_perimetro_sanita_spesa,
 desc_perimetro_sanita_spesa,
+codice_risorse_accantonamento,            /*Haitham 22-05-2023 Issues #109*/
+descrizione_risorse_accantonamento,       /*Haitham 22-05-2023 Issues #109*/
 classificatore_1,
 classificatore_1_valore,
 classificatore_1_desc_valore,
@@ -1126,6 +1413,8 @@ VALUES (v_ente_proprietario_id,
 	    v_descrizione_politiche_regionali_unitarie,
         v_codice_perimetro_sanitario_spesa,
         v_descrizione_perimetro_sanitario_spesa,
+        v_codice_risorse_accantonamento,        /*Haitham 22-05-2023 Issues #109*/
+        v_descrizione_risorse_accantonamento,   /*Haitham 22-05-2023 Issues #109*/
         v_classificatore_generico_1,
         v_classificatore_generico_1_valore,
         v_classificatore_generico_1_descrizione_valore,
@@ -1231,9 +1520,5 @@ WHEN others THEN
   RAISE NOTICE '%-%.',SQLSTATE,SQLERRM;
 RETURN;
 END;
-$body$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY DEFINER
-COST 100 ROWS 1000;
+$function$
+;

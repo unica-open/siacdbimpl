@@ -2,29 +2,30 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_siac_cons_entita_variazione_from_capitolospesa (
-  _uid_capitolospesa integer,
-  _limit integer,
-  _page integer
-)
-RETURNS TABLE (
-  uid integer,
-  variazione_num integer,
-  variazione_desc varchar,
-  variazione_applicazione varchar,
-  variazione_tipo_code varchar,
-  variazione_tipo_desc varchar,
-  variazione_stato_tipo_code varchar,
-  variazione_stato_tipo_desc varchar,
-  attoamm_numero integer,
-  attoamm_anno varchar,
-  attoamm_tipo_code varchar,
-  attoamm_tipo_desc varchar,
-  attoamm_stato_desc varchar,
-  attoamm_sac_code varchar,
-  attoamm_sac_desc varchar
-) AS
-$body$
+drop function fnc_siac_cons_entita_variazione_from_capitolospesa(integer, integer, integer);
+
+CREATE OR REPLACE FUNCTION siac.fnc_siac_cons_entita_variazione_from_capitolospesa(_uid_capitolospesa integer, _limit integer, _page integer)
+ RETURNS TABLE(
+ uid integer, 
+ variazione_num integer, 
+ variazione_desc character varying, 
+ variazione_applicazione character varying, 
+ variazione_tipo_code character varying, 
+ variazione_tipo_desc character varying, 
+ variazione_stato_tipo_code character varying, 
+ variazione_stato_tipo_desc character varying, 
+ attoamm_numero integer, 
+ attoamm_anno character varying, 
+ attoamm_tipo_code character varying, 
+ attoamm_tipo_desc character varying, 
+ attoamm_stato_desc character varying, 
+ attoamm_sac_code character varying, 
+ attoamm_sac_desc character varying,
+ --SIAC-8188
+ attoamm_oggetto character varying, 
+ attoal_causale character varying)
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
 _offset INTEGER := (_page) * _limit;
 rec record;    
@@ -129,16 +130,30 @@ variazione_stato_tipo_desc:=rec.variazione_stato_tipo_desc;
 v_attoamm_id:=rec.attoamm_id;
 
 select 
-q.attoamm_numero,q.attoamm_anno,
+q.attoamm_numero,
+q.attoamm_anno,
+--SIAC-8188
+q.attoamm_oggetto, 
 t.attoamm_stato_desc,
-r.attoamm_tipo_code,r.attoamm_tipo_desc
+r.attoamm_tipo_code,
+r.attoamm_tipo_desc,
+--SIAC-8188
+staa.attoal_causale
 into 
-attoamm_numero,attoamm_anno,
+attoamm_numero,
+attoamm_anno,
+--SIAC-8188
+attoamm_oggetto,
 attoamm_stato_desc,
-attoamm_tipo_code,attoamm_tipo_desc
+attoamm_tipo_code,
+attoamm_tipo_desc,
+--SIAC-8188
+attoal_causale
  from 
-siac_t_atto_amm q,siac_d_atto_amm_tipo r,
-siac_r_atto_amm_stato s, siac_d_atto_amm_stato t
+siac_d_atto_amm_tipo r, siac_r_atto_amm_stato s, 
+siac_d_atto_amm_stato t, siac_t_atto_amm q
+--SIAC-8188 se ci sono corrisponsenze le ritorno
+left join siac_t_atto_allegato staa on q.attoamm_id = staa.attoamm_id 
 where q.attoamm_id=v_attoamm_id
 and r.attoamm_tipo_id=q.attoamm_tipo_id
 and s.attoamm_id=q.attoamm_id
@@ -175,9 +190,5 @@ end loop;
 return;    
 
 END;
-$body$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY INVOKER
-COST 100 ROWS 1000;
+$function$
+;

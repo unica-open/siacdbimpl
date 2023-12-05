@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR119_Allegato_7_Allegato_delibera_variazione_su_entrate_bozz" (
@@ -9,7 +9,8 @@ CREATE OR REPLACE FUNCTION siac."BILR119_Allegato_7_Allegato_delibera_variazione
   p_anno_delibera varchar,
   p_tipo_delibera varchar,
   p_anno_competenza varchar,
-  p_ele_variazioni varchar
+  p_ele_variazioni varchar,
+  p_organo_provv varchar
 )
 RETURNS TABLE (
   bil_anno varchar,
@@ -136,10 +137,19 @@ if p_tipo_delibera IS NOT NULL AND p_tipo_delibera <> '' THEN
 	contaParametriParz := contaParametriParz +1;
 end if;
 
-if contaParametriParz = 1 OR contaParametriParz = 2 then
+--SIAC-6864 09/04/2020.
+--Aggiunto in input il parametro p_organo_provv.
+--p_organo_provv puo' essere specificato da solo.
+if  contaParametriParz = 1 
+    OR contaParametriParz = 2 then
+--SIAC-7767 20/10/2021
+-- il parametro "organo che ha emesso il provvedimento" diventa facoltativo anche
+-- se sono stati specificati i dati del provvedimento.      
+  --  OR (contaParametriParz = 3 and (p_organo_provv IS NULL OR
+	--			p_organo_provv = ''))     then
 	display_error:= 'ERRORE NEI PARAMETRI: Specificare tutti i dati relativi al parametro ''Provvedimento di variazione''';
     return next;
-    return;
+    return; 
 elsif contaParametriParz = 3 THEN -- parametro corretto
 	contaParametri := contaParametri + 1;
 end if;
@@ -696,7 +706,8 @@ if p_numero_delibera IS NOT NULL THEN
   --and		tipologia_variazione.variazione_tipo_code			in ('ST','VA', 'VR', 'PF')
   -- 19/07/2016: tolto il test sul tipo di variazione: accettate tutte.
   --and		tipologia_variazione.variazione_tipo_code			in ('ST','VA', 'VR', 'PF', 'AS')
-  and		tipologia_stato_var.variazione_stato_tipo_code		 in	('B','G', 'C', 'P')
+  --10/10/2022 SIAC-8827  Aggiunto lo stato BD.
+  and		tipologia_stato_var.variazione_stato_tipo_code		 in	('B','G', 'C', 'P','BD')
   and		tipo_capitolo.elem_tipo_code						=	elemTipoCode
   and		tipo_elemento.elem_det_tipo_code					in ('STA','SCA','STR')
   and		atto.data_cancellazione						is null
@@ -751,7 +762,8 @@ and 	testata_variazione.ente_proprietario_id 			= 	'||p_ente_prop_id||'
 and		anno_eserc.anno										= 	'''||p_anno||'''
 and 	testata_variazione.variazione_num					in ('||p_ele_variazioni||')
 and     anno_importo.anno                                   =   '''||p_anno_competenza||'''	--anno variazione				
-and		tipologia_stato_var.variazione_stato_tipo_code		 in	(''B'',''G'', ''C'', ''P'')
+--10/10/2022 SIAC-8827  Aggiunto lo stato BD.
+and		tipologia_stato_var.variazione_stato_tipo_code		 in	(''B'',''G'', ''C'', ''P'',''BD'')
 and		tipo_capitolo.elem_tipo_code						=	'''||elemTipoCode||'''
 and		tipo_elemento.elem_det_tipo_code					in (''STA'',''SCA'',''STR'')
 and		r_variazione_stato.data_cancellazione		is null
@@ -1135,4 +1147,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR119_Allegato_7_Allegato_delibera_variazione_su_entrate_bozz" (p_ente_prop_id integer, p_anno varchar, p_numero_delibera integer, p_anno_delibera varchar, p_tipo_delibera varchar, p_anno_competenza varchar, p_ele_variazioni varchar, p_organo_provv varchar)
+  OWNER TO siac;

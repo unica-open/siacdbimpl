@@ -83,159 +83,6 @@ accertato_anno_succ=0;
 RTN_MESSAGGIO:='lettura struttura del bilancio''.';  
 raise notice '2: %', clock_timestamp()::varchar;  
 
-/*
-insert into  siac_rep_tit_tip_cat_riga_anni
-select v.*,user_table from
-(SELECT v3.classif_tipo_desc AS classif_tipo_desc1, v3.classif_id AS titolo_id,
-    v3.classif_code AS titolo_code, v3.classif_desc AS titolo_desc,
-    v3.validita_inizio AS titolo_validita_inizio,
-    v3.validita_fine AS titolo_validita_fine,
-    v2.classif_tipo_desc AS classif_tipo_desc2, v2.classif_id AS tipologia_id,
-    v2.classif_code AS tipologia_code, v2.classif_desc AS tipologia_desc,
-    v2.validita_inizio AS tipologia_validita_inizio,
-    v2.validita_fine AS tipologia_validita_fine,
-    v1.classif_tipo_desc AS classif_tipo_desc3, v1.classif_id AS categoria_id,
-    v1.classif_code AS categoria_code, v1.classif_desc AS categoria_desc,
-    v1.validita_inizio AS categoria_validita_inizio,
-    v1.validita_fine AS categoria_validita_fine, v1.ente_proprietario_id
-FROM (SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id 
-    AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v1,
--------------siac_v_tit_tip_cat_anni v1,
-(SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id 
-    AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v2, 
-----------siac_v_tit_tip_cat_anni v2,
-(SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id
-     AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v3
----------------    siac_v_tit_tip_cat_anni v3
-WHERE v1.classif_id_padre = v2.classif_id AND v1.classif_tipo_desc::text =
-    'Categoria'::text AND v2.classif_tipo_desc::text = 'Tipologia'::text 
-    AND v2.classif_id_padre = v3.classif_id AND v3.classif_tipo_desc::text = 'Titolo Entrata'::text 
-    AND v1.ente_proprietario_id = v2.ente_proprietario_id AND v2.ente_proprietario_id = v3.ente_proprietario_id) v
----------siac_v_tit_tip_cat_riga_anni 
-where v.ente_proprietario_id=p_ente_prop_id 
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.categoria_validita_inizio and
-COALESCE(v.categoria_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.tipologia_validita_inizio and
-COALESCE(v.tipologia_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.titolo_validita_inizio and
-COALESCE(v.titolo_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-order by titolo_code, tipologia_code,categoria_code;
-*/
-
 
 --06/09/2016: cambiata la query che carica la struttura di bilancio
 --  per motivi prestazionali
@@ -561,17 +408,20 @@ for AccertamentiRec in
     v_importo_acc1 :=0;
     v_importo_acc2 :=0;
     
-    
-    
-    
+           
     var_id_elem := 0;  
    
+-- nella tabella SIAC_REP_ACCERTAMENTI_RIGA sono inseriti i dati degli
+-- accertamenti per capitolo.
+  
     SELECT rep_acc_riga.elem_id
     INTO var_id_elem
     FROM SIAC_REP_ACCERTAMENTI_RIGA rep_acc_riga
     WHERE rep_acc_riga.elem_id=AccertamentiRec.elem_id;
-      
+   
     IF var_id_elem IS NULL OR var_id_elem = 0 THEN
+           -- il record per il capitolo non e' ancora stato inserito,
+           -- viene fatta una INSERT.
            
         IF AccertamentiRec.movgest_anno = annoCapImp1 THEN
            v_importo_acc1 := AccertamentiRec.importo;
@@ -597,20 +447,25 @@ for AccertamentiRec in
                AccertamentiRec.utente
               );   
     
-    ELSE 
+    ELSE -- capitolo gia' esistente: e' fatto un UPDATE.
+  
         IF AccertamentiRec.movgest_anno = annoCapImp1 THEN
            v_importo_acc1 := AccertamentiRec.importo;
-                       
-                       
+                                                     
             UPDATE 
               siac.siac_rep_accertamenti_riga 
             SET 
-              accertato_anno = v_importo_acc1
+-- 11/06/2020  SIAC-7671.
+-- l'importo deve essere aggiornato tenendo conto del valore gia' esistente
+-- in tabella, in quanto un capitolo potrebbe avere piu' accertamenti e
+-- l'importo deve essere la somma di tutti questi.                
+              --accertato_anno = v_importo_acc1
+              accertato_anno = siac_rep_accertamenti_riga.accertato_anno +
+              	v_importo_acc1
             WHERE 
                 elem_id = AccertamentiRec.elem_id AND
                 ente_proprietario = p_ente_prop_id AND
- 				utente = AccertamentiRec.utente
-              ;
+ 				utente = AccertamentiRec.utente;
                        
         ELSIF AccertamentiRec.movgest_anno = annoCapImp2 THEN
            v_importo_acc2 := AccertamentiRec.importo;
@@ -618,26 +473,27 @@ for AccertamentiRec in
             UPDATE 
               siac.siac_rep_accertamenti_riga 
             SET 
-              accertato_anno1 = v_importo_acc2
+              --accertato_anno1 = v_importo_acc2
+              accertato_anno1 = siac_rep_accertamenti_riga.accertato_anno1 + 
+              		v_importo_acc2
             WHERE 
                 elem_id = AccertamentiRec.elem_id AND
                 ente_proprietario = p_ente_prop_id AND
- 				utente = AccertamentiRec.utente
-              ;
-           
-           
+ 				utente = AccertamentiRec.utente;
+                      
         ELSIF AccertamentiRec.movgest_anno > annoCapImp2 THEN  
            v_importo_acc_succ := AccertamentiRec.importo;
            
             UPDATE 
               siac.siac_rep_accertamenti_riga 
             SET 
-              accertato_anno2 = v_importo_acc_succ
+              --accertato_anno2 = v_importo_acc_succ
+              accertato_anno2 = siac_rep_accertamenti_riga.accertato_anno2 + 
+              		v_importo_acc_succ
             WHERE 
                 elem_id = AccertamentiRec.elem_id AND
                 ente_proprietario = p_ente_prop_id AND
- 				utente = AccertamentiRec.utente
-              ;           
+ 				utente = AccertamentiRec.utente;           
            
         END IF;    
     

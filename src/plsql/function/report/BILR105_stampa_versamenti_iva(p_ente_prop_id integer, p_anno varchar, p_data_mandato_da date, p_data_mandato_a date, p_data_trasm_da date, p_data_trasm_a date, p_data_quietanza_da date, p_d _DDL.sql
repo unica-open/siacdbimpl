@@ -35,7 +35,8 @@ RETURNS TABLE (
   display_error varchar,
   cartacont varchar,
   aliquota varchar,
-  data_quietanza date
+  data_quietanza date,
+  conto_tesoreria varchar
 ) AS
 $body$
 DECLARE
@@ -83,6 +84,7 @@ cartacont_pk=0;
 cartacont='';
 aliquota='';
 data_quietanza=NULL;
+conto_tesoreria:='';
 
 /* SIAC-7014 18/09/2019.
 	Procedura rivista per problemi di prestazioni; modifiche effettate:
@@ -182,7 +184,9 @@ select 	 t_ordinativo.ord_anno,
         d_ord_stato.ord_stato_code, 
         SUM(t_ord_ts_det.ord_ts_det_importo) IMPORTO_TOTALE,
         t_movgest.movgest_anno anno_impegno,
-        r_ord_quietanza.ord_quietanza_data
+        r_ord_quietanza.ord_quietanza_data,
+        	--15/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+        COALESCE(d_contotes.contotes_code,'''') conto_tesoreria
 		FROM   siac_t_ordinativo t_ordinativo
                 --10/02/2017: aggiunta la tabella della quietanza per testare
                   -- la data quietanza se specificata in input.
@@ -190,7 +194,11 @@ select 	 t_ordinativo.ord_anno,
                     on (r_ord_quietanza.ord_id=t_ordinativo.ord_id
                         and r_ord_quietanza.data_cancellazione IS NULL
                         --SIAC-6718 Aggiunto il test sulla data di fine validita'
-                        and r_ord_quietanza.validita_fine IS NULL),
+                        and r_ord_quietanza.validita_fine IS NULL)
+                --15/10/2020 SIAC-7812 aggiunto il conto tesoreria.
+               LEFT JOIN siac_d_contotesoreria d_contotes 
+                on (d_contotes.contotes_id = t_ordinativo.contotes_id 
+                	and d_contotes.data_cancellazione is null),
                 siac_t_ordinativo_ts t_ord_ts,
                 siac_r_liquidazione_ord r_liq_ord,
                 siac_r_liquidazione_movgest r_liq_movgest,
@@ -265,8 +273,8 @@ select 	 t_ordinativo.ord_anno,
                t_ordinativo.ord_desc, t_ordinativo.ord_id,
               t_ordinativo.ord_numero,t_ordinativo.ord_emissione_data,       
               t_soggetto.soggetto_desc,t_soggetto.partita_iva,t_soggetto.codice_fiscale,
-             d_ord_stato.ord_stato_code, t_movgest.movgest_anno
-             ,r_ord_quietanza.ord_quietanza_data
+             d_ord_stato.ord_stato_code, t_movgest.movgest_anno,
+             r_ord_quietanza.ord_quietanza_data, conto_tesoreria
             ORDER BY t_ordinativo.ord_numero, t_ordinativo.ord_emissione_data),
 oneri as (SELECT * from "fnc_bilr105_tab_oneri_reversali"(p_ente_prop_id,id_bil))   
 select nome_ente_str::varchar nome_ente,
@@ -291,7 +299,9 @@ select nome_ente_str::varchar nome_ente,
        ''::varchar display_error,
        oneri.cartacont::varchar cartacont,
        oneri.aliquota::varchar aliquota,
-       mandati.ord_quietanza_data::date data_quietanza
+       mandati.ord_quietanza_data::date data_quietanza,
+        --15/10/2020 SIAC-7812 aggiunto il conto tesoreria
+       mandati.conto_tesoreria::varchar conto_tesoreria
 	from mandati 
     	LEFT JOIN oneri ON mandati.ord_id= oneri.ord_id
     where (oneri.tipo_split_comm <> '' OR oneri.tipo_split_istituz <> '' OR

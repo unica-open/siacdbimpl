@@ -5,6 +5,364 @@ SIAC BIL DB
 Funzionalità rilasciate
 ------------------------
 
+build /2023 versione 5.20.0
+ siac-tasks Issue #186
+ siac-tasks Issue #142
+ siac-task-172 
+ siac-task-221
+ siac-task issue #212
+ siac-task-251
+ siac-task issue #229
+ siac-task issue #216
+ siac-task-272 
+ siac-task-184 
+ siac-task-277
+ 
+build /2023 versione 5.19.0
+ SIAC-8580
+ SIAC-8854
+ siac-task issues #153
+ siac-task-175
+ siac-task-174
+ 
+build /2023 versione 5.18.0
+ SIAC-TASK-7
+ SIAC-TASK-132
+ SIAC-TASK-135
+ SIAC-8633
+ SIAC-TASK-136
+ SIAC-8863
+ SIAC-8866
+ 
+build /2023 versione 5.17.0
+ SIAC-8842
+ SIAC-8899
+ SIAC-TASK-20
+ SIAC-8750
+ siac-task-issue #99
+ siac-task-issue #108
+ siac-task-issues #87
+ SIAC-8857
+ siac-task-issues #24
+ 
+build /2023 versione 5.16.0
+ siac-tasks-Issues#75
+ siac-tasks-Issues#70
+ SIAC-8880 
+ SIAC-8864
+ siac-tasks-Issues#79
+ siac-tasks-Issues#80
+ SIAC-TASK-4
+ SIAC-TASK-21
+ SIAC-8335
+ siac-task-issue #89
+ 
+build /2022 versione 5.15.0
+ SIAC-8896
+ SIAC-TASKS-#11 
+ siac-tasks-Issues#23
+ siac-issue-16
+ SIAC-TASKS-#31
+ SIAC-8815
+
+build /2022 versione 5.14.0
+ SIAC-8878
+ SIAC-8881
+ SIAC-8879
+ SIAC-8898
+ SIAC-8762
+ SIAC-8895
+ SIAC-TASKS-#44 
+build /2022 versione 5.13.0
+ SIAC-8823
+ SIAC-8817
+ SIAC-8846
+ SIAC-8855
+ 
+build /2022 versione 5.12.0
+ SIAC-8816
+ SIAC-8664
+ SIAC-8829
+ SIAC-8656
+ SIAC-8837
+
+build /2022 versione 5.11.0
+ SIAC-8766
+ SIAC-8405
+ SIAC-8718
+ SIAC-8777
+ SIAC-8827
+ SIAC-8828
+ SIAC-8829
+ 
+build /2022 versione 5.10.0
+ SIAC-8785
+ SIAC-8759
+ SIAC-8758
+ SIAC-8767
+ SIAC-8768
+ SIAC-8703
+ SIAC-8788
+ SIAC-8792
+ SIAC-8787
+ 
+build /2022 versione 5.9.0
+ SIAC-8759
+ SIAC-8758
+ 
+build /2022 versione 5.8.0
+ SIAC-8735
+ 
+build /2022 versione 5.7.0
+ SIAC-8709
+ SIAC-8551
+ SIAC-8712
+ SIAC-8613
+ SIAC-8717
+ SIAC-8599
+ SIAC-8721
+ SIAC-8713
+ SIAC-8406
+ SIAC-8734
+ SIAC-8433
+ SIAC-8603
+ SIAC-8706
+ SIAC-8714
+ SIAC-8707
+ SIAC-8538
+ 
+build /2022 versione 5.6.0
+ SIAC-8640
+ SIAC-8634 
+ SIAC-8489
+
+build /2022 versione 5.5.0
+ SIAC-8017
+ 
+build /2022 versione 5.5.0
+ SIAC-8404
+ SIAC-8660
+ SIAC-8597
+ SIAC-8529
+ SIAC-8530
+ SIAC-8412
+ SIAC-8667
+ SIAC-8670
+ SIAC-8663
+ SIAC-8676
+ SIAC-8642
+ SIAC-8687
+ SIAC-8688
+ SIAC-8682
+ SIAC-8690
+ SIAC-8696
+ SIAC-8698
+ 
+build /2022 versione 5.4.0
+ SIAC-8604
+ SIAC-8621
+ SIAC-8648
+	
+build /2022 versione 5.3.0
+ SIAC-8539
+ SIAC-8543
+ SIAC-8531
+ SIAC-8564
+ SIAC-8567
+ SIAC-8536
+ SIAC-8585
+ SIAC-8575
+
+ 
+build /2021 versione 5.2.0
+ SIAC-8371
+ SIAC-8493
+ SIAC-8470
+ SIAC-8238
+ SIAC-8522
+ SIAC-8524
+ SIAC-8508
+ SIAC-8350
+ SIAC-8351
+ SIAC-8579 
+ SIAC-8196
+ SIAC-8557
+ SIAC-8578
+ 
+build /2021 versione 5.1.0
+ SIAC-8422
+ SIAC-8439
+ SIAC-8196
+ SIAC-8383
+ SIAC-8298
+ SIAC-8480
+ SIAC-8191
+ SIAC-8484
+ SIAC-8250
+ 
+build /2021 versione 4.37.0
+ SIAC-8338
+ SIAC-8367
+ SIAC-8413
+ SIAC-8258 
+ SIAC-8344
+ SIAC-8408
+ 
+build /2021 versione 4.36.0
+ SIAC-8221
+ SIAC-8285
+ SIAC-8178
+ SIAC-8216
+ SIAC-8349
+ SIAC-8140
+ 
+build /2021 versione 4.35.0
+ SIAC-8153
+ SIAC-8139
+ SIAC-8152
+ SIAC-8276
+ SIAC-8277
+ SIAC-8288
+ SIAC-8295
+ SIAC-8305
+ SIAC-8322
+ 
+build /2021 versione 4.34.0
+ SIAC-8217
+ SIAC-8224
+ SIAC-8239
+ SIAC-8128
+ SIAC-8241
+ SIAC-7790
+
+build /2021 versione 4.33.0
+ SIAC-7794
+ SIAC-8095
+ SIAC-8146
+ SIAC-7931
+ SIAC-8146
+ SIAC-8179
+ SIAC-8119
+ SIAC-8207
+ SIAC-8000
+ SIAC-8205
+ SIAC-8212
+ SIAC-8213
+ SIAC-8197
+ 
+build 04/2021 versione 4.32.0
+ SIAC-7902
+ SIAC-8163
+ SIAC-8127
+ SIAC-8151
+ SIAC-8064
+ SIAC-8129
+ SIAC-8175
+ SIAC-7518
+ SIAC-8099
+ SIAC-8074
+ SIAC-8181
+ 
+build 29/02/2021 versione 4.30.0
+ SIAC-7894
+ SIAC-7958
+ SIAC-7974
+ SIAC-7762
+ SIAC-7933
+ SIAC-8023
+ SIAC-7886
+ SIAC-7907
+ SIAC-8056
+ SIAC-8020
+ 
+build //202 versione 4.29.0
+ SIAC-7842
+ SIAC-7903
+ SIAC-7877
+ SIAC-7875
+ SIAC-7672
+ SIAC-7962
+
+build 28/10/2020 versione 4.28.0
+ SIAC-7702
+ SIAC-7761
+ SIAC-7797
+ SIAC-7828
+ SIAC-7767
+ SIAC-7812
+ 
+build /09/2020 versione 4.27.0
+ SIAC-6865
+ SIAC-7749
+ SIAC-7556
+
+build 05/08/2020 versione 4.26.0
+ SIAC-7678
+ SIAC-7256
+ SIAC-7562
+ 
+build 29/06/2020 versione 4.25.0
+ SIAC-7470
+ SIAC-7684
+
+
+build 29/05/2020 versione 4.24.0
+ SIAC-7294
+ SIAC-7650
+ SIAC-7195
+ 
+build 30/04/2020 versione 4.23.0
+ SIAC-7446
+ SIAC-6864
+ SIAC-7497
+ SIAC-7506
+ SIAC-7491
+ SIAC-7586
+ SIAC-7498
+ SIAC-7465
+ SIAC-7426
+ SIAC-7541
+ 
+build 18/03/2020 versione 4.22.0
+ SIAC-7485
+ SIAC-7361
+ SIAC-7192
+ 
+build 27/02/2020 versione 4.21.0
+ SIAC-7386
+ SIAC-7335
+ SIAC-7391
+ SIAC-7374
+ SIAC-7375
+ SIAC-7329
+ SIAC-7346
+ SIAC-7449
+ SIAC-7292
+
+build 13/02/2020 versione 4.20.1
+ SIAC-7395
+ SIAC-7366
+
+build 28/01/2020 versione 4.20.0
+ SIAC-7312
+ SIAC-7311
+ SIAC-7162
+ SIAC-7271
+ SIAC-7320
+ SIAC-7327
+ SIAC-7278
+ SIAC-7360
+
+build 18/12/2019 versione 4.19.0
+ SIAC-7244
+ SIAC-7251
+ SIAC-7140
+ SIAC-7226
+ SIAC-7268
+ SIAC-7204
+ SIAC-6868
+ SIAC-7219
+
 build 27/11/2019 versione 4.18.0
  SIAC-6840
  SIAC-6881

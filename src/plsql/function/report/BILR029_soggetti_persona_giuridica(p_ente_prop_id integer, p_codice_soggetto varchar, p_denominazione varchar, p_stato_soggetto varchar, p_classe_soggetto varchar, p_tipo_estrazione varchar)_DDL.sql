@@ -227,7 +227,10 @@ ELSE
             siac_r_soggetto_stato	e,
             siac_d_soggetto_stato	f,
             siac_t_soggetto 		a,
-            siac_t_persona_fisica 	b
+            --19/05/2023. siac-tassk-issues #108.
+            --bisogna prendere la tabella siac_t_persona_giuridica e non siac_t_persona_fisica
+            --siac_t_persona_fisica 	b
+            siac_t_persona_giuridica b
             FULL  join siac_r_soggetto_classe	g
             on    	(b.soggetto_id		=	g.soggetto_id
                         and	g.ente_proprietario_id	=	b.ente_proprietario_id
@@ -875,4 +878,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR029_soggetti_persona_giuridica" (p_ente_prop_id integer, p_codice_soggetto varchar, p_denominazione varchar, p_stato_soggetto varchar, p_classe_soggetto varchar, p_tipo_estrazione varchar)
+  OWNER TO siac;

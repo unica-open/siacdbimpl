@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 - per gli oggetti del bilancio 2017 andare a sostituire  il legame presente per il classif_id (SIOPE_SPESA_I, SIOPE_ENTRATA_I)
 -- con il corrispondente valore YYYY
 -- predisponiamo chiusura del vecchio legame ( update con data_cancellazione e validita_fine )

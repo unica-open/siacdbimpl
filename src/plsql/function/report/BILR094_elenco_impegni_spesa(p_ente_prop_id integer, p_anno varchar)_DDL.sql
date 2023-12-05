@@ -217,6 +217,9 @@ from siac_r_movgest_ts_programma a, siac_t_programma b
 where 
 a.ente_proprietario_id=p_ente_prop_id and 
 b.programma_id=a.programma_id
+--20/04/2020 SIAC-7594
+-- aggiunto il controllo sull'anno del bilancio per i progetti.
+and (b.bil_id = bil_id_in OR b.bil_id IS NULL)
 and a.data_cancellazione is null 
 and b.data_cancellazione is null),
 cig as (SELECT a.movgest_ts_id--, a.boolean
@@ -280,7 +283,10 @@ and a.data_cancellazione IS NULL
 and a."boolean" is not null and a."boolean"<>''
 --and b.data_cancellazione IS NULL  
 ),
-vincoli as (select 
+--20/04/2020 SIAC-7594
+-- aggiunto il distinct per evitare la duplicazione dei dati se nella
+-- tabella siac_r_movgest_ts l'impegno e' presente piu' volte.
+vincoli as (select distinct
 movgest_ts_b_id movgest_ts_id
             from siac_r_movgest_ts a where a.ente_proprietario_id = p_ente_prop_id            		
 and a.data_cancellazione is null),

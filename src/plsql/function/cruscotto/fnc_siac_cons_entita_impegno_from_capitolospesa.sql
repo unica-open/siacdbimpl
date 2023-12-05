@@ -2,60 +2,79 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿DROP FUNCTION if EXISTS fnc_siac_cons_entita_impegno_from_capitolospesa (integer, integer,integer);
 
-DROP FUNCTION if EXISTS fnc_siac_cons_entita_impegno_from_capitolospesa (integer, varchar, integer,integer);
+drop function if exists siac.fnc_siac_cons_entita_impegno_from_capitolospesa
+(
+ _uid_capitolospesa integer, 
+ _anno varchar, 
+ _filtro_crp varchar, 
+ _limit integer, 
+ _page integer
+ );
 
-DROP FUNCTION if EXISTS fnc_siac_cons_entita_impegno_from_capitolospesa (integer, varchar, varchar, integer,integer);
-
--- _filtro_crp da rinominare: e' il filtro che discrimina COMPETENZA, RESIDUO, PLURIENNALE
-CREATE OR REPLACE FUNCTION siac.fnc_siac_cons_entita_impegno_from_capitolospesa (
-  _uid_capitolospesa integer,
-  _anno varchar,
-  _filtro_crp varchar, -- 11.07.2018 Sofia jira SIAC-6193 C,R,P, altro per tutto
-  _limit integer,
-  _page integer
-)
-RETURNS TABLE (
-  uid integer,
-  impegno_anno integer,
-  impegno_numero numeric,
-  impegno_desc varchar,
-  impegno_stato varchar,
-  impegno_importo numeric,
-  soggetto_code varchar,
-  soggetto_desc varchar,
-  attoamm_numero integer,
-  attoamm_anno varchar,
-  --attoamm_oggetto varchar,
-  attoamm_desc varchar,
-
-  attoamm_tipo_code varchar,
-  attoamm_tipo_desc varchar,
-  attoamm_stato_desc varchar,
-  attoamm_sac_code varchar,
-  attoamm_sac_desc varchar,
-  pdc_code varchar,
-  pdc_desc varchar,
-  -- 29.06.2018 Sofia siac-6193
-  impegno_anno_capitolo integer,
-  impegno_nro_capitolo  integer,
-  impegno_nro_articolo  integer,
-  impegno_flag_prenotazione varchar,
-  impegno_cup varchar,
-  impegno_cig varchar,
-  impegno_tipo_debito varchar,
-  impegno_motivo_assenza_cig varchar
-) AS
+CREATE OR REPLACE function  siac.fnc_siac_cons_entita_impegno_from_capitolospesa
+(
+ _uid_capitolospesa integer, 
+ _anno varchar, 
+ _filtro_crp varchar, 
+ _limit integer, 
+ _page integer
+ )
+ RETURNS table
+ (
+  uid                                              integer, 
+  impegno_anno                          integer, 
+  impegno_numero                     numeric, 
+  impegno_desc                           varchar, 
+  impegno_stato                          varchar, 
+  impegno_importo                     numeric, 
+  soggetto_code                            varchar, 
+  soggetto_desc                             varchar, 
+  attoamm_numero                     integer, 
+  attoamm_anno                          varchar, 
+  attoamm_oggetto                      varchar, 
+  attoal_causale                            varchar, 
+  attoamm_tipo_code                  varchar, 
+  attoamm_tipo_desc                   varchar, 
+  attoamm_stato_desc                 varchar, 
+  attoamm_sac_code                   varchar, 
+  attoamm_sac_desc                    varchar, 
+  pdc_code                                     varchar, 
+  pdc_desc                                      varchar, 
+  impegno_anno_capitolo            integer, 
+  impegno_nro_capitolo               integer, 
+  impegno_nro_articolo                integer, 
+  impegno_flag_prenotazione      varchar, 
+  impegno_cup                              varchar, 
+  impegno_cig                               varchar, 
+  impegno_tipo_debito                 varchar, 
+  impegno_motivo_assenza_cig varchar, 
+  impegno_componente               varchar, 
+  cap_sac_code                             varchar, 
+  cap_sac_desc                             varchar, 
+  imp_sac_code                            varchar, 
+  imp_sac_desc                            varchar, 
+  -- SIAC-8877 Paolo 17/05/2023
+  programma                                varchar, 
+  cronoprogramma                      varchar)
+ AS
 $body$
+
+
 DECLARE
 	_offset INTEGER := (_page) * _limit;
 BEGIN
 
-	RETURN QUERY
-		with imp_sogg_attoamm as (
+	raise notice 'STO LANCIANDO LA FNC GIUSTA ****';
+	raise notice '_uid_capitolospesa=%',_uid_capitolospesa::varchar;
+    raise notice '_anno=%',_anno;
+    raise notice '_filtro_crp=%',_filtro_crp;
+	RETURN QUERY 
+		with imp_sogg_attoamm as 
+		(
 			with imp_sogg as (
 				select distinct
+					soggall.elem_id,
 					soggall.uid,
 					soggall.movgest_anno,
 					soggall.movgest_numero,
@@ -75,10 +94,16 @@ BEGIN
                     soggall.impegno_cig,
   					soggall.impegno_cup,
                     soggall.impegno_motivo_assenza_cig,
-            		soggall.impegno_tipo_debito
+            		soggall.impegno_tipo_debito,
+                    -- 11.05.2020 SIAC-7349 SR210
+                    soggall.impegno_componente,
+                    -- SIAC-8877 Paolo 17/05/2023
+                    soggall.programma_code,
+                    soggall.cronop_code
 				from (
 					with za as (
 						select
+						    zzz.elem_id,
 							zzz.uid,
 							zzz.movgest_anno,
 							zzz.movgest_numero,
@@ -98,12 +123,18 @@ BEGIN
                             zzz.impegno_cig,
   							zzz.impegno_cup,
                             zzz.impegno_motivo_assenza_cig,
-            				zzz.impegno_tipo_debito
+            				zzz.impegno_tipo_debito,
+                            --11/05/2020 SIAC-7349 SR210
+                            zzz.impegno_componente,
+                            -- SIAC-8877 Paolo 17/05/2023
+                            zzz.programma_code,
+                            zzz.cronop_code
 						from (
 							with impegno as (
 
 
 								select
+									bilelem.elem_id, 
 									a.movgest_id as uid,
 									a.movgest_anno,
 									a.movgest_numero,
@@ -118,7 +149,10 @@ BEGIN
                                     bilelem.elem_code2::integer impegno_nro_articolo,
                                     t.anno::integer impegno_anno_capitolo,
                                     c.siope_assenza_motivazione_id,
-                                    c.siope_tipo_debito_id
+                                    c.siope_tipo_debito_id,
+                                    --11.05.2020 Mr SIAC-7349 SR210 tiro fuori l'id per la join con la tabella del tipo componente
+                                    b.elem_det_comp_tipo_id
+                                    --
 								from
 									siac_t_bil_elem bilelem,
 									siac_t_movgest a,
@@ -242,8 +276,91 @@ BEGIN
 								and r.data_cancellazione is null
 								and t.data_cancellazione is null
 								and t.attr_code = 'cup'
+							),
+                            --11.05.2020 SIAC-7349 MR SR210 lista di tutte le componenti
+                            componente_desc AS
+                            (
+                                select * from 
+                                siac_d_bil_elem_det_comp_tipo tipo
+                                --where tipo.data_cancellazione is NULL --da discuterne. in questo caso prende solo le componenti non cancellate
+                            ),
+                            -- SIAC-8877 Paolo 17/05/2023
+							programma as
+							(
+								select stm.movgest_ts_id,
+									       prog.programma_code
+								from 	siac_t_movgest m,
+											siac_t_movgest_ts stm, 
+											siac_r_movgest_ts_programma r_prog,
+											siac_t_programma prog,
+											siac_t_bil stb,
+											siac_t_periodo stp,
+											siac_r_movgest_bil_elem re
+								where  re.elem_id=_uid_capitolospesa
+								and       m.movgest_id=re.movgest_id								
+								and       stb.bil_id = m.bil_id 
+								and       stb.periodo_id = stp.periodo_id 
+							    and       stp.anno =_anno --anno bilancio
+								and       stm.movgest_id = m.movgest_id 
+								and       r_prog.movgest_ts_id = stm.movgest_ts_id
+								and       prog.programma_id = r_prog.programma_id 
+								and       r_prog.data_cancellazione  is null
+								and       prog.data_cancellazione is null
+								and       re.data_cancellazione is null 
+								and       m.data_cancellazione is null
+								and       stm.data_cancellazione is null
+								and       now() between r_prog.validita_inizio and coalesce(r_prog.validita_fine, now())
+								and       now() between prog.validita_inizio and coalesce(prog.validita_fine, now())
+								and       now() between re.validita_inizio and coalesce(re.validita_fine, now())
+								and       now() between m.validita_inizio and coalesce(m.validita_fine, now())
+								and       now() between stm.validita_inizio and coalesce(stm.validita_fine, now())
+								order by r_prog.data_creazione desc 
+								--limit 1
+							),
+							-- SIAC-8877 Paolo 17/05/2023
+							cronoprogramma as
+							(
+								select	stm.movgest_ts_id,
+											prog.programma_code,
+											cronop.cronop_code
+								from 	siac_t_movgest m,
+											siac_t_bil stb,
+											siac_t_periodo stp,
+											siac_t_movgest_ts stm, 
+											siac_r_movgest_ts_cronop_elem srmtce,
+											siac_t_cronop_elem crono,
+											siac_t_programma prog,
+											siac_r_movgest_bil_elem re,
+											siac_t_cronop cronop 
+								where re.elem_id=_uid_capitolospesa	
+								and     m.movgest_id=re.movgest_id
+								and     stb.bil_id = m.bil_id 
+								and     stb.periodo_id = stp.periodo_id 
+								and     stp.anno =_anno --anno bilancio
+								and     m.movgest_id = stm.movgest_id 
+								and     stm.movgest_ts_id = srmtce.movgest_ts_id
+								and     srmtce.cronop_id = crono.cronop_id
+								and     cronop.cronop_id= crono.cronop_id
+								and     prog.programma_id = cronop.programma_id
+								and     srmtce.data_cancellazione is null
+								and     crono.data_cancellazione is null
+								and     prog.data_cancellazione is null
+								and     m.data_cancellazione is null
+								and     re.data_cancellazione is null
+								and     stm.data_cancellazione is null
+								and     cronop.data_cancellazione is null
+								and     now() between re.validita_inizio and coalesce(re.validita_fine, now())
+								and     now() between srmtce.validita_inizio and coalesce(srmtce.validita_fine, now())
+								and     now() between crono.validita_inizio and coalesce(crono.validita_fine, now())
+								and     now() between prog.validita_inizio and coalesce(prog.validita_fine, now())
+								and     now() between m.validita_inizio and coalesce(m.validita_fine, now())
+								and     now() between stm.validita_inizio and coalesce(stm.validita_fine, now())
+								and     now() between cronop.validita_inizio and coalesce(cronop.validita_fine, now())
+							    order by srmtce.data_creazione desc 
+							--	limit 1
 							)
 							select
+							    impegno.elem_id,
 								impegno.uid,
 								impegno.movgest_anno,
 								impegno.movgest_numero,
@@ -263,7 +380,12 @@ BEGIN
                                 siope_tipo_debito.siope_tipo_debito_desc impegno_tipo_debito,
                                 coalesce(impegno_flag_prenotazione.boolean,'N') impegno_flag_prenotazione,
                                 impegno_cig.testo  impegno_cig,
-                                impegno_cup.testo  impegno_cup
+                                impegno_cup.testo  impegno_cup,
+                                --11.05.2020 MR SIAC-7349 SR210
+                                componente_desc.elem_det_comp_tipo_desc impegno_componente,
+                                -- SIAC-8877 Paolo 17/05/2023
+                                (case when cronoprogramma.movgest_ts_id is not null then cronoprogramma.programma_code else programma.programma_code end ) programma_code,
+                                (case when cronoprogramma.movgest_ts_id is not null then cronoprogramma.cronop_code          else null end ) cronop_code
 							from impegno
                               left outer join soggetto on impegno.movgest_ts_id=soggetto.movgest_ts_id
                               left outer join impegno_flag_prenotazione on impegno.movgest_ts_id=impegno_flag_prenotazione.movgest_ts_id
@@ -271,10 +393,16 @@ BEGIN
                               left outer join impegno_cup on impegno.movgest_ts_id=impegno_cup.movgest_ts_id
                               left outer join siope_assenza_motivazione on impegno.siope_assenza_motivazione_id=siope_assenza_motivazione.siope_assenza_motivazione_id
                               left outer join siope_tipo_debito on impegno.siope_tipo_debito_id=siope_tipo_debito.siope_tipo_debito_id
+                              --11.05.2020 MR SIAC-7349 SR210
+                              left outer join componente_desc on impegno.elem_det_comp_tipo_id=componente_desc.elem_det_comp_tipo_id
+                              -- SIAC-8877 Paolo 17/05/2023
+                              left outer join programma on (programma.movgest_ts_id=impegno.movgest_ts_id)
+                              left outer join cronoprogramma on (cronoprogramma.movgest_ts_id=impegno.movgest_ts_id)
 						) as zzz
 					),
 					zb as (
 						select
+							zzzz.elem_id,
 							zzzz.uid,
 							zzzz.movgest_anno,
 							zzzz.movgest_numero,
@@ -287,7 +415,8 @@ BEGIN
 						from (
 							with impegno as (
 								select
-									a.movgest_id as uid,
+									b.elem_id, 
+								    a.movgest_id as uid,
 									a.movgest_anno,
 									a.movgest_numero,
 									a.movgest_desc,
@@ -342,7 +471,8 @@ BEGIN
 								and h.data_cancellazione is null
 							)
 							select
-								impegno.uid,
+								impegno.elem_id,
+							    impegno.uid,
 								impegno.movgest_anno,
 								impegno.movgest_numero,
 								impegno.movgest_desc,
@@ -363,6 +493,7 @@ BEGIN
 					left join zb on za.movgest_ts_id=zb.movgest_ts_id
 				) soggall
 			),
+
 			attoamm as (
 				select
 					movgest_ts_id,
@@ -373,13 +504,17 @@ BEGIN
                     n.attoamm_oggetto,
 					q.attoamm_stato_desc,
 					o.attoamm_tipo_code,
-					o.attoamm_tipo_desc
+					o.attoamm_tipo_desc,
+					--SIAC-8188
+					staa.attoal_causale
 				from
 					siac_r_movgest_ts_atto_amm m,
-					siac_t_atto_amm n,
 					siac_d_atto_amm_tipo o,
 					siac_r_atto_amm_stato p,
-					siac_d_atto_amm_stato q
+					siac_d_atto_amm_stato q,
+					siac_t_atto_amm n
+				--SIAC-8188 se ci sono corrisponsenze le ritorno
+				left join siac_t_atto_allegato staa on n.attoamm_id = staa.attoamm_id 
 				where n.attoamm_id=m.attoamm_id
 				and o.attoamm_tipo_id=n.attoamm_tipo_id
 				and p.attoamm_id=n.attoamm_id
@@ -394,7 +529,8 @@ BEGIN
 				and q.data_cancellazione is null
 			)
 			select
-				imp_sogg.uid,
+				imp_sogg.elem_id,
+			    imp_sogg.uid,
 				imp_sogg.movgest_anno,
 				imp_sogg.movgest_numero,
 				imp_sogg.movgest_desc,
@@ -410,6 +546,8 @@ BEGIN
 				attoamm.attoamm_tipo_code,
 				attoamm.attoamm_tipo_desc,
 				attoamm.attoamm_stato_desc,
+				--SIAC-8188
+				attoamm.attoal_causale,
 				imp_sogg.pdc_code,
 				imp_sogg.pdc_desc,
                 -- 29.06.2018 Sofia jira siac-6193
@@ -420,8 +558,14 @@ BEGIN
                 imp_sogg.impegno_cig,
                 imp_sogg.impegno_cup,
                 imp_sogg.impegno_motivo_assenza_cig,
-                imp_sogg.impegno_tipo_debito
+                imp_sogg.impegno_tipo_debito,
+                --11.05.2020 MR SIAC-7349 SR210
+                imp_sogg.impegno_componente,
+				-- SIAC-8877 Paolo 17/05/2023
+				imp_sogg.programma_code,
+				imp_sogg.cronop_code
 			from imp_sogg
+
 			 left outer join attoamm ON imp_sogg.movgest_ts_id=attoamm.movgest_ts_id
             where (case when coalesce(_filtro_crp,'X')='R' then imp_sogg.movgest_anno<_anno::integer
                      	when coalesce(_filtro_crp,'X')='C' then imp_sogg.movgest_anno=_anno::integer
@@ -444,6 +588,50 @@ BEGIN
 			and z.data_cancellazione is NULL
 			and x.data_cancellazione is NULL
 			and y.data_cancellazione is NULL
+		),
+      --  	SIAC-8351 Haitham 05/11/2021
+		sac_capitolo as (
+			select
+				class_cap.classif_code,
+				class_cap.classif_desc,
+				r_class_cap.elem_id
+			from
+				siac_r_bil_elem_class r_class_cap,
+				siac_t_class class_cap,
+				siac_d_class_tipo tipo_class_cap
+			where r_class_cap.classif_id=class_cap.classif_id
+			and tipo_class_cap.classif_tipo_id=class_cap.classif_tipo_id
+			and now() BETWEEN r_class_cap.validita_inizio and coalesce (r_class_cap.validita_fine,now())
+			and tipo_class_cap.classif_tipo_code  IN ('CDC', 'CDR')
+			and r_class_cap.data_cancellazione is NULL
+			and tipo_class_cap.data_cancellazione is NULL
+			and class_cap.data_cancellazione is NULL
+		),	
+      --  	SIAC-8351 Haitham 05/11/2021
+        sac_impegno as (
+		
+			select
+				class_imp.classif_code,
+				class_imp.classif_desc,
+				mov.movgest_id 
+			from
+				siac_r_movgest_class  r_class_imp,
+				siac_t_class class_imp,
+				siac_d_class_tipo tipo_class_imp,
+				siac_t_movgest mov,
+				siac_t_movgest_ts ts
+			where r_class_imp.classif_id=class_imp.classif_id
+			and tipo_class_imp.classif_tipo_id=class_imp.classif_tipo_id
+			and now() BETWEEN r_class_imp.validita_inizio and coalesce (r_class_imp.validita_fine,now())
+			and tipo_class_imp.classif_tipo_code  IN ('CDC', 'CDR')
+			and ts.movgest_ts_id  = r_class_imp.movgest_ts_id 
+			and mov.movgest_id = ts.movgest_id 
+			and r_class_imp.data_cancellazione is NULL
+			and tipo_class_imp.data_cancellazione is NULL
+			and class_imp.data_cancellazione is null
+			-- 25.02.2022 Sofia Jira SIAC-8648
+			and now() BETWEEN ts.validita_inizio and COALESCE(ts.validita_fine,now())
+			and ts.data_cancellazione is null
 		)
 		select
 			imp_sogg_attoamm.uid,
@@ -457,7 +645,8 @@ BEGIN
 			imp_sogg_attoamm.attoamm_numero,
 			imp_sogg_attoamm.attoamm_anno,
             -- 29.06.2018 Sofia jira siac-6193
-            imp_sogg_attoamm.attoamm_oggetto attoamm_desc,
+            imp_sogg_attoamm.attoamm_oggetto attoamm_oggetto, --SIAC-8188 si cambia il nome del campo da attoamm_desc a attoamm_oggetto per mantenere una struttura univoca
+            imp_sogg_attoamm.attoal_causale attoal_causale, --SIAC-8188 si cambia il nome del campo da attoamm_desc a attoamm_oggetto per mantenere una struttura univoca
 			imp_sogg_attoamm.attoamm_tipo_code,
 			imp_sogg_attoamm.attoamm_tipo_desc,
 			imp_sogg_attoamm.attoamm_stato_desc,
@@ -473,12 +662,24 @@ BEGIN
 			imp_sogg_attoamm.impegno_cup,
             imp_sogg_attoamm.impegno_cig,
             imp_sogg_attoamm.impegno_tipo_debito,
-            imp_sogg_attoamm.impegno_motivo_assenza_cig
+            imp_sogg_attoamm.impegno_motivo_assenza_cig,
+            --11.05.2020 SIAC-7349 MR SR210
+            imp_sogg_attoamm.impegno_componente,
+   			sac_capitolo.classif_code as cap_sac_code,       --  	SIAC-8351 Haitham 05/11/2021
+			sac_capitolo.classif_desc as cap_sac_desc,        --  	SIAC-8351 Haitham 05/11/2021
+   			sac_impegno.classif_code as imp_sac_code,       --  	SIAC-8351 Haitham 05/11/2021
+			sac_impegno.classif_desc as imp_sac_desc,        --  	SIAC-8351 Haitham 05/11/2021
+			imp_sogg_attoamm.programma_code as programma,			--		SIAC-8877 Paolo 17/05/2023
+			imp_sogg_attoamm.cronop_code as cronoprogramma	--		SIAC-8877 Paolo 17/05/2023
 		from imp_sogg_attoamm
 		left outer join sac_attoamm on imp_sogg_attoamm.attoamm_id=sac_attoamm.attoamm_id
+		left outer join sac_capitolo on imp_sogg_attoamm.elem_id=sac_capitolo.elem_id
+		left outer join sac_impegno on imp_sogg_attoamm.uid=sac_impegno.movgest_id
 		order by
 			imp_sogg_attoamm.movgest_anno,
 			imp_sogg_attoamm.movgest_numero
+
+
 		LIMIT _limit
 		OFFSET _offset;
 END;
@@ -488,3 +689,6 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_siac_cons_entita_impegno_from_capitolospesa(integer, character varying, character varying, integer, integer)
+    OWNER TO siac;

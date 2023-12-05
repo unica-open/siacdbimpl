@@ -9,85 +9,10 @@
 
 DROP FUNCTION if exists fnc_siac_cons_entita_mandato_from_soggetto (integer,  varchar, integer, integer);
 
-CREATE OR REPLACE FUNCTION siac.fnc_siac_cons_entita_mandato_from_soggetto (
-  _uid_soggetto integer,
-  _annoesercizio varchar,
-  _limit integer,
-  _page integer
-)
-RETURNS TABLE (
-  uid integer,
-  ord_numero numeric,
-  ord_desc varchar,
-  ord_emissione_data timestamp,
-  -- 11.07.2018 Sofia siac-6193
-  ord_soggetto_code varchar,
-  ord_soggetto_desc varchar,
-  -- 11.07.2018 Sofia siac-6193
-  --  accredito_tipo_code varchar,
-  --  accredito_tipo_desc varchar,
-  ord_stato_desc varchar,
-  importo numeric,
-  ord_ts_code varchar,
-  attoamm_numero integer,
-  attoamm_anno varchar,
-  attoamm_stato_desc varchar,
-  attoamm_sac_code varchar,
-  attoamm_sac_desc varchar,
-  attoamm_tipo_code varchar,
-  attoamm_tipo_desc varchar,
-  uid_capitolo integer,
-  num_capitolo varchar,
-  num_articolo varchar,
-  num_ueb varchar,
-  capitolo_desc varchar,
-  provc_anno integer,
-  provc_numero numeric,
-  provc_data_convalida timestamp,
-  ord_quietanza_data timestamp,
-  -- 11.07.2018 Sofia jira siac-6193
-  sog_codice_fiscale varchar,
-  sog_partita_iva varchar,
-  -- MDP - no cessione
-  ord_accredito_tipo_code varchar,
-  ord_accredito_tipo_desc varchar,
-  ord_iban varchar,
-  ord_bic varchar,
-  ord_contocorrente varchar,
-  ord_contocorrente_intestazione varchar,
-  ord_banca_denominazione varchar,
-  ord_quietanzante varchar,
-  ord_quietanzante_codice_fiscale varchar,
-  -- Estremi Cessione
-  ord_soggetto_cessione_code varchar,
-  ord_soggetto_cessione_desc varchar,
-  ord_relaz_tipo_code varchar,
-  ord_relaz_tipo_desc varchar,
-  -- MDP - Cessione
-  ord_accredito_tipo_code_cess varchar,
-  ord_accredito_tipo_desc_cess varchar,
-  ord_iban_cess varchar,
-  ord_bic_cess varchar,
-  ord_contocorrente_cess varchar,
-  ord_contocorrente_intestazione_cess varchar,
-  ord_banca_denominazione_cess varchar,
-  ord_quietanzante_cess varchar,
-  ord_quietanzante_codice_fiscale_cess varchar,
-  liq_attoamm_desc varchar,
-  liq_attoalg_data_inserimento timestamp,
-  liq_attoalg_data_scad timestamp,
-  liq_attoalg_stato_desc varchar,
-  ord_split varchar,
-  ord_split_importo numeric,
-  ord_ritenute varchar,
-  ord_ritenute_importo numeric,
-  carte_contabili varchar,
-  ord_copertura varchar,
-  ord_conto_tesoreria varchar,
-  ord_distinta_codice varchar,
-  ord_distinta_desc varchar
-) AS
-$body$
+CREATE OR REPLACE FUNCTION siac.fnc_siac_cons_entita_mandato_from_soggetto(_uid_soggetto integer, _annoesercizio character varying, _limit integer, _page integer)
+ RETURNS TABLE(uid integer, ord_numero numeric, ord_desc character varying, ord_emissione_data timestamp without time zone, ord_soggetto_code character varying, ord_soggetto_desc character varying, ord_stato_desc character varying, importo numeric, ord_ts_code character varying, attoamm_numero integer, attoamm_anno character varying, attoamm_stato_desc character varying, attoamm_sac_code character varying, attoamm_sac_desc character varying, attoamm_tipo_code character varying, attoamm_tipo_desc character varying, uid_capitolo integer, num_capitolo character varying, num_articolo character varying, num_ueb character varying, capitolo_desc character varying, provc_anno integer, provc_numero numeric, provc_data_convalida timestamp without time zone, ord_quietanza_data timestamp without time zone, sog_codice_fiscale character varying, sog_partita_iva character varying, ord_accredito_tipo_code character varying, ord_accredito_tipo_desc character varying, ord_iban character varying, ord_bic character varying, ord_contocorrente character varying, ord_contocorrente_intestazione character varying, ord_banca_denominazione character varying, ord_quietanzante character varying, ord_quietanzante_codice_fiscale character varying, ord_soggetto_cessione_code character varying, ord_soggetto_cessione_desc character varying, ord_relaz_tipo_code character varying, ord_relaz_tipo_desc character varying, ord_accredito_tipo_code_cess character varying, ord_accredito_tipo_desc_cess character varying, ord_iban_cess character varying, ord_bic_cess character varying, ord_contocorrente_cess character varying, ord_contocorrente_intestazione_cess character varying, ord_banca_denominazione_cess character varying, ord_quietanzante_cess character varying, ord_quietanzante_codice_fiscale_cess character varying, liq_attoamm_desc character varying, liq_attoalg_data_inserimento timestamp without time zone, liq_attoalg_data_scad timestamp without time zone, liq_attoalg_stato_desc character varying, ord_split character varying, ord_split_importo numeric, ord_ritenute character varying, ord_ritenute_importo numeric, carte_contabili character varying, ord_copertura character varying, ord_conto_tesoreria character varying, ord_distinta_codice character varying, ord_distinta_desc character varying)
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
 	_offset INTEGER := (_page) * _limit;
 
@@ -577,6 +502,8 @@ BEGIN
       WHERE
               siac_t_oil_ricevuta.oil_ricevuta_tipo_id =  siac_d_oil_ricevuta_tipo.oil_ricevuta_tipo_id
           AND siac_t_oil_ricevuta.oil_ord_id  = siac_T_Ordinativo.ord_id
+		  --SIAC-8897
+		  AND siac_t_oil_ricevuta.oil_ricevuta_id =siac_r_ordinativo_quietanza.oil_ricevuta_id
           AND siac_T_Ordinativo.ord_id = siac_r_ordinativo_quietanza.ord_id
           and siac_T_Ordinativo.ente_proprietario_id = enteProprietarioId
           AND siac_d_oil_ricevuta_tipo.oil_ricevuta_tipo_code = 'Q'
@@ -665,11 +592,5 @@ BEGIN
 	LIMIT _limit
 	OFFSET _offset;
 END;
-$body$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY INVOKER
-COST 100 ROWS 1000;
-
---select * from  fnc_siac_cons_entita_mandato_from_soggetto (28771,  '2018',100000,  0);
+$function$
+;

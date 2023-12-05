@@ -2,6 +2,13 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
+
+drop FUNCTION siac.fnc_siac_disponibilitadodicesimi 
+(
+  id_in integer,
+  tipodisp_in varchar
+);
+
 CREATE OR REPLACE FUNCTION siac.fnc_siac_disponibilitadodicesimi (
   id_in integer,
   tipodisp_in varchar
@@ -85,6 +92,9 @@ LIC                  numeric:=0;
 IAP                  numeric:=0;
 LIM                  numeric:=0;
 
+-- 10.08.2020 Sofia Jira SIAC-6865
+importo_agg_IAP      numeric:=0;
+
 begin
     codicerisultato     :=0;
     messaggiorisultato  :=null;
@@ -96,7 +106,7 @@ begin
     dataelaborazione    := now()::timestamp;
 
 
-    strMessaggioFinale:='Calcolo disponibilità dodicesimi.';
+    strMessaggioFinale:='Calcolo disponibilita'' dodicesimi.';
 
 	strMessaggio:='Controllo parametri tipo elaborazione='||tipoDisp_in||'.';
     if tipoDisp_in is null then
@@ -366,6 +376,80 @@ impegnabili dal calcolo */
     if importoIAP is null then
 	    RAISE  EXCEPTION ' Errore in lettura.';
     end if;
+    raise notice 'imporoIAP =%',importoIAP;
+
+  -- 07.08.2020 Sofia SIAC-6865 - inizio
+  -- calcolo di impegni validi in annoBilancio
+  -- collegati per aggiudicazione ad impegni validi in annoBilancio
+  -- di competenza con annoProvvidemento<annoBilancio
+  -- questa cifra da sommare a importoIAP
+
+  strMessaggio:='Lettura importo IAP - quota di aggiudicazioni anno prec.';
+  select coalesce(sum(tsdet_agg.movgest_ts_det_importo),0) into importo_agg_IAP
+  from siac_t_bil_elem e, siac_r_bil_elem_stato rstato, siac_r_bil_elem_class rc,
+       siac_r_movgest_bil_elem rmov, siac_t_movgest mov, siac_t_movgest_ts ts,
+       siac_r_movgest_ts_stato rmovstato,
+	   siac_r_movgest_ts_atto_amm rmovatto, siac_t_atto_amm attoamm,
+       siac_r_movgest_aggiudicazione ragg, siac_t_movgest mov_agg,
+       siac_t_movgest_ts ts_agg,siac_r_movgest_ts_stato rs_agg,
+	   siac_t_movgest_ts_det tsdet_agg
+  where e.bil_id=bilancioId
+  and  e.elem_tipo_id=idTipoCapitolo
+  and  rc.elem_id=e.elem_id
+  and  rc.classif_id=programmaClassId
+  and  rstato.elem_id=e.elem_id
+  and  rstato.elem_stato_id!=elemStatoANId
+  and  rmov.elem_id=e.elem_id
+  and  mov.movgest_id=rmov.movgest_id
+  and  mov.movgest_anno::integer=annoBilancio::integer
+  and  ts.movgest_id=mov.movgest_id
+  and  ts.movgest_ts_tipo_id=movGestTsTipoTId
+  and  rmovstato.movgest_ts_id=ts.movgest_ts_id
+  and  rmovstato.movgest_stato_id!=movGestTsStatoAId
+  and  rmovatto.movgest_ts_id=ts.movgest_ts_id
+  and  attoamm.attoamm_id=rmovatto.attoamm_id
+  and  attoamm.attoamm_anno::integer<annoBilancio::integer
+  and  ragg.movgest_id_da=mov.movgest_id
+  and  mov_agg.movgest_id=ragg.movgest_id_a
+  and  mov_agg.bil_id=mov.bil_id
+  and  ts_agg.movgest_id=mov_agg.movgest_id
+  and  ts_agg.movgest_ts_tipo_id=movGestTsTipoTId
+  and  rs_agg.movgest_ts_id=ts_agg.movgest_ts_id
+  and  rs_agg.movgest_stato_id!=movGestTsStatoAId
+  and  tsdet_agg.movgest_ts_id=ts_agg.movgest_ts_id
+  and  tsdet_agg.movgest_ts_det_tipo_id=movGestTsDetATipoId
+  and  rstato.data_cancellazione is null
+  and  rstato.validita_fine is null
+  and  e.data_cancellazione is null
+  and  e.validita_fine is null
+  and  rc.data_cancellazione is null
+  and  rc.validita_fine is null
+  and  mov.data_cancellazione is null
+  and  mov.validita_fine is null
+  and  ts.data_cancellazione is null
+  and  ts.validita_fine is null
+  and  rmov.data_cancellazione is null
+  and  rmov.validita_fine is null
+  and  rmovstato.data_cancellazione is null
+  and  rmovstato.validita_fine is null
+  and  rmovatto.data_cancellazione is null
+  and  rmovatto.validita_fine is null
+  and  attoamm.data_cancellazione is null
+  and  attoamm.validita_fine is null
+  and  ragg.data_cancellazione is null
+  and  ragg.validita_fine is null
+  and  mov_agg.data_cancellazione is null
+  and  mov_agg.validita_fine is null
+  and  ts_agg.data_cancellazione is null
+  and  ts_agg.validita_fine is null
+  and  rs_agg.data_cancellazione is null
+  and  rs_agg.validita_fine is null
+  and  tsdet_agg.data_cancellazione is null
+  and  tsdet_agg.validita_fine is null;
+   raise notice 'importo_agg_IAP =%',importo_agg_IAP;
+  if COALESCE(importo_agg_IAP,0)!=0 then importoIAP:=importoIAP+importo_agg_IAP; end if;
+   raise notice 'imporoIAP =%',importoIAP;
+  -- 07.08.2020 Sofia SIAC-6865 - fine
 
   -- per calcolo DIM o ENTRAMBI allora calcolo impegnato competenza
   if tipoDisp_in in ( TIPO_DISP_ALL,TIPO_DISP_DIM) then
@@ -542,3 +626,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_siac_disponibilitadodicesimi (integer,varchar) OWNER TO siac;

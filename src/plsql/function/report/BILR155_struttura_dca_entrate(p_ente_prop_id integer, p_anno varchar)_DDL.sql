@@ -361,12 +361,19 @@ from 		siac_t_bil 						bilancio,
             movimento.movgest_id,
             movimento.movgest_anno      
 ),
+/* SIAC-7702 14/09/2020.
+	Questa funzione utilizza 3 funzioni create per il report BILR153.
+    Tali funzioni sono state modificate in modo da gestire
+    l'id del bilancio in modo da filtrare i dati e renderle piu'
+    performanti.
+	E' stata quindi adeguata anche questa funzione.
+*/
 elenco_class_capitoli as (
-	select * from "fnc_bilr153_tab_class_capitoli"  (p_ente_prop_id)),
+	select * from "fnc_bilr153_tab_class_capitoli"  (p_ente_prop_id,bilancio_id)),
 elenco_class_movgest as (
-	select * from "fnc_bilr153_tab_class_movgest"  (p_ente_prop_id)),
+	select * from "fnc_bilr153_tab_class_movgest"  (p_ente_prop_id,bilancio_id)),
 elenco_class_ord as (
-	select * from "fnc_bilr153_tab_class_ord"  (p_ente_prop_id)) ,
+	select * from "fnc_bilr153_tab_class_ord"  (p_ente_prop_id,bilancio_id)) ,
 elenco_pdci_IV as (
   select d_class_tipo.classif_tipo_code classif_tipo_code_cap,
           r_bil_elem_class.elem_id ,

@@ -132,8 +132,10 @@
   desc_causale VARCHAR(200),
   cod_tipo_causale VARCHAR(200),
   desc_tipo_causale VARCHAR(200),
-  ord_da_trasmettere boolean not null default true
-
+  ord_da_trasmettere boolean not null default true,
+  --  23.01.2023 Sofia Jira 	SIAC-8762
+  cod_conto_tes_vincolato VARCHAR(200),
+  descri_conto_tes_vincolato VARCHAR(500)
 )
 WITH (oids = false);
 

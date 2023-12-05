@@ -57,11 +57,15 @@ INNER JOIN siac_t_prima_nota g ON f.regep_id = g.pnota_id
 INNER JOIN siac_t_bil h ON g.bil_id = h.bil_id
 INNER JOIN siac_t_periodo i ON h.periodo_id = i.periodo_id
 INNER JOIN siac_r_prima_nota_stato l ON g.pnota_id = l.pnota_id
-INNER JOIN siac_d_prima_nota_stato m ON l.pnota_stato_id = m.pnota_stato_id   
+INNER JOIN siac_d_prima_nota_stato m ON l.pnota_stato_id = m.pnota_stato_id  
+--29/12/2020 SIAC-7894: occorre filtrare per ambito = FIN.
+INNER JOIN siac_d_ambito ambito ON ambito.ambito_id= b.ambito_id   
 WHERE b.ente_proprietario_id = p_ente_prop_id
 AND   m.pnota_stato_code = 'D'
 AND   i.anno = p_anno
 AND   d.pdce_fam_code in ('PP','AP','OP','OA')
+--29/12/2020 SIAC-7894: occorre filtrare per ambito = FIN.
+AND   ambito.ambito_code ='AMBITO_FIN'
 AND   b.data_cancellazione IS NULL
 AND   c.data_cancellazione IS NULL
 AND   d.data_cancellazione IS NULL
@@ -106,7 +110,20 @@ LOOP
   importo := elenco_prime_note.importo;
   livello := elenco_prime_note.livello;
 
-  return next;
+
+/* 22/06/2021 SIAC-8246.
+   Non restituisco gli importi a 0 in quanto per il formato Xbrl se un conto ha
+   entrambi gli importi a 0 non deve essere presente nel file.
+   Il report se il conto e' presente con un importo a 0 e l'altro non 0
+   visualizza comunque il dato correttamente.
+   Questa modifica vale anche per il formato excel.
+	return next;
+*/
+
+  --return next;
+  if importo <> 0 then
+  	return next;
+  end if;
 
   fam_code := '';
   fam_desc := '';

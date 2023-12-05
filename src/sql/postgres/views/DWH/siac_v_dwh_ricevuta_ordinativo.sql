@@ -2,7 +2,8 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE VIEW siac.siac_v_dwh_ricevuta_ordinativo
+﻿drop view if exists siac.siac_v_dwh_ricevuta_ordinativo;
+CREATE OR REPLACE VIEW siac.siac_v_dwh_ricevuta_ordinativo
 (
   ente_proprietario_id,
   bil_anno_ord,
@@ -31,8 +32,12 @@ SELECT
     roq.ord_quietanza_numero AS numero_ricevuta_ord,
     roq.ord_quietanza_importo AS importo_ricevuta_ord,
     'Q'::text AS tipo_ricevuta_ord,
-    ros.validita_inizio,
-    ros.validita_fine
+--    ros.validita_inizio,
+--    ros.validita_fine
+	-- 30.04.2021 Sofia Jira SIAC-8074
+  roq.validita_inizio,
+  roq.validita_fine
+
 FROM siac_t_ordinativo sto
   JOIN siac_t_bil tb ON sto.bil_id = tb.bil_id
   JOIN siac_t_periodo tp ON tp.periodo_id = tb.periodo_id
@@ -62,8 +67,11 @@ SELECT
   os.ord_storno_numero AS numero_ricevuta_ord,
   os.ord_storno_importo AS importo_ricevuta_ord,
   'S'::text AS tipo_ricevuta_ord,
-  ros.validita_inizio,
-  ros.validita_fine
+--  ros.validita_inizio,
+--  ros.validita_fine
+-- 30.04.2021 Sofia Jira SIAC-8074
+  os.validita_inizio,
+  os.validita_fine
 FROM siac_t_ordinativo sto
   JOIN siac_t_bil tb ON sto.bil_id = tb.bil_id
   JOIN siac_t_periodo tp ON tp.periodo_id = tb.periodo_id
@@ -81,3 +89,5 @@ AND   ros.data_cancellazione IS NULL
 AND   dos.data_cancellazione IS NULL
 -- 26.10.2018 jira siac-6477
 and   ros.validita_fine is null;
+
+ALTER view siac.siac_v_dwh_ricevuta_ordinativo OWNER TO siac;

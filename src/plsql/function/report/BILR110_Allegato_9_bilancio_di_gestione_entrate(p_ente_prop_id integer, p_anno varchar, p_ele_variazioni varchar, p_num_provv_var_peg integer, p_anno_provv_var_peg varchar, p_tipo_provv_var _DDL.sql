@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR110_Allegato_9_bilancio_di_gestione_entrate" (
@@ -131,6 +131,16 @@ IF p_ele_variazioni IS NOT NULL AND p_ele_variazioni <> '' THEN
   END LOOP;
   -- ALESSANDRO - SIAC-5208 - FINE
 END IF;
+
+--INC000004803136 10/03/2021.
+--Controllo aggiunto per ovviare ad un errato passaggio di parametri dal report.
+--Dovra' essere tolto quando il report sara' corretto.
+if p_code_sac_direz_peg = '99' then
+	p_code_sac_direz_peg:='999';
+end if;
+if p_code_sac_direz_bil = '99' then
+	p_code_sac_direz_bil:='999';
+end if;
 
     /* 22/09/2017: parametri nuovi, controllo che se e' passato uno tra numero/anno/tipo
     	provvedimento di variazione di PEG o di BILANCIO, siano passati anche
@@ -735,7 +745,8 @@ IF (p_ele_variazioni IS NOT NULL AND p_ele_variazioni <> '') OR
     END IF;
     sql_query=sql_query||' and		testata_variazione.ente_proprietario_id				= ' || p_ente_prop_id;
     sql_query=sql_query || ' and		anno_eserc.anno			= 	'''||p_anno||'''
-    and		tipologia_stato_var.variazione_stato_tipo_code in (''B'',''G'', ''C'', ''P'')
+    --10/10/2022 SIAC-8827  Aggiunto lo stato BD.
+    and		tipologia_stato_var.variazione_stato_tipo_code in (''B'',''G'', ''C'', ''P'',''BD'')
     and		tipo_capitolo.elem_tipo_code = ''' || elemTipoCode|| '''    
     and		tipo_elemento.elem_det_tipo_code	in (''STA'',''SCA'',''STR'') ';
     IF (p_ele_variazioni IS NOT NULL AND p_ele_variazioni <> '') THEN
@@ -1187,4 +1198,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR110_Allegato_9_bilancio_di_gestione_entrate" (p_ente_prop_id integer, p_anno varchar, p_ele_variazioni varchar, p_num_provv_var_peg integer, p_anno_provv_var_peg varchar, p_tipo_provv_var_peg varchar, p_num_provv_var_bil integer, p_anno_provv_var_bil varchar, p_tipo_provv_var_bil varchar, p_code_sac_direz_peg varchar, p_code_sac_sett_peg varchar, p_code_sac_direz_bil varchar, p_code_sac_sett_bil varchar)
+  OWNER TO siac;

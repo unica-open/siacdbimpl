@@ -2,14 +2,12 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_siac_dicuiimpegnatoup_comp_anno (
-  id_in integer,
-  anno_in varchar
-)
-RETURNS TABLE (
-  annocompetenza varchar,
-  dicuiimpegnato numeric
-) AS
+-- SIAC-7349 04/08/2020 CM Inizio
+
+DROP FUNCTION if exists siac.fnc_siac_dicuiimpegnatoup_comp_anno ( integer,character varying);
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dicuiimpegnatoup_comp_anno(id_in integer, anno_in character varying, verifica_mod_prov boolean DEFAULT true)
+ RETURNS TABLE(annocompetenza character varying, dicuiimpegnato numeric)
+AS 
 $body$
 DECLARE
 
@@ -20,7 +18,9 @@ NVL_STR     constant varchar:='';
 STA_IMP     constant varchar:='STA';
 
 FASE_OP_BIL_PREV constant VARCHAR:='P';
-
+STATO_ATTO_P constant varchar:='PROVVISORIO';
+STATO_ATTO_D constant varchar:='DEFINITIVO';
+STATO_MOD_V  constant varchar:='V';
 TIPO_IMP    constant varchar:='I';
 TIPO_IMP_T  constant varchar:='T';
 
@@ -30,24 +30,24 @@ STATO_P     constant varchar:='P';
 STATO_A     constant varchar:='A';
 IMPORTO_ATT constant varchar:='A';
 
-
 strMessaggio varchar(1500):=NVL_STR;
 
-
+attoAmmStatoDId integer:=0; -- SIAC-7349
+attoAmmStatoPId integer:=0;-- SIAC-7349
 bilancioId integer:=0;
 enteProprietarioId INTEGER:=0;
 annoBilancio varchar:=null;
-
+modStatoVId integer:=0; -- SIAC-7349
 movGestTipoId integer:=0;
 movGestTsTipoId integer:=0;
-movGestStatoId integer:=0;
-movGestTsDetTipoId integer:=0;
-
+movGestStatoId integer:=0;movGestTsDetTipoId integer:=0;
+movGestStatoIdProvvisorio integer:=0; -- SIAC-7349
 movGestTsId integer:=0;
 
 importoAttuale numeric:=0;
 importoCurAttuale numeric:=0;
-
+importoModifDelta  numeric:=0;
+importoModifINS numeric:=0; -- SIAC-7349 --aggiunta per ECONB
 
 movGestIdRec record;
 
@@ -60,6 +60,9 @@ elemCode3 varchar(50):=NVL_STR;
 elemIdGestEq integer:=0;
 bilIdElemGestEq integer:=0;
 
+-- 10.08.2020 Sofia jira siac-6865
+movGestStatoPId integer:=null;
+importoCurAttAggiudicazione numeric:=0;
 BEGIN
 
 
@@ -174,14 +177,48 @@ else
  where movGestStato.ente_proprietario_id=enteProprietarioId
  and   movGestStato.movgest_stato_code=STATO_A;
 
+ -- 10.08.2020 Sofia jira SIAC-6865
  strMessaggio:='Calcolo impegnato competenza elem_id='||id_in||'.'
+               ||'Per elemento gest equivalente elem_id='||elemIdGestEq||'.Calcolo movGestStatoPId.';
+
+ select movGestStato.movgest_stato_id into strict movGestStatoPId
+ from siac_d_movgest_stato movGestStato
+ where movGestStato.ente_proprietario_id=enteProprietarioId
+ and   movGestStato.movgest_stato_code=STATO_P;
+
+
+-- SIAC-7349 INIZIO
+strMessaggio:='Calcolo impegnato competenza elem_id='||id_in||'. Calcolo attoAmmStatoPId per attoamm_stato_code=PROVVISORIO';
+	  select d.attoamm_stato_id into strict attoAmmStatoPId
+	  from siac_d_atto_amm_stato d
+	  where d.ente_proprietario_id=enteProprietarioId
+	  and d.attoamm_stato_code=STATO_ATTO_P;
+
+	 strMessaggio:='Calcolo impegnato competenza elem_id='||id_in||'. Calcolo attoAmmStatoDId per attoamm_stato_code=DEFINTIVO';
+
+	  select d.attoamm_stato_id into strict attoAmmStatoDId
+	  from siac_d_atto_amm_stato d
+	  where d.ente_proprietario_id=enteProprietarioId
+	  and  d.attoamm_stato_code=STATO_ATTO_D;
+
+	select  movGestStato.movgest_stato_id into strict movGestStatoIdProvvisorio
+	  from siac_d_movgest_stato movGestStato
+	  where movGestStato.ente_proprietario_id=enteProprietarioId
+	  and   movGestStato.movgest_stato_code=STATO_P;
+
+	select d.mod_stato_id into strict modStatoVId
+	  from siac_d_modifica_stato d
+	  where d.ente_proprietario_id=enteProprietarioId
+	  and   d.mod_stato_code=STATO_MOD_V;
+-- SIAC-7349 FINE
+
+    strMessaggio:='Calcolo impegnato competenza elem_id='||id_in||'.'
                ||'Per elemento gest equivalente elem_id='||elemIdGestEq||'.Calcolo movGestTsDetTipoId.';
 
  select movGestTsDetTipo.movgest_ts_det_tipo_id into strict movGestTsDetTipoId
  from siac_d_movgest_ts_det_tipo movGestTsDetTipo
  where movGestTsDetTipo.ente_proprietario_id=enteProprietarioId
  and   movGestTsDetTipo.movgest_ts_det_tipo_code=IMPORTO_ATT;
-
 
  strMessaggio:='Calcolo impegnato competenza elem_id='||id_in
               ||'Per elemento gest equivalente elem_id='||elemIdGestEq||'. Inizio ciclo per anno_in='||anno_in||'.';
@@ -227,12 +264,355 @@ else
            from siac_t_movgest_ts_det movGestTsDet
            where movGestTsDet.movgest_ts_id=movGestTsId
            and   movGestTsDet.movgest_ts_det_tipo_id=movGestTsDetTipoId;
-    end if;
+	   -- SIAC-7349 INIZIO
+          
+/*  SIAC-8493 03.12.2021 Sofia spostato fuori ciclo      
+    if importoCurAttuale>=0 then
+              ----------------
+              select tb.importo into importoModifDelta
+	          from
+	          (
+	          	select coalesce(sum(moddet.movgest_ts_det_importo),0) importo , ts.movgest_ts_tipo_id
+	          	from siac_r_movgest_bil_elem rbil,
+	          	 	siac_t_movgest mov,
+	          	 	siac_t_movgest_ts ts,
+	          		siac_r_movgest_ts_stato rstato,
+	          	  siac_t_movgest_ts_det tsdet,
+	          		siac_t_movgest_ts_det_mod moddet,
+	          		siac_t_modifica mod,
+	          	 	siac_r_modifica_stato rmodstato,
+	          		siac_r_atto_amm_stato attostato,
+	          	 	siac_t_atto_amm atto,
+	          		siac_d_modifica_tipo tipom
+	          	where
+	          		rbil.elem_id=elemIdGestEq -- UID del capitolo di gestione equivalente
+	          		and	 mov.movgest_id=rbil.movgest_id
+	          		and  mov.movgest_tipo_id=movGestTipoId -- deve essere IMPEGNO
+	          		and  mov.movgest_anno=anno_in::integer -- anno dell impegno = annoMovimento
+	          		and  mov.bil_id=bilIdElemGestEq -- UID del bilancio in annoEsercizio
+	          		and  ts.movgest_id=mov.movgest_id
+	          		and  rstato.movgest_ts_id=ts.movgest_ts_id
+	          		and  rstato.movgest_stato_id!=movGestStatoId -- Impegno non ANNULLATO
+	          		and  rstato.movgest_stato_id!=movGestStatoIdProvvisorio -- Impegno non PROVVISORIO
+	          	  and  tsdet.movgest_ts_id=ts.movgest_ts_id
+	          		and  moddet.movgest_ts_det_id=tsdet.movgest_ts_det_id
+	          		and  moddet.movgest_ts_det_tipo_id=tsdet.movgest_ts_det_tipo_id
+	          	 	and   moddet.movgest_ts_det_importo<0 -- importo negativo
+	          		and   rmodstato.mod_stato_r_id=moddet.mod_stato_r_id
+	          		and   rmodstato.mod_stato_id=modStatoVId   -- V modifica in stato valido
+	          		and   mod.mod_id=rmodstato.mod_id
+	          		and   atto.attoamm_id=mod.attoamm_id
+	          		and   attostato.attoamm_id=atto.attoamm_id
+	          		and   attostato.attoamm_stato_id=attoAmmStatoPId -- atto provvisorio
+	          		and   tipom.mod_tipo_id=mod.mod_tipo_id
+	          		and   tipom.mod_tipo_code <> 'ECONB'  -- SIAC-7349 non tengo conto di questa condizione
+	          		and rbil.data_cancellazione is null
+	          		and rbil.validita_fine is null
+	          		and mov.data_cancellazione is null
+	          		and mov.validita_fine is null
+	          		and ts.data_cancellazione is null
+	          		and ts.validita_fine is null
+	          		and rstato.data_cancellazione is null
+	          		and rstato.validita_fine is null
+	          		and tsdet.data_cancellazione is null
+	          		and tsdet.validita_fine is null
+	          		and moddet.data_cancellazione is null
+	          		and moddet.validita_fine is null
+	          		and mod.data_cancellazione is null
+	          		and mod.validita_fine is null
+	          		and rmodstato.data_cancellazione is null
+	          		and rmodstato.validita_fine is null
+	          		and attostato.data_cancellazione is null
+	          		and attostato.validita_fine is null
+	          		and atto.data_cancellazione is null
+	          		and atto.validita_fine is null
+	          		group by ts.movgest_ts_tipo_id
+	          	  ) tb, siac_d_movgest_ts_tipo tipo
+	          	  where tipo.movgest_ts_tipo_id=tb.movgest_ts_tipo_id
+	          	  order by tipo.movgest_ts_tipo_code desc
+	          	  limit 1;
+	      	  -- 14.05.2020 Manuel - aggiunto parametro verifica_mod_prov
+	          if importoModifDelta is null or verifica_mod_prov is false then importoModifDelta:=0; end if;
 
-    importoAttuale:=importoAttuale+importoCurAttuale;
+                  /*Aggiunta delle modifiche ECONB*/
+		        -- anna_economie inizio
+	          select tb.importo into importoModifINS
+		                from
+		                (
+		                	select coalesce(sum(moddet.movgest_ts_det_importo),0) importo , ts.movgest_ts_tipo_id
+		                	from siac_r_movgest_bil_elem rbil, siac_t_movgest mov,siac_t_movgest_ts ts,
+	                   	siac_r_movgest_ts_stato rstato,siac_t_movgest_ts_det tsdet,
+		                  siac_t_movgest_ts_det_mod moddet,
+	                   	siac_t_modifica mod, siac_r_modifica_stato rmodstato,
+		                  siac_r_atto_amm_stato attostato, siac_t_atto_amm atto,
+	                    siac_d_modifica_tipo tipom
+		                where rbil.elem_id=elemIdGestEq
+		                and	 mov.movgest_id=rbil.movgest_id
+		                and  mov.movgest_tipo_id=movgestTipoId -- tipo movimento impegno
+	                  and  mov.movgest_anno=anno_in::integer
+	                  and  mov.bil_id=bilancioId
+		                and  ts.movgest_id=mov.movgest_id
+		                and  rstato.movgest_ts_id=ts.movgest_ts_id
+		                and  rstato.movgest_stato_id!=movGestStatoId -- impegno non annullato
+		                and  tsdet.movgest_ts_id=ts.movgest_ts_id
+		                and  moddet.movgest_ts_det_id=tsdet.movgest_ts_det_id
+		                and  moddet.movgest_ts_det_tipo_id=tsdet.movgest_ts_det_tipo_id
+		                and   moddet.movgest_ts_det_importo<0 -- importo negativo
+		                and   rmodstato.mod_stato_r_id=moddet.mod_stato_r_id
+		                and   rmodstato.mod_stato_id=modStatoVId   -- V modifica in stato valido
+		                and   mod.mod_id=rmodstato.mod_id
+		                and   atto.attoamm_id=mod.attoamm_id
+		                and   attostato.attoamm_id=atto.attoamm_id
+		                and   attostato.attoamm_stato_id in (attoAmmStatoDId, attoAmmStatoPId) -- atto definitivo
+	                   and   tipom.mod_tipo_id=mod.mod_tipo_id
+	                   and   tipom.mod_tipo_code = 'ECONB'
+		                -- date
+		                and rbil.data_cancellazione is null
+		                and rbil.validita_fine is null
+		                and mov.data_cancellazione is null
+		                and mov.validita_fine is null
+		                and ts.data_cancellazione is null
+		                and ts.validita_fine is null
+		                and rstato.data_cancellazione is null
+		                and rstato.validita_fine is null
+		                and tsdet.data_cancellazione is null
+		                and tsdet.validita_fine is null
+		                and moddet.data_cancellazione is null
+		                and moddet.validita_fine is null
+		                and mod.data_cancellazione is null
+		                and mod.validita_fine is null
+		                and rmodstato.data_cancellazione is null
+		                and rmodstato.validita_fine is null
+		                and attostato.data_cancellazione is null
+		                and attostato.validita_fine is null
+		                and atto.data_cancellazione is null
+		                and atto.validita_fine is null
+	                   group by ts.movgest_ts_tipo_id
+	                  ) tb, siac_d_movgest_ts_tipo tipo
+	                  where tipo.movgest_ts_tipo_id=tb.movgest_ts_tipo_id
+	                  order by tipo.movgest_ts_tipo_code desc
+	                  limit 1;
+
+       			 if importoModifINS is null then
+	 	            importoModifINS = 0;
+	            end if;
+            end if; SIAC-8493 03.12.2021 Sofia spostato fuori ciclo   - fine   */
+    end if;
+   importoAttuale:=importoAttuale+importoCurAttuale;
+ 
+  -- SIAC-8493 03.12.2021 Sofia spostato fuori ciclo    
+  --importoAttuale:=importoAttuale+importoCurAttuale-(importoModifDelta);
+
+  -- SIAC-8493 03.12.2021 Sofia spostato fuori ciclo    
+  --aggiunta per ECONB
+  --importoAttuale:=importoAttuale+abs(importoModifINS);
+
  end loop;
+ 
+ -- SIAC-8493 03.12.2021 Sofia spostato fuori ciclo    
+ raise notice 'importoAttuale=%',importoAttuale::varchar;
+ if  verifica_mod_prov=true then
+  strMessaggio:='Calcolo impegnato competenza elem_id='||id_in
+               ||'. Calcolo modifiche negative per anno_in='||anno_in||'.';
+  select tb.importo into importoModifDelta
+  from
+  (
+  	select coalesce(sum(moddet.movgest_ts_det_importo),0) importo , ts.movgest_ts_tipo_id
+  	from siac_r_movgest_bil_elem rbil,
+  	 	siac_t_movgest mov,
+  	 	siac_t_movgest_ts ts,
+  		siac_r_movgest_ts_stato rstato,
+  	  siac_t_movgest_ts_det tsdet,
+  		siac_t_movgest_ts_det_mod moddet,
+  		siac_t_modifica mod,
+  	 	siac_r_modifica_stato rmodstato,
+  		siac_r_atto_amm_stato attostato,
+  	 	siac_t_atto_amm atto,
+  		siac_d_modifica_tipo tipom
+  	where
+  		rbil.elem_id=elemIdGestEq -- UID del capitolo di gestione equivalente
+  		and	 mov.movgest_id=rbil.movgest_id
+  		and  mov.movgest_tipo_id=movGestTipoId -- deve essere IMPEGNO
+  		and  mov.movgest_anno=anno_in::integer -- anno dell impegno = annoMovimento
+  		and  mov.bil_id=bilIdElemGestEq -- UID del bilancio in annoEsercizio
+  		and  ts.movgest_id=mov.movgest_id
+  		and  rstato.movgest_ts_id=ts.movgest_ts_id
+  		and  rstato.movgest_stato_id!=movGestStatoId -- Impegno non ANNULLATO
+  		and  rstato.movgest_stato_id!=movGestStatoIdProvvisorio -- Impegno non PROVVISORIO
+    	and  tsdet.movgest_ts_id=ts.movgest_ts_id
+  		and  moddet.movgest_ts_det_id=tsdet.movgest_ts_det_id
+  		and  moddet.movgest_ts_det_tipo_id=tsdet.movgest_ts_det_tipo_id
+  	 	and   moddet.movgest_ts_det_importo<0 -- importo negativo
+  		and   rmodstato.mod_stato_r_id=moddet.mod_stato_r_id
+  		and   rmodstato.mod_stato_id=modStatoVId   -- V modifica in stato valido
+  		and   mod.mod_id=rmodstato.mod_id
+  		and   atto.attoamm_id=mod.attoamm_id
+  		and   attostato.attoamm_id=atto.attoamm_id
+  		and   attostato.attoamm_stato_id=attoAmmStatoPId -- atto provvisorio
+  		and   tipom.mod_tipo_id=mod.mod_tipo_id
+  		and   tipom.mod_tipo_code <> 'ECONB'  -- SIAC-7349 non tengo conto di questa condizione -- SIAC-8899 09.05.2023 Sofia 
+  		--and  (tipom.mod_tipo_code <> 'ECONB' and tipom.mod_tipo_code <> 'REANNO') -- SIAC-8899 09.05.2023 Sofia 
+  		and rbil.data_cancellazione is null
+  		and rbil.validita_fine is null
+  		and mov.data_cancellazione is null
+  		and mov.validita_fine is null
+  		and ts.data_cancellazione is null
+  		and ts.validita_fine is null
+  		and rstato.data_cancellazione is null
+  		and rstato.validita_fine is null
+  		and tsdet.data_cancellazione is null
+  		and tsdet.validita_fine is null
+  		and moddet.data_cancellazione is null
+  		and moddet.validita_fine is null
+  		and mod.data_cancellazione is null
+  		and mod.validita_fine is null
+  		and rmodstato.data_cancellazione is null
+  		and rmodstato.validita_fine is null
+  		and attostato.data_cancellazione is null
+  		and attostato.validita_fine is null
+  		and atto.data_cancellazione is null
+  		and atto.validita_fine is null
+  		group by ts.movgest_ts_tipo_id
+  	  ) tb, siac_d_movgest_ts_tipo tipo
+  	  where tipo.movgest_ts_tipo_id=tb.movgest_ts_tipo_id
+  	  order by tipo.movgest_ts_tipo_code desc
+  	  limit 1;
+   
+      if importoModifDelta is null or verifica_mod_prov is false then importoModifDelta:=0; end if;
+      raise notice 'importoModifDelta=%',importoModifDelta::varchar;
+
+      -- aggiunta negative	
+      importoAttuale:=importoAttuale-(importoModifDelta);
+
+      raise notice 'importoAttuale=%',importoAttuale::varchar;
+
+      strMessaggio:='Calcolo impegnato competenza elem_id='||id_in
+               ||'. Calcolo modifiche negative ECONB per anno_in='||anno_in||'.';  
+      select tb.importo into importoModifINS
+	  from
+	  (
+		select coalesce(sum(moddet.movgest_ts_det_importo),0) importo , ts.movgest_ts_tipo_id
+		from siac_r_movgest_bil_elem rbil, siac_t_movgest mov,siac_t_movgest_ts ts,
+			 siac_r_movgest_ts_stato rstato,siac_t_movgest_ts_det tsdet,
+		     siac_t_movgest_ts_det_mod moddet,
+			 siac_t_modifica mod, siac_r_modifica_stato rmodstato,
+		  	 siac_r_atto_amm_stato attostato, siac_t_atto_amm atto,
+	   		 siac_d_modifica_tipo tipom
+		where rbil.elem_id=elemIdGestEq
+		and	 mov.movgest_id=rbil.movgest_id
+		and  mov.movgest_tipo_id=movgestTipoId -- tipo movimento impegno
+		and  mov.movgest_anno=anno_in::integer
+		and  mov.bil_id=bilancioId
+		and  ts.movgest_id=mov.movgest_id
+		and  rstato.movgest_ts_id=ts.movgest_ts_id
+		and  rstato.movgest_stato_id!=movGestStatoId -- impegno non annullato
+		and  tsdet.movgest_ts_id=ts.movgest_ts_id
+		and  moddet.movgest_ts_det_id=tsdet.movgest_ts_det_id
+		and  moddet.movgest_ts_det_tipo_id=tsdet.movgest_ts_det_tipo_id
+		and   moddet.movgest_ts_det_importo<0 -- importo negativo
+		and   rmodstato.mod_stato_r_id=moddet.mod_stato_r_id
+		and   rmodstato.mod_stato_id=modStatoVId   -- V modifica in stato valido
+		and   mod.mod_id=rmodstato.mod_id
+		and   atto.attoamm_id=mod.attoamm_id
+		and   attostato.attoamm_id=atto.attoamm_id
+		and   attostato.attoamm_stato_id in (attoAmmStatoDId, attoAmmStatoPId) -- atto definitivo
+		and   tipom.mod_tipo_id=mod.mod_tipo_id
+		and   tipom.mod_tipo_code = 'ECONB'
+		-- date
+        and rbil.data_cancellazione is null
+        and rbil.validita_fine is null
+        and mov.data_cancellazione is null
+        and mov.validita_fine is null
+        and ts.data_cancellazione is null
+        and ts.validita_fine is null
+        and rstato.data_cancellazione is null
+        and rstato.validita_fine is null
+        and tsdet.data_cancellazione is null
+        and tsdet.validita_fine is null
+        and moddet.data_cancellazione is null
+        and moddet.validita_fine is null
+        and mod.data_cancellazione is null
+        and mod.validita_fine is null
+        and rmodstato.data_cancellazione is null
+        and rmodstato.validita_fine is null
+        and attostato.data_cancellazione is null
+        and attostato.validita_fine is null
+        and atto.data_cancellazione is null
+        and atto.validita_fine is null
+        group by ts.movgest_ts_tipo_id
+      ) tb, siac_d_movgest_ts_tipo tipo
+	  where tipo.movgest_ts_tipo_id=tb.movgest_ts_tipo_id
+	  order by tipo.movgest_ts_tipo_code desc
+	  limit 1;
+		
+	  if importoModifINS is null then
+		    importoModifINS = 0;
+	  end if;   
+      raise notice 'importoModifINS=%',importoModifINS::varchar;
+
+      --aggiunta per ECONB
+      importoAttuale:=importoAttuale+abs(importoModifINS);
+	  raise notice 'importoAttuale=%',importoAttuale::varchar;
+ end if;
+ -- SIAC-8493 03.12.2021 Sofia spostato fuori ciclo - fine
+
+ -- 10.08.2020 Sofia Jira SIAC-6865 - inizio
+ -- impegni provvisori nati da aggiudiazione non decurtano la disp. a impegnare
+ if  verifica_mod_prov=true then
+   strMessaggio:='Calcolo impegnato competenza elem_id='||id_in
+               ||'. Calcolo impegnato provvisorio per aggiudicazione per anno_in='||anno_in||'.';
+
+   select tb.importo into importoCurAttAggiudicazione
+   from
+   (
+  	select coalesce(sum(det.movgest_ts_det_importo),0)  importo, ts.movgest_ts_tipo_id
+    from  siac_r_movgest_bil_elem rmov,
+          siac_t_movgest mov,
+      	  siac_t_movgest_ts ts,
+      	  siac_r_movgest_ts_stato rs_stato,
+          siac_t_movgest_ts_det det,
+     	  siac_d_movgest_ts_det_tipo tipo_det
+      where rmov.elem_id=elemIdGestEq
+      and 	mov.movgest_id=rmov.movgest_id
+      and   mov.bil_id = bilIdElemGestEq
+      and   mov.movgest_tipo_id=movGestTipoId
+      and   mov.movgest_anno = anno_in::integer
+      and   ts.movgest_id=mov.movgest_id
+      and   rs_stato.movgest_ts_id=ts.movgest_ts_id
+	  and   rs_stato.movgest_stato_id=movGestStatoPId
+      and   det.movgest_ts_id=ts.movgest_ts_id
+      and   tipo_det.movgest_ts_det_tipo_id=det.movgest_ts_det_tipo_id
+      and   tipo_det.movgest_ts_det_tipo_id=movGestTsDetTipoId
+      and   exists
+      (
+        select 1
+        from siac_r_movgest_aggiudicazione ragg
+        where   ragg.movgest_id_a=mov.movgest_id
+        and     ragg.data_cancellazione is null
+        and     ragg.validita_fine is null
+      )
+      and   rs_stato.validita_fine is null
+	  and   rmov.data_cancellazione is null
+      and   mov.data_cancellazione is null
+      and   ts.data_cancellazione is null
+      and   det.data_cancellazione is null
+     group by ts.movgest_ts_tipo_id
+    ) tb, siac_d_movgest_ts_tipo t
+    where tb.movgest_ts_tipo_id=t.movgest_ts_tipo_id
+    order by t.movgest_ts_tipo_code desc
+    limit 1;
+    if importoCurAttAggiudicazione is null then importoCurAttAggiudicazione:=0; end if;
+    raise notice 'importoCurAttAggiudicazione=%',importoCurAttAggiudicazione::varchar;
+    importoAttuale:=importoAttuale-importoCurAttAggiudicazione;
+    raise notice 'importoAttuale=%',importoAttuale::varchar;
+  end if;
+  -- 10.08.2020 Sofia Jira SIAC-6865 - fine
+
 end if;
 
+
+-- SIAC-8493 03.12.2021 Sofia spostato fuori ciclo
+raise notice '@@@@@ in uscita importoAttuale=%',importoAttuale::varchar;
 annoCompetenza:=anno_in;
 diCuiImpegnato:=importoAttuale;
 
@@ -256,3 +636,8 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_siac_dicuiimpegnatoup_comp_anno (integer, varchar, boolean)
+  OWNER TO siac;
+  
+-- SIAC-7349 04/08/2020 CM Fine

@@ -70,158 +70,6 @@ denom_ente='';
 select fnc_siac_random_user()
 into	user_table;
 
-/*
-insert into  siac_rep_tit_tip_cat_riga_anni
-select v.*,user_table from
-(SELECT v3.classif_tipo_desc AS classif_tipo_desc1, v3.classif_id AS titolo_id,
-    v3.classif_code AS titolo_code, v3.classif_desc AS titolo_desc,
-    v3.validita_inizio AS titolo_validita_inizio,
-    v3.validita_fine AS titolo_validita_fine,
-    v2.classif_tipo_desc AS classif_tipo_desc2, v2.classif_id AS tipologia_id,
-    v2.classif_code AS tipologia_code, v2.classif_desc AS tipologia_desc,
-    v2.validita_inizio AS tipologia_validita_inizio,
-    v2.validita_fine AS tipologia_validita_fine,
-    v1.classif_tipo_desc AS classif_tipo_desc3, v1.classif_id AS categoria_id,
-    v1.classif_code AS categoria_code, v1.classif_desc AS categoria_desc,
-    v1.validita_inizio AS categoria_validita_inizio,
-    v1.validita_fine AS categoria_validita_fine, v1.ente_proprietario_id
-FROM (SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id 
-    AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v1,
--------------siac_v_tit_tip_cat_anni v1,
-(SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id 
-    AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v2, 
-----------siac_v_tit_tip_cat_anni v2,
-(SELECT tb.classif_classif_fam_tree_id, tb.classif_fam_tree_id, t1.classif_code,
-    t1.classif_desc, ti1.classif_tipo_desc, tb.classif_id, tb.classif_id_padre,
-    tb.ente_proprietario_id, tb.ordine, tb.level, tb.validita_inizio,
-    tb.validita_fine
-FROM ( WITH RECURSIVE rqname(classif_classif_fam_tree_id, classif_fam_tree_id,
-    classif_id, classif_id_padre, ente_proprietario_id, ordine, livello, validita_inizio, validita_fine, level, arrhierarchy) AS (
-    SELECT rt1.classif_classif_fam_tree_id,
-                            rt1.classif_fam_tree_id, rt1.classif_id,
-                            rt1.classif_id_padre, rt1.ente_proprietario_id,
-                            rt1.ordine, rt1.livello, tt1.validita_inizio,
-                            tt1.validita_fine, 1,
-                            ARRAY[COALESCE(rt1.classif_id, 0)] AS "array"
-    FROM siac_r_class_fam_tree rt1,
-                            siac_t_class_fam_tree tt1, siac_d_class_fam cf
-    WHERE cf.classif_fam_id = tt1.classif_fam_id AND tt1.classif_fam_tree_id =
-        rt1.classif_fam_tree_id AND rt1.classif_id_padre IS NULL AND cf.classif_fam_desc::text = 'Entrata - TitoliTipologieCategorie'::text AND tt1.ente_proprietario_id = rt1.ente_proprietario_id
-    UNION ALL
-    SELECT tn.classif_classif_fam_tree_id,
-                            tn.classif_fam_tree_id, tn.classif_id,
-                            tn.classif_id_padre, tn.ente_proprietario_id,
-                            tn.ordine, tn.livello, tn.validita_inizio,
-                            tn.validita_fine, tp.level + 1,
-                            tp.arrhierarchy || tn.classif_id
-    FROM rqname tp, siac_r_class_fam_tree tn
-    WHERE tp.classif_id = tn.classif_id_padre AND tn.ente_proprietario_id =
-        tp.ente_proprietario_id
-    )
-    SELECT rqname.classif_classif_fam_tree_id, rqname.classif_fam_tree_id,
-            rqname.classif_id, rqname.classif_id_padre,
-            rqname.ente_proprietario_id, rqname.ordine, rqname.livello,
-            rqname.validita_inizio, rqname.validita_fine, rqname.level
-    FROM rqname
-    ORDER BY rqname.arrhierarchy
-    ) tb, siac_t_class t1,
-    siac_d_class_tipo ti1
-WHERE t1.classif_id = tb.classif_id AND ti1.classif_tipo_id =
-    t1.classif_tipo_id AND t1.ente_proprietario_id = tb.ente_proprietario_id
-     AND ti1.ente_proprietario_id = t1.ente_proprietario_id) v3
----------------    siac_v_tit_tip_cat_anni v3
-WHERE v1.classif_id_padre = v2.classif_id AND v1.classif_tipo_desc::text =
-    'Categoria'::text AND v2.classif_tipo_desc::text = 'Tipologia'::text 
-    AND v2.classif_id_padre = v3.classif_id AND v3.classif_tipo_desc::text = 'Titolo Entrata'::text 
-    AND v1.ente_proprietario_id = v2.ente_proprietario_id AND v2.ente_proprietario_id = v3.ente_proprietario_id) v
----------siac_v_tit_tip_cat_riga_anni 
-where v.ente_proprietario_id=p_ente_prop_id 
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.categoria_validita_inizio and
-COALESCE(v.categoria_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.tipologia_validita_inizio and
-COALESCE(v.tipologia_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between v.titolo_validita_inizio and
-COALESCE(v.titolo_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-order by titolo_code, tipologia_code,categoria_code;
-*/
 
 
 --06/09/2016: cambiata la query che carica la struttura di bilancio
@@ -507,7 +355,11 @@ from 		siac_t_bil_elem_det 			capitolo_importi,
         and	r_class.data_cancellazione				is null
         and	b.data_cancellazione					is null
         and c.data_cancellazione					is null
-        and b.classif_code <> 'XX')
+        --12/07/2021 SIAC-8285
+        --Occorre prendere solo i capitolo che per l'attributo
+        --PERIMETRO_SANITARIO_ENTRATA hanno il valore '2'.
+        --and b.classif_code <> 'XX')
+        and b.classif_code ='2')
         and	capitolo_importi.data_cancellazione 	is null
         and	capitolo_imp_tipo.data_cancellazione 	is null
         and	capitolo_imp_periodo.data_cancellazione is null

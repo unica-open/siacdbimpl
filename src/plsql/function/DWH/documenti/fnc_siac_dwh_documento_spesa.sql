@@ -2,7 +2,15 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_documento_spesa (
+drop FUNCTION if exists siac.fnc_siac_dwh_documento_spesa
+(
+  p_ente_proprietario_id integer,
+  p_data timestamp
+);
+
+
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_documento_spesa
+(
   p_ente_proprietario_id integer,
   p_data timestamp
 )
@@ -16,7 +24,13 @@ v_user_table varchar;
 params varchar;
 fnc_eseguita integer;
 
+-- 26.01.2021 Sofia Jira SIAC-7518
+annoStorico INTEGER:=2018;
+caricaDatiStorico integer:=null;
 BEGIN
+
+SET local work_mem = '64MB'; -- 22.04.2021 Sofia - indicazioni di Meo B.
+
 
 select count(*) into fnc_eseguita
 from siac_dwh_log_elaborazioni
@@ -25,6 +39,8 @@ a.ente_proprietario_id=p_ente_proprietario_id and
 a.fnc_elaborazione_inizio >= (now() - interval '13 hours')::timestamp -- non deve esistere  una elaborazione uguale nelle 13 ore che precedono la chimata
 and a.fnc_name='fnc_siac_dwh_documento_spesa' ;
 
+-- 13.03.2020 Sofia jira 	SIAC-7513
+fnc_eseguita:=0;
 if fnc_eseguita> 0 then
 
 return;
@@ -40,12 +56,27 @@ IF p_data IS NULL THEN
    p_data := now();
 END IF;
 
+-- 26.01.2021 Sofia JIRA siac-7518
+select substr(liv.gestione_livello_code,1,4)::integer into annoStorico
+from siac_d_gestione_livello liv,siac_d_gestione_tipo tipo
+where tipo.ente_proprietario_id=p_ente_proprietario_id
+and   tipo.gestione_tipo_code='ANNO_STORICO_DWH_DOC_SPESA_ATTIVO'
+and   liv.gestione_tipo_id=tipo.gestione_tipo_id
+and   tipo.data_cancellazione is null
+and   liv.data_cancellazione  is null;
+
+if annoStorico is null then
+--	annoStorico:=extract( year from now()::timestamp)-3;
+    annoStorico:=2000;
+end if;
+-- 26.01.2021 Sofia JIRA siac-7518
 select fnc_siac_random_user()
 into	v_user_table;
 
-params := p_ente_proprietario_id::varchar||' - '||p_data::varchar;
-
-
+-- 26.01.2021 Sofia Jira SIAC-7518
+--params := p_ente_proprietario_id::varchar||' - '||p_data::varchar;
+-- 26.01.2021 Sofia Jira SIAC-7518
+params := p_ente_proprietario_id::varchar||' - annoStorico '||annoStorico::varchar||' - '||p_data::varchar;
 insert into
 siac_dwh_log_elaborazioni (
 ente_proprietario_id,
@@ -63,13 +94,21 @@ v_user_table
 );
 
 
-esito:= 'Inizio funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - '||clock_timestamp();
+esito:= params||' - Inizio funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - '||clock_timestamp();
 RETURN NEXT;
 
 DELETE FROM siac.siac_dwh_documento_spesa
 WHERE ente_proprietario_id = p_ente_proprietario_id;
-esito:= '  Fine eliminazione dati pregressi - '||clock_timestamp();
+esito:= 'In funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - fine eliminazione dati pregressi - '||clock_timestamp();
+
+-- 20.01.2021 Sofia jira SIAC-7967
+update siac_dwh_log_elaborazioni   log
+set    fnc_elaborazione_fine = clock_timestamp(),
+       fnc_durata=clock_timestamp()-log.fnc_elaborazione_inizio,
+       fnc_parameters=log.fnc_parameters||' - '||esito
+where fnc_user=v_user_table;
 RETURN NEXT;
+
 
 INSERT INTO
   siac.siac_dwh_documento_spesa
@@ -275,13 +314,19 @@ INSERT INTO
   desc_siope_scad_motiv_subdoc,
   desc_siope_scad_moti_bnkit_sub,
   doc_id, -- SIAC-5573,
-  --- 15.05.2018 Sofia SIAC-6124
   data_ins_atto_allegato,
   data_sosp_atto_allegato,
   causale_sosp_atto_allegato,
   data_riattiva_atto_allegato,
   data_completa_atto_allegato,
-  data_convalida_atto_allegato
+  data_convalida_atto_allegato,
+  -- SIAC-8153  - Sofia 22.06.2021
+  cod_cdc_sub,
+  desc_cdc_sub,
+  cod_cdr_sub,
+  desc_cdr_sub
+  -- SIAC-8153  - Sofia 22.06.2021
+  
   )
 select
 tb.v_ente_proprietario_id::INTEGER,
@@ -494,73 +539,188 @@ tb.data_sosp_atto_allegato::timestamp,
 tb.causale_sosp_atto_allegato,
 tb.data_riattiva_atto_allegato::timestamp,
 tb.data_completa_atto_allegato::timestamp,
-tb.data_convalida_atto_allegato::timestamp
+tb.data_convalida_atto_allegato::timestamp,
+-- SIAC-8153  - Sofia 22.06.2021
+tb.cod_cdc_sub,
+tb.desc_cdc_sub,
+tb.cod_cdr_sub,
+tb.desc_cdr_sub
+-- SIAC-8153  - Sofia 22.06.2021
 from (
 with doc as (
-  with doc1 as (
-select distinct
-  --h.subdoc_id,a.doc_id,b.doc_tipo_id,c.doc_fam_tipo_id,d.doc_gruppo_tipo_id,e.doc_stato_r_id,f.doc_stato_id,
-  b.doc_gruppo_tipo_id,
-  g.ente_proprietario_id, g.ente_denominazione,
-  a.doc_anno, a.doc_numero, a.doc_desc, a.doc_importo,
-  case when a.doc_beneficiariomult= false then 'F' else 'T' end doc_beneficiariomult,
-  a.doc_data_emissione, a.doc_data_scadenza,
-  case when a.doc_collegato_cec = false then 'F' else 'T' end doc_collegato_cec,
-  f.doc_stato_code, f.doc_stato_desc,
-  c.doc_fam_tipo_code, c.doc_fam_tipo_desc, b.doc_tipo_code, b.doc_tipo_desc,
-  a.doc_id, a.pcccod_id, a.pccuff_id,
-  case when a.doc_contabilizza_genpcc= false then 'F' else 'T' end doc_contabilizza_genpcc,
-  h.subdoc_numero, h.subdoc_desc, h.subdoc_importo, h.subdoc_nreg_iva, h.subdoc_data_scadenza,
-  h.subdoc_convalida_manuale, h.subdoc_importo_da_dedurre, h.subdoc_splitreverse_importo,
-  case when h.subdoc_pagato_cec = false then 'F' else 'T' end subdoc_pagato_cec,
-  h.subdoc_data_pagamento_cec,
-  a.codbollo_id, h.subdoc_id,h.comm_tipo_id,
-  h.notetes_id,h.dist_id,h.contotes_id,
-  a.doc_sdi_lotto_siope,
-  n.siope_documento_tipo_code, n.siope_documento_tipo_desc, n.siope_documento_tipo_desc_bnkit,
-  o.siope_documento_tipo_analogico_code, o.siope_documento_tipo_analogico_desc, o.siope_documento_tipo_analogico_desc_bnkit,
-  i.siope_tipo_debito_code, i.siope_tipo_debito_desc, i.siope_tipo_debito_desc_bnkit,
-  l.siope_assenza_motivazione_code, l.siope_assenza_motivazione_desc, l.siope_assenza_motivazione_desc_bnkit,
-  m.siope_scadenza_motivo_code, m.siope_scadenza_motivo_desc, m.siope_scadenza_motivo_desc_bnkit
-  from siac_t_doc a
-  left join siac_d_siope_documento_tipo n on n.siope_documento_tipo_id = a.siope_documento_tipo_id
-                                     and n.data_cancellazione is null
-                                     and n.validita_fine is null
-  left join siac_d_siope_documento_tipo_analogico o on o.siope_documento_tipo_analogico_id = a.siope_documento_tipo_analogico_id
-                                             and o.data_cancellazione is null
-                                             and o.validita_fine is null
-  ,siac_d_doc_tipo b,siac_d_doc_fam_tipo c,
-  --siac_d_doc_gruppo d,
-  siac_r_doc_stato e,
-  siac_d_doc_stato f,
-  siac_t_ente_proprietario g,
-  siac_t_subdoc h
-  left join siac_d_siope_tipo_debito i on i.siope_tipo_debito_id = h.siope_tipo_debito_id
-                                     and i.data_cancellazione is null
-                                     and i.validita_fine is null
-  left join siac_d_siope_assenza_motivazione l on l.siope_assenza_motivazione_id = h.siope_assenza_motivazione_id
-                                             and l.data_cancellazione is null
-                                             and l.validita_fine is null
-  left join siac_d_siope_scadenza_motivo m on m.siope_scadenza_motivo_id = h.siope_scadenza_motivo_id
-                                             and m.data_cancellazione is null
-                                             and m.validita_fine is null
-  where b.doc_tipo_id=a.doc_tipo_id
-  and c.doc_fam_tipo_id=b.doc_fam_tipo_id
-  --and b.doc_gruppo_tipo_id=d.doc_gruppo_tipo_id
-  and e.doc_id=a.doc_id
-  and p_data BETWEEN e.validita_inizio AND COALESCE(e.validita_fine, p_data)
-  and f.doc_stato_id=e.doc_stato_id
-  and g.ente_proprietario_id=a.ente_proprietario_id
-  and g.ente_proprietario_id=p_ente_proprietario_id--p_ente_proprietario_id
-  AND c.doc_fam_tipo_code in ('S','IS')
-  and h.doc_id=a.doc_id
-  AND a.data_cancellazione IS NULL
-  AND b.data_cancellazione IS NULL
-  AND c.data_cancellazione IS NULL
-  AND e.data_cancellazione IS NULL
-  AND f.data_cancellazione IS NULL
-  AND g.data_cancellazione IS NULL
-  AND h.data_cancellazione IS NULL
+  with doc1 as
+  (
+      with
+      doc_totale as
+      (
+        select distinct
+        --h.subdoc_id,a.doc_id,b.doc_tipo_id,c.doc_fam_tipo_id,d.doc_gruppo_tipo_id,e.doc_stato_r_id,f.doc_stato_id,
+        b.doc_gruppo_tipo_id,
+        g.ente_proprietario_id, g.ente_denominazione,
+        a.doc_anno, a.doc_numero, a.doc_desc, a.doc_importo,
+        case when a.doc_beneficiariomult= false then 'F' else 'T' end doc_beneficiariomult,
+        a.doc_data_emissione, a.doc_data_scadenza,
+        case when a.doc_collegato_cec = false then 'F' else 'T' end doc_collegato_cec,
+        f.doc_stato_code, f.doc_stato_desc,
+        c.doc_fam_tipo_code, c.doc_fam_tipo_desc, b.doc_tipo_code, b.doc_tipo_desc,
+        a.doc_id, a.pcccod_id, a.pccuff_id,
+        case when a.doc_contabilizza_genpcc= false then 'F' else 'T' end doc_contabilizza_genpcc,
+        h.subdoc_numero, h.subdoc_desc, h.subdoc_importo, h.subdoc_nreg_iva, h.subdoc_data_scadenza,
+        h.subdoc_convalida_manuale, h.subdoc_importo_da_dedurre, h.subdoc_splitreverse_importo,
+        case when h.subdoc_pagato_cec = false then 'F' else 'T' end subdoc_pagato_cec,
+        h.subdoc_data_pagamento_cec,
+        a.codbollo_id, h.subdoc_id,h.comm_tipo_id,
+        h.notetes_id,h.dist_id,h.contotes_id,
+        a.doc_sdi_lotto_siope,
+        n.siope_documento_tipo_code, n.siope_documento_tipo_desc, n.siope_documento_tipo_desc_bnkit,
+        o.siope_documento_tipo_analogico_code, o.siope_documento_tipo_analogico_desc, o.siope_documento_tipo_analogico_desc_bnkit,
+        i.siope_tipo_debito_code, i.siope_tipo_debito_desc, i.siope_tipo_debito_desc_bnkit,
+        l.siope_assenza_motivazione_code, l.siope_assenza_motivazione_desc, l.siope_assenza_motivazione_desc_bnkit,
+        m.siope_scadenza_motivo_code, m.siope_scadenza_motivo_desc, m.siope_scadenza_motivo_desc_bnkit
+        from siac_t_doc a
+        left join siac_d_siope_documento_tipo n on n.siope_documento_tipo_id = a.siope_documento_tipo_id
+                                           and n.data_cancellazione is null
+                                           and n.validita_fine is null
+        left join siac_d_siope_documento_tipo_analogico o on o.siope_documento_tipo_analogico_id = a.siope_documento_tipo_analogico_id
+                                                   and o.data_cancellazione is null
+                                                   and o.validita_fine is null
+        ,siac_d_doc_tipo b,siac_d_doc_fam_tipo c,
+        --siac_d_doc_gruppo d,
+        siac_r_doc_stato e,
+        siac_d_doc_stato f,
+        siac_t_ente_proprietario g,
+        siac_t_subdoc h
+        left join siac_d_siope_tipo_debito i on i.siope_tipo_debito_id = h.siope_tipo_debito_id
+                                           and i.data_cancellazione is null
+                                           and i.validita_fine is null
+        left join siac_d_siope_assenza_motivazione l on l.siope_assenza_motivazione_id = h.siope_assenza_motivazione_id
+                                                   and l.data_cancellazione is null
+                                                   and l.validita_fine is null
+        left join siac_d_siope_scadenza_motivo m on m.siope_scadenza_motivo_id = h.siope_scadenza_motivo_id
+                                                   and m.data_cancellazione is null
+                                                   and m.validita_fine is null
+        where b.doc_tipo_id=a.doc_tipo_id
+        and c.doc_fam_tipo_id=b.doc_fam_tipo_id
+        --and b.doc_gruppo_tipo_id=d.doc_gruppo_tipo_id
+        and e.doc_id=a.doc_id
+        and p_data BETWEEN e.validita_inizio AND COALESCE(e.validita_fine, p_data)
+        and f.doc_stato_id=e.doc_stato_id
+        and g.ente_proprietario_id=a.ente_proprietario_id
+        and g.ente_proprietario_id=p_ente_proprietario_id--p_ente_proprietario_id
+        AND c.doc_fam_tipo_code in ('S','IS')
+        and h.doc_id=a.doc_id
+        -- 22.06.2021 Sofia SIAC-8153
+/*        and exists  (select 1 from siac_r_subdoc_class rc,siac_t_class c,siac_d_class_tipo tipo 
+             where rc.subdoc_id=h.subdoc_id and  c.classif_id=rc.classif_id and tipo.classif_tipo_id=c.classif_tipo_id and  tipo.classif_tipo_code='CDC'
+             and   rc.data_cancellazione is null and rc.validita_fine is null) */
+        -- 19.01.2021 Sofia Jira SIAC_7966 - inizio
+        -- and date_trunc('DAY',a.data_creazione)=date_trunc('DAY',now())
+        -- 26.01.2021 Sofia JIRA SIAC-7518 - inizio
+        -- 1 esclusione pagamenti su mandato antecedente annoStorico
+        and  not exists
+        (
+         select 1
+         from  siac_t_bil anno,siac_t_periodo per,
+               siac_t_ordinativo ord,siac_d_ordinativo_tipo tipo,
+               siac_r_ordinativo_stato rs,siac_d_ordinativo_Stato stato,
+               siac_t_ordinativo_ts ts,siac_r_subdoc_ordinativo_ts rsub
+         where f.doc_stato_code='EM'
+         and   rsub.subdoc_id=h.subdoc_id
+         and   ts.ord_ts_id=rsub.ord_ts_id
+         and   ord.ord_id=ts.ord_id
+         and   tipo.ord_tipo_id=ord.ord_tipo_id
+         and   tipo.ord_tipo_code='P'
+         and   anno.bil_id=ord.bil_id
+         and   per.periodo_id=anno.periodo_id
+         and   per.anno::integer<=annoStorico
+         and   rs.ord_id=ord.ord_id
+         and   stato.ord_stato_id=rs.ord_stato_id
+         and   stato.ord_stato_code!='A'
+         and   not exists
+         (
+          select 1
+          from siac_t_subdoc sub1,siac_r_subdoc_ordinativo_ts rsub1,
+               siac_t_ordinativo_ts ts1,siac_t_ordinativo ord1,
+               siac_t_bil anno1,siac_t_periodo per1
+          where sub1.doc_id=a.doc_id
+          and   rsub1.subdoc_id=sub1.subdoc_id
+          and   ts1.ord_ts_id=rsub1.ord_ts_id
+          and   ord1.ord_id=ts1.ord_id
+          and   anno1.bil_id=ord1.bil_id
+          and   per1.periodo_id=anno1.bil_id
+          and   per1.anno::integer>=annoStorico+1
+          and   rsub1.data_cancellazione is null
+          and   rsub1.validita_fine is null
+         )
+         and   rsub.data_cancellazione is null
+         and   rsub.validita_fine is null
+         and   ts.data_cancellazione is null
+         and   ts.validita_fine is null
+         and   rs.data_cancellazione is null
+         and   rs.validita_fine is null
+        )
+        -- 2 esclusione pagamenti manuali dataOperazionePagamentoIncasso antecedente annoStorico
+        and not exists
+        (
+          with
+          doc_paga_man as
+          (
+          select rattr.doc_id,
+                 substring(coalesce(rattrDataPAga.testo,'01/01/'||(annoStorico+1)::varchar||''),7,4)::integer annoDataPaga
+          from siac_r_doc_attr rattr,siac_t_attr attr,
+               siac_r_doc_Stato rs,siac_d_doc_Stato stato,
+               siac_r_doc_attr rattrDataPaga,siac_t_attr attrDataPaga
+          where rattr.doc_id=a.doc_id
+          and   attr.attr_id=rattr.attr_id
+          and   attr.attr_code='flagPagataIncassata'
+          and   rattr.boolean='S'
+          and   rs.doc_id=a.doc_id
+          and   stato.doc_stato_id=rs.doc_stato_id
+          and   stato.doc_stato_code='EM'
+          and   rattrDataPaga.doc_id=a.doc_id
+          and   attrDataPaga.attr_id=rattrDataPaga.attr_id
+          and   attrdatapaga.attr_code='dataOperazionePagamentoIncasso'
+          and   rattr.data_cancellazione is null
+		  --- SIAC-8239 - Sofia 14.06.21 inizio 
+		  and   rattr.validita_fine is null
+  	      and   rattrDataPaga.data_cancellazione is null
+		  and   rattrDataPaga.validita_fine is null
+		  --- SIAC-8239 - Sofia 14.06.21 fine 
+          and   rs.data_cancellazione is null
+          and   rs.validita_fine is null
+          )
+          select query_doc_paga_man.*
+          from doc_paga_man  query_doc_paga_man
+          where query_doc_paga_man.annoDataPaga<=annoStorico
+        )
+        -- 3 - esclusione documenti ANNULLATI IN ANNI ANTECEDENTI annoStorico
+        and not exists
+        (
+           select 1
+           where f.doc_stato_code='A'
+           and  extract (year from e.validita_inizio)::integer<=annoStorico
+        )
+ 	    -- 4 - esclusione documenti STORNATI IN ANNI ANTECEDENTI annoStorico
+        and not exists
+        (
+           select 1
+           where f.doc_stato_code='ST'
+           and  extract (year from e.validita_inizio)::integer<=annoStorico
+        )
+        -- 19.01.2021 Sofia Jira SIAC_7966 - fine
+        -- 26.01.2021 Sofia JIRA SIAC-7518 - fine
+        AND a.data_cancellazione IS NULL
+        AND b.data_cancellazione IS NULL
+        AND c.data_cancellazione IS NULL
+        AND e.data_cancellazione IS NULL
+        AND f.data_cancellazione IS NULL
+        AND g.data_cancellazione IS NULL
+        AND h.data_cancellazione IS NULL
+  --      order by a.doc_anno::integer desc
+     )
+     select doc_tot.*
+     from doc_totale doc_tot
+--     limit 10
 )
 , docgru as  (
 select a.doc_gruppo_tipo_id, a.doc_gruppo_tipo_code, a.doc_gruppo_tipo_desc
@@ -1503,7 +1663,31 @@ c.ord_anno, c.ord_numero, b.ord_ts_code, g.anno
     AND   g.data_cancellazione IS NULL
     AND   p_data between a.validita_inizio and COALESCE(a.validita_fine,p_data)
     AND   p_data between d.validita_inizio and COALESCE(d.validita_fine,p_data)
-    )
+    ),
+  -- SIAC-8153  - Sofia 22.06.2021
+  cdc_subdoc AS
+  (
+  SELECT c.classif_code cod_cdc_sub,c.classif_desc desc_cdc_sub, rc.subdoc_id
+  FROM siac_r_subdoc_class rc,siac_t_class c,siac_d_class_tipo tipo
+  WHERE tipo.ente_proprietario_id=p_ente_proprietario_id
+  AND   tipo.classif_tipo_code='CDC'
+  AND   c.classif_tipo_id=tipo.classif_tipo_id
+  AND   rc.classif_id=c.classif_id
+  AND   rc.data_cancellazione IS NULL
+  AND   p_data between rc.validita_inizio and COALESCE(rc.validita_fine,p_data)
+  ),
+  cdr_subdoc AS
+  (
+  SELECT c.classif_code cod_cdr_sub,c.classif_desc desc_cdr_sub, rc.subdoc_id
+  FROM siac_r_subdoc_class rc,siac_t_class c,siac_d_class_tipo tipo
+  WHERE tipo.ente_proprietario_id=p_ente_proprietario_id
+  AND   tipo.classif_tipo_code='CDR'
+  AND   c.classif_tipo_id=tipo.classif_tipo_id
+  AND   rc.classif_id=c.classif_id
+  AND   rc.data_cancellazione IS NULL
+  AND   p_data between rc.validita_inizio and COALESCE(rc.validita_fine,p_data)
+  )
+  -- SIAC-8153  - Sofia 22.06.2021
   select doc.ente_proprietario_id v_ente_proprietario_id,
   doc.ente_denominazione v_ente_denominazione,
   doc.subdoc_id,
@@ -1666,7 +1850,13 @@ eldocattall.data_sosp_atto_allegato,
 eldocattall.causale_sosp_atto_allegato,
 eldocattall.data_riattiva_atto_allegato,
 eldocattall.data_completa_atto_allegato,
-eldocattall.data_convalida_atto_allegato
+eldocattall.data_convalida_atto_allegato,
+-- SIAC-8153 Sofia 22.06.2021
+cdc_subdoc.cod_cdc_sub,
+cdc_subdoc.desc_cdc_sub,
+cdr_subdoc.cod_cdr_sub,
+cdr_subdoc.desc_cdr_sub
+-- SIAC-8153 Sofia 22.06.2021
 from doc
 left join bollo on doc.codbollo_id=bollo.codbollo_id
 left join sogg on doc.doc_id=sogg.doc_id
@@ -1717,17 +1907,494 @@ left join soggsub on soggsub.subdoc_id = doc.subdoc_id
 left join imp on imp.subdoc_id=doc.subdoc_id
 left join modpag on modpag.subdoc_id=doc.subdoc_id
 left join ord on ord.subdoc_id = doc.subdoc_id
+-- SIAC-8153 Sofia 22.06.2021
+LEFT JOIN cdc_subdoc ON cdc_subdoc.subdoc_id=doc.subdoc_id
+LEFT JOIN cdr_subdoc ON cdr_subdoc.subdoc_id=doc.subdoc_id
+-- SIAC-8153 Sofia 22.06.2021
 ) as tb;
 
 
-esito:= 'Fine funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - '||clock_timestamp();
+esito:= 'In funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - fine dati variabili - '||clock_timestamp();
 RETURN NEXT;
 
-update siac_dwh_log_elaborazioni  set fnc_elaborazione_fine = clock_timestamp(),
+-- 20.01.2021 Sofia jira SIAC-7967
+update siac_dwh_log_elaborazioni   log
+set    fnc_elaborazione_fine = clock_timestamp(),
+       fnc_durata=clock_timestamp()-log.fnc_elaborazione_inizio,
+       fnc_parameters=log.fnc_parameters||' - '||esito
+where fnc_user=v_user_table;
+/*update siac_dwh_log_elaborazioni  set fnc_elaborazione_fine = clock_timestamp(),
 fnc_durata=clock_timestamp()-fnc_elaborazione_inizio
+where fnc_user=v_user_table;*/
+
+-- 26.01.2021 Sofia JIRA siac-7518
+select 1 into caricaDatiStorico
+from siac_d_gestione_livello liv,siac_d_gestione_tipo tipo
+where tipo.ente_proprietario_id=p_ente_proprietario_id
+and   tipo.gestione_tipo_code='CARICA_STORICO_DWH_DOC_SPESA_ATTIVO'
+and   liv.gestione_tipo_id=tipo.gestione_tipo_id
+and   tipo.data_cancellazione is null
+and   liv.data_cancellazione  is null;
+
+-- 26.01.2021 Sofia Jira SIAC-7518
+if caricaDatiStorico is not null then
+
+  -- 20.01.2021 Sofia jira SIAC-7967 - inizio
+  INSERT INTO siac.siac_dwh_documento_spesa
+  (
+    ente_proprietario_id,
+    ente_denominazione,
+    anno_atto_amministrativo,
+    num_atto_amministrativo,
+    oggetto_atto_amministrativo,
+    cod_tipo_atto_amministrativo,
+    desc_tipo_atto_amministrativo,
+    cod_cdr_atto_amministrativo,
+    desc_cdr_atto_amministrativo,
+    cod_cdc_atto_amministrativo,
+    desc_cdc_atto_amministrativo,
+    note_atto_amministrativo,
+    cod_stato_atto_amministrativo,
+    desc_stato_atto_amministrativo,
+    causale_atto_allegato,
+    altri_allegati_atto_allegato,
+    dati_sensibili_atto_allegato,
+    data_scadenza_atto_allegato,
+    note_atto_allegato,
+    annotazioni_atto_allegato,
+    pratica_atto_allegato,
+    resp_amm_atto_allegato,
+    resp_contabile_atto_allegato,
+    anno_titolario_atto_allegato,
+    num_titolario_atto_allegato,
+    vers_invio_firma_atto_allegato,
+    cod_stato_atto_allegato,
+    desc_stato_atto_allegato,
+    sogg_id_atto_allegato,
+    cod_sogg_atto_allegato,
+    tipo_sogg_atto_allegato,
+    stato_sogg_atto_allegato,
+    rag_sociale_sogg_atto_allegato,
+    p_iva_sogg_atto_allegato,
+    cf_sogg_atto_allegato,
+    cf_estero_sogg_atto_allegato,
+    nome_sogg_atto_allegato,
+    cognome_sogg_atto_allegato,
+    anno_doc,
+    num_doc,
+    desc_doc,
+    importo_doc,
+    beneficiario_multiplo_doc,
+    data_emissione_doc,
+    data_scadenza_doc,
+    codice_bollo_doc,
+    desc_codice_bollo_doc,
+    collegato_cec_doc,
+    cod_pcc_doc,
+    desc_pcc_doc,
+    cod_ufficio_doc,
+    desc_ufficio_doc,
+    cod_stato_doc,
+    desc_stato_doc,
+    anno_elenco_doc,
+    num_elenco_doc,
+    data_trasmissione_elenco_doc,
+    tot_quote_entrate_elenco_doc,
+    tot_quote_spese_elenco_doc,
+    tot_da_pagare_elenco_doc,
+    tot_da_incassare_elenco_doc,
+    cod_stato_elenco_doc,
+    desc_stato_elenco_doc,
+    cod_gruppo_doc,
+    desc_famiglia_doc,
+    cod_famiglia_doc,
+    desc_gruppo_doc,
+    cod_tipo_doc,
+    desc_tipo_doc,
+    sogg_id_doc,
+    cod_sogg_doc,
+    tipo_sogg_doc,
+    stato_sogg_doc,
+    rag_sociale_sogg_doc,
+    p_iva_sogg_doc,
+    cf_sogg_doc,
+    cf_estero_sogg_doc,
+    nome_sogg_doc,
+    cognome_sogg_doc,
+    num_subdoc,
+    desc_subdoc,
+    importo_subdoc,
+    num_reg_iva_subdoc,
+    data_scadenza_subdoc,
+    convalida_manuale_subdoc,
+    importo_da_dedurre_subdoc,
+    splitreverse_importo_subdoc,
+    pagato_cec_subdoc,
+    data_pagamento_cec_subdoc,
+    note_tesoriere_subdoc,
+    cod_distinta_subdoc,
+    desc_distinta_subdoc,
+    tipo_commissione_subdoc,
+    conto_tesoreria_subdoc,
+    rilevante_iva,
+    ordinativo_singolo,
+    ordinativo_manuale,
+    esproprio,
+    note,
+    cig,
+    cup,
+    causale_sospensione,
+    data_sospensione,
+    data_riattivazione,
+    causale_ordinativo,
+    num_mutuo,
+    annotazione,
+    certificazione,
+    data_certificazione,
+    note_certificazione,
+    num_certificazione,
+    data_scadenza_dopo_sospensione,
+    data_esecuzione_pagamento,
+    avviso,
+    cod_tipo_avviso,
+    desc_tipo_avviso,
+    sogg_id_subdoc,
+    cod_sogg_subdoc,
+    tipo_sogg_subdoc,
+    stato_sogg_subdoc,
+    rag_sociale_sogg_subdoc,
+    p_iva_sogg_subdoc,
+    cf_sogg_subdoc,
+    cf_estero_sogg_subdoc,
+    nome_sogg_subdoc,
+    cognome_sogg_subdoc,
+    sede_secondaria_subdoc,
+    bil_anno,
+    anno_impegno,
+    num_impegno,
+    cod_impegno,
+    desc_impegno,
+    cod_subimpegno,
+    desc_subimpegno,
+    num_liquidazione,
+    cod_tipo_accredito,
+    desc_tipo_accredito,
+    mod_pag_id,
+    quietanziante,
+    data_nascita_quietanziante,
+    luogo_nascita_quietanziante,
+    stato_nascita_quietanziante,
+    bic,
+    contocorrente,
+    intestazione_contocorrente,
+    iban,
+    note_mod_pag,
+    data_scadenza_mod_pag,
+    sogg_id_mod_pag,
+    cod_sogg_mod_pag,
+    tipo_sogg_mod_pag,
+    stato_sogg_mod_pag,
+    rag_sociale_sogg_mod_pag,
+    p_iva_sogg_mod_pag,
+    cf_sogg_mod_pag,
+    cf_estero_sogg_mod_pag,
+    nome_sogg_mod_pag,
+    cognome_sogg_mod_pag,
+    anno_liquidazione,
+    bil_anno_ord,
+    anno_ord,
+    num_ord,
+    num_subord,
+    registro_repertorio,
+    anno_repertorio,
+    num_repertorio,
+    data_repertorio,
+    data_ricezione_portale,
+    doc_contabilizza_genpcc,
+    rudoc_registrazione_anno,
+    rudoc_registrazione_numero,
+    rudoc_registrazione_data,
+    cod_cdc_doc,
+    desc_cdc_doc,
+    cod_cdr_doc,
+    desc_cdr_doc,
+    data_operazione_pagamentoincasso,
+    pagataincassata,
+    note_pagamentoincasso,
+    arrotondamento,
+    cod_tipo_splitrev,
+    desc_tipo_splitrev,
+    stato_liquidazione,
+    sdi_lotto_siope_doc,
+    cod_siope_tipo_doc,
+    desc_siope_tipo_doc,
+    desc_siope_tipo_bnkit_doc,
+    cod_siope_tipo_analogico_doc,
+    desc_siope_tipo_analogico_doc,
+    desc_siope_tipo_ana_bnkit_doc,
+    cod_siope_tipo_debito_subdoc,
+    desc_siope_tipo_debito_subdoc,
+    desc_siope_tipo_deb_bnkit_sub,
+    cod_siope_ass_motiv_subdoc,
+    desc_siope_ass_motiv_subdoc,
+    desc_siope_ass_motiv_bnkit_sub,
+    cod_siope_scad_motiv_subdoc,
+    desc_siope_scad_motiv_subdoc,
+    desc_siope_scad_moti_bnkit_sub,
+    doc_id,
+    data_ins_atto_allegato,
+    data_sosp_atto_allegato,
+    causale_sosp_atto_allegato,
+    data_riattiva_atto_allegato,
+    data_completa_atto_allegato,
+    data_convalida_atto_allegato,
+    -- SIAC-8153 Sofia 22.06.2021
+    cod_cdc_sub,
+    desc_cdc_sub,
+    cod_cdr_sub,
+    desc_cdr_sub
+    -- SIAC-8153 Sofia 22.06.2021
+    )
+  select
+    dw.ente_proprietario_id,
+    dw.ente_denominazione,
+    dw.anno_atto_amministrativo,
+    dw.num_atto_amministrativo,
+    dw.oggetto_atto_amministrativo,
+    dw.cod_tipo_atto_amministrativo,
+    dw.desc_tipo_atto_amministrativo,
+    dw.cod_cdr_atto_amministrativo,
+    dw.desc_cdr_atto_amministrativo,
+    dw.cod_cdc_atto_amministrativo,
+    dw.desc_cdc_atto_amministrativo,
+    dw.note_atto_amministrativo,
+    dw.cod_stato_atto_amministrativo,
+    dw.desc_stato_atto_amministrativo,
+    dw.causale_atto_allegato,
+    dw.altri_allegati_atto_allegato,
+    dw.dati_sensibili_atto_allegato,
+    dw.data_scadenza_atto_allegato,
+    dw.note_atto_allegato,
+    dw.annotazioni_atto_allegato,
+    dw.pratica_atto_allegato,
+    dw.resp_amm_atto_allegato,
+    dw.resp_contabile_atto_allegato,
+    dw.anno_titolario_atto_allegato,
+    dw.num_titolario_atto_allegato,
+    dw.vers_invio_firma_atto_allegato,
+    dw.cod_stato_atto_allegato,
+    dw.desc_stato_atto_allegato,
+    dw.sogg_id_atto_allegato,
+    dw.cod_sogg_atto_allegato,
+    dw.tipo_sogg_atto_allegato,
+    dw.stato_sogg_atto_allegato,
+    dw.rag_sociale_sogg_atto_allegato,
+    dw.p_iva_sogg_atto_allegato,
+    dw.cf_sogg_atto_allegato,
+    dw.cf_estero_sogg_atto_allegato,
+    dw.nome_sogg_atto_allegato,
+    dw.cognome_sogg_atto_allegato,
+    dw.anno_doc,
+    dw.num_doc,
+    dw.desc_doc,
+    dw.importo_doc,
+    dw.beneficiario_multiplo_doc,
+    dw.data_emissione_doc,
+    dw.data_scadenza_doc,
+    dw.codice_bollo_doc,
+    dw.desc_codice_bollo_doc,
+    dw.collegato_cec_doc,
+    dw.cod_pcc_doc,
+    dw.desc_pcc_doc,
+    dw.cod_ufficio_doc,
+    dw.desc_ufficio_doc,
+    dw.cod_stato_doc,
+    dw.desc_stato_doc,
+    dw.anno_elenco_doc,
+    dw.num_elenco_doc,
+    dw.data_trasmissione_elenco_doc,
+    dw.tot_quote_entrate_elenco_doc,
+    dw.tot_quote_spese_elenco_doc,
+    dw.tot_da_pagare_elenco_doc,
+    dw.tot_da_incassare_elenco_doc,
+    dw.cod_stato_elenco_doc,
+    dw.desc_stato_elenco_doc,
+    dw.cod_gruppo_doc,
+    dw.desc_famiglia_doc,
+    dw.cod_famiglia_doc,
+    dw.desc_gruppo_doc,
+    dw.cod_tipo_doc,
+    dw.desc_tipo_doc,
+    dw.sogg_id_doc,
+    dw.cod_sogg_doc,
+    dw.tipo_sogg_doc,
+    dw.stato_sogg_doc,
+    dw.rag_sociale_sogg_doc,
+    dw.p_iva_sogg_doc,
+    dw.cf_sogg_doc,
+    dw.cf_estero_sogg_doc,
+    dw.nome_sogg_doc,
+    dw.cognome_sogg_doc,
+    dw.num_subdoc,
+    dw.desc_subdoc,
+    dw.importo_subdoc,
+    dw.num_reg_iva_subdoc,
+    dw.data_scadenza_subdoc,
+    dw.convalida_manuale_subdoc,
+    dw.importo_da_dedurre_subdoc,
+    dw.splitreverse_importo_subdoc,
+    dw.pagato_cec_subdoc,
+    dw.data_pagamento_cec_subdoc,
+    dw.note_tesoriere_subdoc,
+    dw.cod_distinta_subdoc,
+    dw.desc_distinta_subdoc,
+    dw.tipo_commissione_subdoc,
+    dw.conto_tesoreria_subdoc,
+    dw.rilevante_iva,
+    dw.ordinativo_singolo,
+    dw.ordinativo_manuale,
+    dw.esproprio,
+    dw.note,
+    dw.cig,
+    dw.cup,
+    dw.causale_sospensione,
+    dw.data_sospensione,
+    dw.data_riattivazione,
+    dw.causale_ordinativo,
+    dw.num_mutuo,
+    dw.annotazione,
+    dw.certificazione,
+    dw.data_certificazione,
+    dw.note_certificazione,
+    dw.num_certificazione,
+    dw.data_scadenza_dopo_sospensione,
+    dw.data_esecuzione_pagamento,
+    dw.avviso,
+    dw.cod_tipo_avviso,
+    dw.desc_tipo_avviso,
+    dw.sogg_id_subdoc,
+    dw.cod_sogg_subdoc,
+    dw.tipo_sogg_subdoc,
+    dw.stato_sogg_subdoc,
+    dw.rag_sociale_sogg_subdoc,
+    dw.p_iva_sogg_subdoc,
+    dw.cf_sogg_subdoc,
+    dw.cf_estero_sogg_subdoc,
+    dw.nome_sogg_subdoc,
+    dw.cognome_sogg_subdoc,
+    dw.sede_secondaria_subdoc,
+    dw.bil_anno,
+    dw.anno_impegno,
+    dw.num_impegno,
+    dw.cod_impegno,
+    dw.desc_impegno,
+    dw.cod_subimpegno,
+    dw.desc_subimpegno,
+    dw.num_liquidazione,
+    dw.cod_tipo_accredito,
+    dw.desc_tipo_accredito,
+    dw.mod_pag_id,
+    dw.quietanziante,
+    dw.data_nascita_quietanziante,
+    dw.luogo_nascita_quietanziante,
+    dw.stato_nascita_quietanziante,
+    dw.bic,
+    dw.contocorrente,
+    dw.intestazione_contocorrente,
+    dw.iban,
+    dw.note_mod_pag,
+    dw.data_scadenza_mod_pag,
+    dw.sogg_id_mod_pag,
+    dw.cod_sogg_mod_pag,
+    dw.tipo_sogg_mod_pag,
+    dw.stato_sogg_mod_pag,
+    dw.rag_sociale_sogg_mod_pag,
+    dw.p_iva_sogg_mod_pag,
+    dw.cf_sogg_mod_pag,
+    dw.cf_estero_sogg_mod_pag,
+    dw.nome_sogg_mod_pag,
+    dw.cognome_sogg_mod_pag,
+    dw.anno_liquidazione,
+    dw.bil_anno_ord,
+    dw.anno_ord,
+    dw.num_ord,
+    dw.num_subord,
+    dw.registro_repertorio,
+    dw.anno_repertorio,
+    dw.num_repertorio,
+    dw.data_repertorio,
+    dw.data_ricezione_portale,
+    dw.doc_contabilizza_genpcc,
+    dw.rudoc_registrazione_anno,
+    dw.rudoc_registrazione_numero,
+    dw.rudoc_registrazione_data,
+    dw.cod_cdc_doc,
+    dw.desc_cdc_doc,
+    dw.cod_cdr_doc,
+    dw.desc_cdr_doc,
+    dw.data_operazione_pagamentoincasso,
+    dw.pagataincassata,
+    dw.note_pagamentoincasso,
+    dw.arrotondamento,
+    dw.cod_tipo_splitrev,
+    dw.desc_tipo_splitrev,
+    dw.stato_liquidazione,
+    dw.sdi_lotto_siope_doc,
+    dw.cod_siope_tipo_doc,
+    dw.desc_siope_tipo_doc,
+    dw.desc_siope_tipo_bnkit_doc,
+    dw.cod_siope_tipo_analogico_doc,
+    dw.desc_siope_tipo_analogico_doc,
+    dw.desc_siope_tipo_ana_bnkit_doc,
+    dw.cod_siope_tipo_debito_subdoc,
+    dw.desc_siope_tipo_debito_subdoc,
+    dw.desc_siope_tipo_deb_bnkit_sub,
+    dw.cod_siope_ass_motiv_subdoc,
+    dw.desc_siope_ass_motiv_subdoc,
+    dw.desc_siope_ass_motiv_bnkit_sub,
+    dw.cod_siope_scad_motiv_subdoc,
+    dw.desc_siope_scad_motiv_subdoc,
+    dw.desc_siope_scad_moti_bnkit_sub,
+    dw.doc_id,
+    dw.data_ins_atto_allegato,
+    dw.data_sosp_atto_allegato,
+    dw.causale_sosp_atto_allegato,
+    dw.data_riattiva_atto_allegato,
+    dw.data_completa_atto_allegato,
+    dw.data_convalida_atto_allegato,
+     -- SIAC-8153 Sofia 22.06.2021
+    dw.cod_cdc_sub,
+    dw.desc_cdc_sub,
+    dw.cod_cdr_sub,
+    dw.desc_cdr_sub
+    -- SIAC-8153 Sofia 22.06.2021
+  from siac_dwh_st_documento_spesa dw
+  where dw.ente_proprietario_id=p_ente_proprietario_id;
+--  limit 100;
+
+  esito:= 'In funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - fine dati storici - '||clock_timestamp();
+  RETURN NEXT;
+
+  update siac_dwh_log_elaborazioni   log
+  set    fnc_elaborazione_fine = clock_timestamp(),
+         fnc_durata=clock_timestamp()-log.fnc_elaborazione_inizio,
+         fnc_parameters=log.fnc_parameters||' - '||esito
+  where fnc_user=v_user_table;
+  -- 20.01.2021 Sofia jira SIAC-7967 - fine
+
+end if;
+-- 26.01.2021 Sofia Jira SIAC-7518
+
+esito:= 'Fine funzione carico documenti spesa (FNC_SIAC_DWH_DOCUMENTO_SPESA) - '||clock_timestamp();
+update siac_dwh_log_elaborazioni   log
+set    fnc_elaborazione_fine = clock_timestamp(),
+       fnc_durata=clock_timestamp()-log.fnc_elaborazione_inizio,
+       fnc_parameters=log.fnc_parameters||' - '||esito
 where fnc_user=v_user_table;
 
 end if;
+
+
 
 EXCEPTION
 WHEN others THEN
@@ -1741,3 +2408,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY DEFINER
 COST 100 ROWS 1000;
+
+alter FUNCTION siac.fnc_siac_dwh_documento_spesa(integer,timestamp) owner to siac;

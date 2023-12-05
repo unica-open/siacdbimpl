@@ -2,6 +2,18 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
+drop FUNCTION if exists siac.fnc_siac_stanz_effettivo_ug_anno 
+(
+  id_in integer = NULL::integer,
+  anno_comp_in varchar = (NOT NULL::boolean),
+  ente_prop_in integer = NULL::integer,
+  bil_id_in integer = NULL::integer,
+  anno_in varchar = NULL::character varying,
+  ele_code_in varchar = NULL::character varying,
+  ele_code2_in varchar = NULL::character varying,
+  ele_code3_in varchar = NULL::character varying
+);
+
 CREATE OR REPLACE FUNCTION siac.fnc_siac_stanz_effettivo_ug_anno (
   id_in integer = NULL::integer,
   anno_comp_in varchar = (NOT NULL::boolean),
@@ -43,6 +55,8 @@ STATO_VAR_C    constant varchar:='C'; -- CONSIGLIO
 STATO_VAR_B    constant varchar:='B'; -- BOZZA
 STATO_VAR_D    constant varchar:='D'; -- DEFINITIVA
 STATO_VAR_P    constant varchar:='P'; -- PRE-DEFINITIVA -- 31.03.2016 Sofia JIRA-SIAC-3304
+--- SIAC-8828
+STATO_VAR_BD    constant varchar:='BD'; -- BOZZA DEC
 
 bilancioId integer:=0;
 bilElemId  integer:=0;
@@ -411,7 +425,9 @@ if anno_comp_in!=annoBilancio then
     	     tipoStatoVar.variazione_stato_tipo_id=statoVar.variazione_stato_tipo_id and
 --  	         tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_B,STATO_VAR_P) and --1109015 Sofia aggiunto STATO_VAR_B
 --  	         tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P) and -- 26072016 Sofia JIRA-SIAC-3887
-  	         tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14.102016 Sofia JIRA-SIAC-4099 riaggiunto B
+--  	         tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14.102016 Sofia JIRA-SIAC-4099 riaggiunto B
+  	         tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B,STATO_VAR_BD) and -- 10.102022 Sofia JIRA-SIAC-8828 aggiunto BD
+  	         
         	 var.variazione_id=statoVar.variazione_id and
              var.data_cancellazione is null and var.validita_fine is null and
 	         var.bil_id=bilancioId;
@@ -447,7 +463,8 @@ if anno_comp_in!=annoBilancio then
     	      tipoStatoVar.variazione_stato_tipo_id=statoVar.variazione_stato_tipo_id and
 --   	          tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_B,STATO_VAR_P) and -- 1109015 Sofia aggiunto STATO_VAR_B
 --   	          tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P) and -- 26072016 Sofia JIRA-SIAC-3887
-   	          tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14102016 Sofia JIRA-SIAC-4099
+--   	          tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B) and -- 14102016 Sofia JIRA-SIAC-4099
+   	          tipoStatoVar.variazione_stato_tipo_code in (STATO_VAR_G,STATO_VAR_C,STATO_VAR_P,STATO_VAR_B,STATO_VAR_BD) and -- 10102022 Sofia JIRA-SIAC-8828   	          
        	      var.variazione_id=statoVar.variazione_id and
               var.data_cancellazione is null and var.validita_fine is null and
 	          var.bil_id=bilancioId;
@@ -553,3 +570,5 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_siac_stanz_effettivo_ug_anno ( integer, varchar, integer,integer,varchar, varchar,varchar,varchar) OWNER TO siac;  

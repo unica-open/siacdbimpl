@@ -13,7 +13,8 @@ RETURNS TABLE (
   r_totale_riaccertamenti_residui numeric,
   i_totale_importo_impegni numeric,
   totale_importo_fpv_parte_corr numeric,
-  totale_importo_fpv_cc numeric
+  totale_importo_fpv_cc numeric,
+  disav_debito_autor_non_contr numeric
 ) AS
 $body$
 DECLARE
@@ -56,6 +57,11 @@ r_totale_riaccertamenti_residui:=0;
 i_totale_importo_impegni:=0;
 totale_importo_fpv_parte_corr:=0;
 totale_importo_fpv_cc:=0;
+
+--SIAC-7192 20/02/2020.
+--  Introdotto il calcolo dell'importo dei capitoli  
+--  DDANC - DISAVANZO DERIVANTE DA DEBITO AUTORIZZATO E NON CONTRATTO 
+disav_debito_autor_non_contr:=0;
 
 RTN_MESSAGGIO:='Estrazione dei dati delle riscossioni e dei pagamenti.';
 raise notice '%',RTN_MESSAGGIO;
@@ -498,10 +504,15 @@ and o.periodo_id=d.periodo_id
 and o.anno=p_anno
 group by a.elem_id
  ),
-fpv_tit2 as (
+ -- 03/06/2020 SIAC-7657
+ -- il campo totale_importo_fpv_cc deve contenere gli importi FPV dei titoli 2 e 3
+ -- e non solo il titolo 2.
+ -- Per pulizia e' stato cambiato anche il nome da fpv_tit2 a fpv_tit2_3.
+--fpv_tit2 as (
+fpv_tit2_3 as (
 select  
 a.elem_id,
-sum(d.elem_det_importo) importo_fpv_tit2
+sum(d.elem_det_importo) importo_fpv_tit2_3
  from 
 siac_t_bil_elem a, siac_d_bil_elem_tipo b,
 siac_t_bil c, siac_t_periodo c2,  siac_t_bil_elem_det d, siac_d_bil_elem_det_tipo e,
@@ -549,18 +560,78 @@ and m2.classif_tipo_id=m.classif_tipo_id
 and m2.classif_tipo_code='MACROAGGREGATO'
 and n2.classif_tipo_id=n.classif_tipo_id
 and n2.classif_tipo_code='PROGRAMMA'
-and substring(m.classif_code from 1 for 1)='2'
+ -- 03/06/2020 SIAC-7657
+ -- il campo totale_importo_fpv_cc deve contenere gli importi FPV dei titoli 2 e 3
+ -- e non solo il titolo 2.
+--and substring(m.classif_code from 1 for 1) = '2'
+and substring(m.classif_code from 1 for 1) in('2','3')
 and o.periodo_id=d.periodo_id
 and o.anno=p_anno
 group by a.elem_id
-)    
+) ,
+disav_debito_non_contr as (
+select  
+a.elem_id,
+sum(d.elem_det_importo) importo_disavanzo
+ from 
+siac_t_bil_elem a, siac_d_bil_elem_tipo b,
+siac_t_bil c, siac_t_periodo c2,  siac_t_bil_elem_det d, siac_d_bil_elem_det_tipo e,
+siac_r_bil_elem_categoria f,siac_d_bil_elem_categoria g,siac_d_bil_elem_stato h,
+siac_r_bil_elem_stato i,siac_r_bil_elem_class j,siac_r_bil_elem_class k,
+siac_t_class m,siac_t_class n,
+siac_d_class_tipo m2,siac_d_class_tipo n2,siac_t_periodo o
+where 
+a.ente_proprietario_id=p_ente_prop_id 
+and 
+a.elem_tipo_id=b.elem_tipo_id
+and b.elem_tipo_code='CAP-UG'
+and c.bil_id=a.bil_id
+and c2.periodo_id=c.periodo_id
+and c2.anno=p_anno
+and d.elem_id=a.elem_id
+and e.elem_det_tipo_id=d.elem_det_tipo_id
+and e.elem_det_tipo_code='STA'
+and f.elem_id=A.elem_id
+and now() BETWEEN f.validita_inizio and COALESCE(f.validita_fine,now())
+and g.elem_cat_id=f.elem_cat_id
+and g.elem_cat_code in	('DDANC')	
+and i.elem_id=A.elem_id
+and h.elem_stato_id=i.elem_stato_id
+and h.elem_stato_code='VA'
+and j.elem_id=a.elem_id
+and now() between i.validita_inizio and COALESCE(i.validita_fine,now())
+and now() between j.validita_inizio and COALESCE(j.validita_fine,now())    
+and a.data_cancellazione is null
+and b.data_cancellazione is null
+and c.data_cancellazione is null
+and c2.data_cancellazione is null
+and d.data_cancellazione is null
+and e.data_cancellazione is null
+and f.data_cancellazione is null
+and g.data_cancellazione is null
+and h.data_cancellazione is null
+and i.data_cancellazione is null
+and j.data_cancellazione is null
+and k.elem_id=A.elem_id
+and now() between k.validita_inizio and COALESCE(k.validita_fine,now())
+and m.classif_id=j.classif_id
+and n.classif_id=k.classif_id
+and m2.classif_tipo_id=m.classif_tipo_id
+and m2.classif_tipo_code='MACROAGGREGATO'
+and n2.classif_tipo_id=n.classif_tipo_id
+and n2.classif_tipo_code='PROGRAMMA'
+and o.periodo_id=d.periodo_id
+and o.anno=p_anno
+group by a.elem_id
+ )   
 select sum(pagamenti_residui.pagamenti) pr_totale_pagam_residui,
 	sum(pagamenti_comp.pagamenti) pc_totale_pagam_competenza,
     sum(residui_pass.residui_passivi) rs_totale_residui_passivi,
     sum(riacc_residui.riaccertamenti_residui) r_totale_riaccertamenti_residui,
     sum(impegni.importo_impegni) i_totale_importo_impegni,
     sum(fpv_tit1.importo_fpv_tit1) totale_importo_fpv_parte_corr,
-    sum(fpv_tit2.importo_fpv_tit2) totale_importo_fpv_cc
+    sum(fpv_tit2_3.importo_fpv_tit2_3) totale_importo_fpv_cc,
+    COALESCE(sum(disav_debito_non_contr.importo_disavanzo),0) disav_debito_autor_non_contr
    from capusc   	
           left join pagamenti_residui 
               on capusc.elem_id=pagamenti_residui.elem_id
@@ -574,10 +645,11 @@ select sum(pagamenti_residui.pagamenti) pr_totale_pagam_residui,
           	  on capusc.elem_id=impegni.elem_id
           left join fpv_tit1
           	  on capusc.elem_id=fpv_tit1.elem_id 
-          left join fpv_tit2
-          	  on capusc.elem_id=fpv_tit2.elem_id ;
+          left join fpv_tit2_3
+          	  on capusc.elem_id=fpv_tit2_3.elem_id 
+          left join disav_debito_non_contr
+          	  on capusc.elem_id=disav_debito_non_contr.elem_id;
   
-
 
 exception
 	when no_data_found THEN

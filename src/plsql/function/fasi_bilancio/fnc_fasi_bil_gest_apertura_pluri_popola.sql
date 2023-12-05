@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_pluri_popola (
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_pluri_popola (
   enteproprietarioid integer,
   annobilancio integer,
   loginoperazione varchar,
@@ -232,10 +232,12 @@ BEGIN
      	raise exception ' Errore in inserimento LOG.';
      end if;
 
+     -- 14.05.2020 Sofia Jira SIAC-7593
    	 insert into fase_bil_t_gest_apertura_pluri
      (fase_bil_elab_id,
       movgest_orig_id,
 	  movgest_orig_ts_id,
+      elem_orig_det_comp_tipo_id,  -- 14.05.2020 Sofia Jira SIAC-7593
 	  elem_orig_id,
 	  bil_orig_id,
       movgest_tipo,
@@ -246,7 +248,8 @@ BEGIN
       (select faseBilElabId,
               m.movgest_id,
               ts.movgest_ts_id,
-              elem.elem_id,
+              elem.elem_det_comp_tipo_id,-- 14.05.2020 Sofia Jira SIAC-7593
+              elem.elem_id, -- 14.05.2020 Sofia Jira SIAC-7593
               m.bil_id,
               'IMP', -- impegno
               clock_timestamp(),
@@ -307,6 +310,7 @@ BEGIN
      (fase_bil_elab_id,
       movgest_orig_id,
 	  movgest_orig_ts_id,
+      elem_orig_det_comp_tipo_id,  -- 14.05.2020 Sofia Jira SIAC-7593
 	  elem_orig_id,
 	  bil_orig_id,
       movgest_tipo,
@@ -317,6 +321,7 @@ BEGIN
       (select faseBilElabId,
               m.movgest_id,
               ts.movgest_ts_id,
+              elem.elem_det_comp_tipo_id,-- 14.05.2020 Sofia Jira SIAC-7593
               elem.elem_id,
               m.bil_id,
               'SIM', -- subimpegno

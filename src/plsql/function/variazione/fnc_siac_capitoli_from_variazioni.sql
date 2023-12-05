@@ -1,11 +1,7 @@
 /*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
-*SPDX-License-Identifier: EUPL-1.2
+*SPDX-License-Identifier: EUPL-1.2 
 */
-
-drop FUNCTION siac.fnc_siac_capitoli_from_variazioni (integer) ; 
-
-
 CREATE OR REPLACE FUNCTION siac.fnc_siac_capitoli_from_variazioni (
   p_uid_variazione integer
 )
@@ -43,21 +39,51 @@ RETURNS TABLE (
   cap_competenza2 numeric,
   cap_residuo2 numeric,
   cap_cassa2 numeric,
-  tipologiaFinanziamento varchar,
+  tipologiafinanziamento varchar,
   sac varchar,
   variazione_num integer
 ) AS
 $body$
 DECLARE
 	v_ente_proprietario_id INTEGER;
+    v_bil_id INTEGER;
+    v_anno VARCHAR;
+    v_applicazione VARCHAR;
+    tipo_cap_ent VARCHAR;
+    tipo_cap_spe VARCHAR;
 BEGIN
 
 	-- Utilizzo l'ente per migliorare la performance delle CTE nella query successiva
-	SELECT ente_proprietario_id
+   /* SELECT ente_proprietario_id
 	INTO v_ente_proprietario_id
 	FROM siac_t_variazione
-	WHERE siac_t_variazione.variazione_id = p_uid_variazione;
+	WHERE siac_t_variazione.variazione_id = p_uid_variazione;*/
+    
+    --SIAC-8151 19/04/2021.
+    --Per ottimizzare le prestazioni della procedura leggo l'id del bilancio, l'anno e
+    --l'applicazione (PREVISIONE/GESTIONE).
+	SELECT v.ente_proprietario_id, v.bil_id, per.anno, var_appl.applicazione_code
+	INTO v_ente_proprietario_id, v_bil_id, v_anno, v_applicazione
+	FROM siac_t_variazione v, 
+    	siac_t_bil bil, 
+        siac_t_periodo per,
+        siac_d_variazione_applicazione var_appl
+	WHERE v.bil_id=bil.bil_id
+    	and bil.periodo_id=per.periodo_id
+        and v.applicazione_id=var_appl.applicazione_id
+    	and v.variazione_id = p_uid_variazione
+        and bil.data_cancellazione IS NULL;	    
 	
+    --SIAC-8151 19/04/2021.
+    --Carico su 2 variabili le tipologie di capitolo che devo considerare.
+    if v_applicazione = 'PREVISIONE' then  
+    	tipo_cap_ent:='CAP-EP';
+        tipo_cap_spe:='CAP-UP';
+    else 
+    	tipo_cap_ent:='CAP-EG';
+        tipo_cap_spe:='CAP-UG';
+    end if;
+    
 	RETURN QUERY
 		-- CTE per uscita
 		WITH missione AS (
@@ -229,8 +255,8 @@ BEGIN
 				siac_r_variazione_stato.variazione_stato_id,
 				siac_t_bil_elem_det_var.elem_det_importo impSta,
 				siac_t_periodo.anno::INTEGER
-			FROM siac_t_bil
-			JOIN siac_t_variazione        ON (siac_t_bil.bil_id = siac_t_variazione.bil_id                                              AND siac_t_variazione.data_cancellazione IS NULL)
+			FROM siac_t_bil 
+			JOIN siac_t_variazione        ON (siac_t_bil.bil_id = siac_t_variazione.bil_id    AND siac_t_variazione.data_cancellazione IS NULL)
 			JOIN siac_r_variazione_stato  ON (siac_t_variazione.variazione_id = siac_r_variazione_stato.variazione_id                   AND siac_r_variazione_stato.data_cancellazione IS NULL)
 			JOIN siac_t_bil_elem_det_var  ON (siac_r_variazione_stato.variazione_stato_id = siac_t_bil_elem_det_var.variazione_stato_id AND siac_t_bil_elem_det_var.data_cancellazione IS NULL)
 			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det_var.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id      AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
@@ -239,6 +265,7 @@ BEGIN
 			WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STA'
 			AND siac_t_bil.data_cancellazione IS NULL
 			AND siac_t_variazione.variazione_id = p_uid_variazione
+            
 		),
 		residuo_variaz AS (
 			SELECT
@@ -247,7 +274,7 @@ BEGIN
 				siac_r_variazione_stato.variazione_stato_id,
 				siac_t_bil_elem_det_var.elem_det_importo impRes,
 				siac_t_periodo.anno::integer
-			FROM siac_t_bil
+			FROM siac_t_bil 
 			JOIN siac_t_variazione        ON (siac_t_bil.bil_id = siac_t_variazione.bil_id                                              AND siac_t_variazione.data_cancellazione IS NULL)
 			JOIN siac_r_variazione_stato  ON (siac_t_variazione.variazione_id = siac_r_variazione_stato.variazione_id                   AND siac_r_variazione_stato.data_cancellazione IS NULL)
 			JOIN siac_t_bil_elem_det_var  ON (siac_r_variazione_stato.variazione_stato_id = siac_t_bil_elem_det_var.variazione_stato_id AND siac_t_bil_elem_det_var.data_cancellazione  IS NULL)
@@ -256,7 +283,7 @@ BEGIN
 			JOIN siac_t_periodo           ON (siac_t_bil_elem_det_var.periodo_id = siac_t_periodo.periodo_id                            AND siac_t_periodo.data_cancellazione IS NULL)
 			WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STR'
 			AND siac_t_bil.data_cancellazione IS NULL
-			AND siac_t_variazione.variazione_id = p_uid_variazione
+			AND siac_t_variazione.variazione_id = p_uid_variazione           
 		),
 		cassa_variaz AS (
 			SELECT
@@ -265,8 +292,8 @@ BEGIN
 				siac_r_variazione_stato.variazione_stato_id,
 				siac_t_bil_elem_det_var.elem_det_importo impSca,
 				siac_t_periodo.anno::INTEGER
-			FROM siac_t_bil
-			JOIN siac_t_variazione        ON (siac_t_bil.bil_id = siac_t_variazione.bil_id                                              AND siac_t_variazione.data_cancellazione IS NULL)
+			FROM siac_t_bil 
+			JOIN siac_t_variazione        ON (siac_t_bil.bil_id = siac_t_variazione.bil_id     AND siac_t_variazione.data_cancellazione IS NULL)
 			JOIN siac_r_variazione_stato  ON (siac_t_variazione.variazione_id = siac_r_variazione_stato.variazione_id                   AND siac_r_variazione_stato.data_cancellazione IS NULL)
 			JOIN siac_t_bil_elem_det_var  ON (siac_r_variazione_stato.variazione_stato_id = siac_t_bil_elem_det_var.variazione_stato_id AND siac_t_bil_elem_det_var.data_cancellazione IS NULL)
 			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det_var.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id      AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
@@ -274,9 +301,17 @@ BEGIN
 			JOIN siac_t_periodo           ON (siac_t_bil_elem_det_var.periodo_id = siac_t_periodo.periodo_id                            AND siac_t_periodo.data_cancellazione IS NULL)
 			WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'SCA'
 			AND siac_t_bil.data_cancellazione IS NULL
-			AND siac_t_variazione.variazione_id = p_uid_variazione
+			AND siac_t_variazione.variazione_id = p_uid_variazione          
 		),
 		-- CTE importi capitolo
+        
+        --SIAC-8151 19/04/2021.
+        --Per ottimizzare le prestazioni le query che estraggono gli importi dei capitoli
+        --per competenza (comp_capitolo), residuo (residuo_capitolo) e cassa 
+        --(cassa_capitolo) sono state triplicate mettendo il filtro sull'anno relativo
+        --agli importi.
+        --Inoltre è stato aggiunto il filtro sull'id del bilancio che mancava e
+        --quello per estrarre solo le tipologie di capitolo coinvolte (PREVISONE o GESTIONE). 
 		comp_capitolo AS (
 			SELECT
 				siac_t_bil_elem.elem_id,
@@ -286,9 +321,49 @@ BEGIN
 			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
 			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
 			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
-			WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STA'
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STA'
 			AND siac_t_bil_elem.data_cancellazione IS NULL
 			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            --SIAC-8151 19/04/2021.
+            --Aggiunti filtri per id bilancio, anno importo e tipologia capitolo.
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno = v_anno
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
+		),
+         comp_capitolo1 AS (
+			SELECT
+				siac_t_bil_elem.elem_id,
+				siac_t_bil_elem_det.elem_det_importo impSta,
+				siac_t_periodo.anno::INTEGER
+			FROM siac_t_bil_elem
+			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
+			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STA'
+			AND siac_t_bil_elem.data_cancellazione IS NULL
+			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno::INTEGER = v_anno::INTEGER+1
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
+		),
+        comp_capitolo2 AS (
+			SELECT
+				siac_t_bil_elem.elem_id,
+				siac_t_bil_elem_det.elem_det_importo impSta,
+				siac_t_periodo.anno::INTEGER
+			FROM siac_t_bil_elem
+			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
+			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STA'
+			AND siac_t_bil_elem.data_cancellazione IS NULL
+			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno::INTEGER = v_anno::INTEGER+2
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
 		),
 		residuo_capitolo AS (
 			SELECT
@@ -299,9 +374,49 @@ BEGIN
 			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
 			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
 			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
-			WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STR'
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STR'
 			AND siac_t_bil_elem.data_cancellazione IS NULL
 			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+             --SIAC-8151 19/04/2021.
+            --Aggiunti filtri per id bilancio, anno importo e tipologia capitolo.
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno = v_anno
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
+		),
+        residuo_capitolo1 AS (
+			SELECT
+				siac_t_bil_elem.elem_id,
+				siac_t_bil_elem_det.elem_det_importo impRes,
+				siac_t_periodo.anno::INTEGER
+			FROM siac_t_bil_elem
+			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
+			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STR'
+			AND siac_t_bil_elem.data_cancellazione IS NULL
+			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno::INTEGER = v_anno::INTEGER+1
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
+		),
+        residuo_capitolo2 AS (
+			SELECT
+				siac_t_bil_elem.elem_id,
+				siac_t_bil_elem_det.elem_det_importo impRes,
+				siac_t_periodo.anno::INTEGER
+			FROM siac_t_bil_elem
+			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
+			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'STR'
+			AND siac_t_bil_elem.data_cancellazione IS NULL
+			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno::INTEGER = v_anno::INTEGER+2
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
 		),
 		cassa_capitolo AS (
 			SELECT
@@ -312,9 +427,49 @@ BEGIN
 			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
 			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
 			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
-			WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'SCA'
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'SCA'
 			AND siac_t_bil_elem.data_cancellazione IS NULL
 			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+             --SIAC-8151 19/04/2021.
+            --Aggiunti filtri per id bilancio, anno importo e tipologia capitolo.
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno = v_anno
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
+		),
+        cassa_capitolo1 AS (
+			SELECT
+				siac_t_bil_elem.elem_id,
+				siac_t_bil_elem_det.elem_det_importo impSca,
+				siac_t_periodo.anno::INTEGER
+			FROM siac_t_bil_elem
+			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
+			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'SCA'
+			AND siac_t_bil_elem.data_cancellazione IS NULL
+			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno::INTEGER = v_anno::INTEGER+1
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
+		),
+        cassa_capitolo2 AS (
+			SELECT
+				siac_t_bil_elem.elem_id,
+				siac_t_bil_elem_det.elem_det_importo impSca,
+				siac_t_periodo.anno::INTEGER
+			FROM siac_t_bil_elem
+			JOIN siac_t_bil_elem_det      ON (siac_t_bil_elem.elem_id = siac_t_bil_elem_det.elem_id                            AND siac_t_bil_elem_det.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_det_tipo ON (siac_t_bil_elem_det.elem_det_tipo_id = siac_d_bil_elem_det_tipo.elem_det_tipo_id AND siac_d_bil_elem_det_tipo.data_cancellazione IS NULL)
+			JOIN siac_t_periodo           ON (siac_t_bil_elem_det.periodo_id = siac_t_periodo.periodo_id                       AND siac_t_periodo.data_cancellazione IS NULL)
+			JOIN siac_d_bil_elem_tipo     ON (siac_t_bil_elem.elem_tipo_id = siac_d_bil_elem_tipo.elem_tipo_id)
+            WHERE siac_d_bil_elem_det_tipo.elem_det_tipo_code = 'SCA'
+			AND siac_t_bil_elem.data_cancellazione IS NULL
+			AND siac_t_bil_elem.ente_proprietario_id = v_ente_proprietario_id
+            AND siac_t_bil_elem.bil_id = v_bil_id
+            and siac_t_periodo.anno::INTEGER = v_anno::INTEGER+2
+            and siac_d_bil_elem_tipo.elem_tipo_code in (tipo_cap_ent, tipo_cap_spe)
 		)
 		SELECT
 			 siac_d_variazione_stato.variazione_stato_tipo_desc stato_variazione
@@ -389,17 +544,23 @@ BEGIN
 		LEFT OUTER JOIN residuo_variaz residuo_variaz2 ON (siac_r_variazione_stato.variazione_stato_id = residuo_variaz2.variazione_stato_id AND siac_t_bil_elem_det_var.elem_id = residuo_variaz2.elem_id AND residuo_variaz2.anno = siac_t_periodo.anno::INTEGER + 2)
 		LEFT OUTER JOIN cassa_variaz   cassa_variaz2   ON (siac_r_variazione_stato.variazione_stato_id = cassa_variaz2.variazione_stato_id   AND siac_t_bil_elem_det_var.elem_id = cassa_variaz2.elem_id   AND cassa_variaz2.anno = siac_t_periodo.anno::INTEGER + 2)
 		-- Importi capitolo, anno 0
-		JOIN comp_capitolo    ON (siac_t_bil_elem.elem_id = comp_capitolo.elem_id    AND comp_capitolo.anno = siac_t_periodo.anno::INTEGER)
-		JOIN residuo_capitolo ON (siac_t_bil_elem.elem_id = residuo_capitolo.elem_id AND residuo_capitolo.anno = siac_t_periodo.anno::INTEGER)
-		JOIN cassa_capitolo   ON (siac_t_bil_elem.elem_id = cassa_capitolo.elem_id   AND cassa_capitolo.anno = siac_t_periodo.anno::INTEGER)
+		JOIN comp_capitolo    ON (siac_t_bil_elem.elem_id = comp_capitolo.elem_id)--    AND comp_capitolo.anno = siac_t_periodo.anno::INTEGER)
+		JOIN residuo_capitolo ON (siac_t_bil_elem.elem_id = residuo_capitolo.elem_id)-- AND residuo_capitolo.anno = siac_t_periodo.anno::INTEGER)
+		JOIN cassa_capitolo   ON (siac_t_bil_elem.elem_id = cassa_capitolo.elem_id)--   AND cassa_capitolo.anno = siac_t_periodo.anno::INTEGER)
 		-- Importi capitolo, anno +1
-		JOIN comp_capitolo    comp_capitolo1    ON (siac_t_bil_elem.elem_id = comp_capitolo1.elem_id    AND comp_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
-		JOIN residuo_capitolo residuo_capitolo1 ON (siac_t_bil_elem.elem_id = residuo_capitolo1.elem_id AND residuo_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
-		JOIN cassa_capitolo   cassa_capitolo1   ON (siac_t_bil_elem.elem_id = cassa_capitolo1.elem_id   AND cassa_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
+		--JOIN comp_capitolo    comp_capitolo1    ON (siac_t_bil_elem.elem_id = comp_capitolo1.elem_id    AND comp_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
+        JOIN comp_capitolo1    ON (siac_t_bil_elem.elem_id = comp_capitolo1.elem_id)
+		--JOIN residuo_capitolo residuo_capitolo1 ON (siac_t_bil_elem.elem_id = residuo_capitolo1.elem_id AND residuo_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
+        JOIN residuo_capitolo1 ON (siac_t_bil_elem.elem_id = residuo_capitolo1.elem_id)-- AND residuo_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
+		--JOIN cassa_capitolo   cassa_capitolo1   ON (siac_t_bil_elem.elem_id = cassa_capitolo1.elem_id   AND cassa_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
+        JOIN  cassa_capitolo1   ON (siac_t_bil_elem.elem_id = cassa_capitolo1.elem_id)--   AND cassa_capitolo1.anno = siac_t_periodo.anno::INTEGER + 1)
 		-- Importi capitolo, anno +2
-		JOIN comp_capitolo    comp_capitolo2    ON (siac_t_bil_elem.elem_id = comp_capitolo2.elem_id    AND comp_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
-		JOIN residuo_capitolo residuo_capitolo2 ON (siac_t_bil_elem.elem_id = residuo_capitolo2.elem_id AND residuo_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
-		JOIN cassa_capitolo   cassa_capitolo2   ON (siac_t_bil_elem.elem_id = cassa_capitolo2.elem_id   AND cassa_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
+		--JOIN comp_capitolo    comp_capitolo2    ON (siac_t_bil_elem.elem_id = comp_capitolo2.elem_id    AND comp_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
+        JOIN comp_capitolo2    ON (siac_t_bil_elem.elem_id = comp_capitolo2.elem_id)
+		--JOIN residuo_capitolo residuo_capitolo2 ON (siac_t_bil_elem.elem_id = residuo_capitolo2.elem_id AND residuo_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
+        JOIN  residuo_capitolo2 ON (siac_t_bil_elem.elem_id = residuo_capitolo2.elem_id)-- AND residuo_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
+		--JOIN cassa_capitolo   cassa_capitolo2   ON (siac_t_bil_elem.elem_id = cassa_capitolo2.elem_id   AND cassa_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
+        JOIN  cassa_capitolo2   ON (siac_t_bil_elem.elem_id = cassa_capitolo2.elem_id)--   AND cassa_capitolo2.anno = siac_t_periodo.anno::INTEGER + 2)
 		-- Classificatori
 		LEFT OUTER JOIN macroag   ON (macroag.macroag_elem_id = siac_t_bil_elem.elem_id)
 		LEFT OUTER JOIN programma ON (programma.programma_elem_id = siac_t_bil_elem.elem_id)
@@ -425,15 +586,3 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100 ROWS 1000;
-
-
---select * from fnc_siac_capitoli_from_variazioni(724);
-
-
-/*
-select * from 
-siac_t_variazione
-where 
-ente_proprietario_id = 2
-and variazione_num = 50
-*/

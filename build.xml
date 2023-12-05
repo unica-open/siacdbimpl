@@ -16,106 +16,106 @@ SPDX-License-Identifier: EUPL-1.2
 <!-- ##################################################### -->
 
 <project xmlns:ivy="antlib:fr.jayasoft.ivy.ant"
-         basedir="."
-         default="distribution"
-         name="siacbdiimpl">
+		 basedir="."
+		 default="distribution"
+		 name="siacdbimpl">
 
-    <description>Build file per la componente : [siacbdiimpl]</description>
-    
-    <property file="buildfiles/build.properties"/>
+	<description>Build file per la componente : [siacbdiimpl]</description>
 	
-    <!-- ############################################################# -->
-    <!-- # Target: init                                              # -->
-    <!-- ############################################################# -->
-    <target name="init" description="Inizializza lo script Ant.">
-        <tstamp/>
-        <tstamp/>
-		<mkdir dir="${build}/temp" />
-		<mkdir dir="${dist}/UI/${target}" />
+	<property file="buildfiles/build.properties"/>
+	
+	<!-- ################ -->
+	<!-- # Target: init # -->
+	<!-- ################ -->
+	<target name="init" description="Inizializza lo script Ant.">
+		<tstamp/>
+		<mkdir dir="${build}/temp/incr" />
+		<mkdir dir="${build}/temp/target" />
+		<mkdir dir="${dist}/${target}" />
 		<echo message="target: ${target}" />
 		<loadproperties srcFile="buildfiles/${target}.properties"/>
-		<!-- propertyregex property="linea.client" input="${target}" regexp="(.*)\\ *@@" select="\1" /-->
-    </target>
+	</target>
 
 	<target name="environment-config" description="Predispone le configurazioni dipendenti dall'ambiente" depends="init">
 		<script language="javascript">
-		  tokens = project.getProperty('target').split('-')
-		  ambiente = tokens[1]+'-'+tokens[2];
-		  project.setProperty('linea.cliente', ambiente);
-		 </script>
-		 <echo message="versione componente: ${component-version}" />
-		 <copy todir="${build}/temp" flatten="true" overwrite="true">
+			if(!project.getProperty('linea.cliente')) {
+				tokens = project.getProperty('target').split('-');
+				ambiente = tokens[1]+'-'+tokens[2];
+				project.setProperty('linea.cliente', ambiente);
+			}
+		</script>
+		<echo message="versione componente: ${component-version} - linea cliente ${linea.cliente}" />
+		<copy todir="${build}/temp" flatten="true" overwrite="true">
 			<fileset dir="${dist}/${component-version}/" includes="all.sql" />
+			<fileset dir="${dist}/${component-version}/" includes="delta.sql" />
 			<fileset dir="${dist}/${component-version}/" includes="${linea.cliente}.sql" />
 		 </copy>
 		<antcall target="replace-token" />
 		<antcall target="concat-files" />
 	</target>
-	
+
 	<target name="replace-token" if="environment.config">
-		<echo message="eseguo le parsificazioni necessarie sui file sorgenti se nel build.properties è settata	environment.config" />
+		<echo message="eseguo le parsificazioni necessarie sui file sorgenti se nel build.properties è settata environment.config" />
 		<replace file="${build}/temp/*.pkb.SQL" token="@linea.cliente@" value="${linea.cliente}"/>
 		<replace file="${build}/temp/*.SQL" token="@linea.cliente@" value="${linea.cliente}"/>
-		</target>
-		
-	<target name="concat-files" >		
+	</target>
+
+	<target name="concat-files" >
+		<echo message="concateno delta.sql con ${linea.cliente}.sql ..." />
+		<concat encoding="UTF-8" outputencoding="UTF-8" destfile="${build}/temp/incr/delta.sql" fixlastline="true">
+			<fileset dir="${build}/temp" includes="delta.sql, ${linea.cliente}.sql" />
+		</concat>
 		<echo message="concateno all.sql con ${linea.cliente}.sql ..." />
-		<concat encoding="UTF-8" outputencoding="UTF-8" destfile="${build}/temp/siacdb_${component-version}.sql">
+		<concat encoding="UTF-8" outputencoding="UTF-8" destfile="${build}/temp/target/all.sql">
 			<fileset dir="${build}/temp" includes="all.sql, ${linea.cliente}.sql" />
 		</concat>
 	</target>
 
-    <target name="distribution" depends="environment-config" description="crea la distribution per un dato target">
-		
-		<zip destfile="${dist}/UI/${target}/${zip-outfilename}" 
+	<target name="distribution" depends="environment-config" description="crea la distribution per un dato target">
+
+		<zip destfile="${dist}/${target}/${zip-outfilename}"
 			basedir="${build}/temp"
-			includes="siacdb_${component-version}.sql"
-			update="true" 
+			includes="incr/*, target/*"
+			update="true"
 			filesonly="true"/>
-			<!--
-		<delete dir="${build}/temp" />
-		-->
 	</target>
 
-    <!-- -->
-    <!-- ############################################################# -->
-    <!-- # [CLEAN]: clean                                            # -->
-    <!-- ############################################################# -->
-    <!-- -->
-    <target name="clean" description="Rimuove tutti i prodotti del build (in pratica la cartella build)">
-        <delete dir="target" verbose="y"/>
-		<delete dir="${dist}/UI" verbose="y"/>
-    </target>
+	<!-- ################## -->
+	<!-- # [CLEAN]: clean # -->
+	<!-- ################## -->
+	<target name="clean" description="Rimuove tutti i prodotti del build (in pratica la cartella build)">
+		<delete dir="target" verbose="y"/>
+		<delete verbose="y">
+			<fileset dir="${dist}">
+				<!-- Aggiungere le cartelle per le versioni successive, o spostare dalla cartella /dist -->
+				<exclude name="4.*/**/*" />
+				<exclude name="5.*/**/*" />
+				<exclude name="incr*/**/*" />
+			</fileset>
+		</delete>
+	</target>
 
-    <!-- -->
-    <!-- ############################################################# -->
-    <!-- # Target: about                                             # -->
-    <!-- ############################################################# -->
-    <!-- -->
-    <target name="about" description="Visualizza l'elenco dei target
-                                    pubblici dello script.">
+	<target name="clean-all" depends="clean" description="Rimuove tutti i prodotti del build (in pratica la cartella build)"></target>
 
-        <loadproperties srcfile="buildfiles/build.properties"/>
-        <loadfile property="about" srcfile="buildfiles/about.txt"/>
-        <echo message="${about}"/>
-    </target>
+	<!-- ################# -->
+	<!-- # Target: about # -->
+	<!-- ################# -->
+	<target name="about" description="Visualizza l'elenco dei target pubblici dello script.">
+		<loadproperties srcfile="buildfiles/build.properties"/>
+		<loadfile property="about" srcfile="buildfiles/about.txt"/>
+		<echo message="${about}"/>
+	</target>
 
-    <!-- -->
-    <!-- ############################################################# -->
-    <!-- # Target: about-custom                                      # -->
-    <!-- ############################################################# -->
-    <!-- -->
-    <target name="about-custom"
-            description="Visualizza l'elenco di tutti i target,
-                       pubblici e privati
-                       (equivalente a 'ant -projecthelp')">
-
-        <loadproperties srcfile="buildfiles/build.properties"/>
-        <loadfile property="about-custom" srcfile="buildfiles/about-custom.txt"/>
-        <echo message="${about-custom}"/>
-        <java classname="org.apache.tools.ant.Main">
-            <arg value="-projecthelp"/>
-        </java>
-    </target>
+	<!-- ######################## -->
+	<!-- # Target: about-custom # -->
+	<!-- ######################## -->
+	<target name="about-custom" description="Visualizza l'elenco di tutti i target, pubblici e privati (equivalente a 'ant -projecthelp')">
+		<loadproperties srcfile="buildfiles/build.properties"/>
+		<loadfile property="about-custom" srcfile="buildfiles/about-custom.txt"/>
+		<echo message="${about-custom}"/>
+		<java classname="org.apache.tools.ant.Main">
+			<arg value="-projecthelp"/>
+		</java>
+	</target>
 
 </project>

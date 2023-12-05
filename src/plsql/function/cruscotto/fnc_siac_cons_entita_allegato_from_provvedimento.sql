@@ -2,38 +2,33 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_siac_cons_entita_allegato_from_provvedimento (
-  _uid_provvedimento integer,
-  _limit integer,
-  _page integer
+DROP FUNCTION fnc_siac_cons_entita_allegato_from_provvedimento(INTEGER, INTEGER, INTEGER);
+
+CREATE FUNCTION fnc_siac_cons_entita_allegato_from_provvedimento(
+_uid_provvedimento integer,
+_limit integer, 
+_page integer
 )
-RETURNS TABLE (
-  uid integer,
-  attoal_causale varchar,
-  attoal_data_scadenza timestamp,
-  attoal_stato_desc varchar,
-  attoal_versione_invio_firma integer,
-  attoamm_numero integer,
-  attoamm_anno varchar,
-  attoamm_tipo_code varchar,
-  attoamm_tipo_desc varchar,
-  attoamm_stato_desc varchar,
-  attoamm_sac_code varchar,
-  attoamm_sac_desc varchar
-) AS
+RETURNS table(
+	uid integer,
+ 	attoal_causale varchar,
+ 	attoal_data_scadenza timestamp,
+ 	attoal_stato_desc varchar,	
+ 	attoal_versione_invio_firma integer,
+ 	attoamm_numero integer,
+ 	attoamm_anno varchar,
+ 	attoamm_tipo_code varchar,
+ 	attoamm_tipo_desc varchar,
+ 	attoamm_stato_desc varchar,
+ 	attoamm_sac_code varchar,
+ 	attoamm_sac_desc varchar
+) as
 $body$
 DECLARE
-	_offset INTEGER := (_page) * _limit;
-	stringaTest character varying := 'stringa di test';
+_offset integer := (_page) * _limit;
 BEGIN
 
-/*	RETURN QUERY
-	SELECT 123, stringaTest, TO_TIMESTAMP('2015 12 31', 'YYYY MM DD')::timestamp without time zone,stringaTest,
-		1,234, stringaTest, stringaTest, stringaTest, stringaTest, stringaTest, stringaTest
-	LIMIT _limit
-	OFFSET _offset;*/
-
-    RETURN QUERY
+	RETURN QUERY
     with attoamm as (
     select 
     e.attoal_id uid,
@@ -100,12 +95,10 @@ BEGIN
    	LIMIT _limit
 	OFFSET _offset
     ;
-        
-    
-END;
+END 
 $body$
 LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
-COST 100 ROWS 1000;
+;

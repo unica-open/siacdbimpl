@@ -2,19 +2,37 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_mif_ordinativo_entrata_splus
-( enteProprietarioId integer,
-  nomeEnte VARCHAR,
+drop FUNCTION if exists 
+siac.fnc_mif_ordinativo_entrata_splus 
+(
+  enteproprietarioid integer,
+  nomeente varchar,
   annobilancio varchar,
-  loginOperazione varchar,
-  dataElaborazione timestamp,
-  mifOrdRitrasmElabId integer,
-  out flussoElabMifDistOilId integer,
-  out flussoElabMifId integer,
-  out numeroOrdinativiTrasm integer,
-  out nomeFileMif varchar,
-  out codiceRisultato integer,
-  out messaggioRisultato varchar )
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  mifordritrasmelabid integer,
+  out flussoelabmifdistoilid integer,
+  out flussoelabmifid integer,
+  out numeroordinativitrasm integer,
+  out nomefilemif varchar,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_mif_ordinativo_entrata_splus (
+  enteproprietarioid integer,
+  nomeente varchar,
+  annobilancio varchar,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  mifordritrasmelabid integer,
+  out flussoelabmifdistoilid integer,
+  out flussoelabmifid integer,
+  out numeroordinativitrasm integer,
+  out nomefilemif varchar,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+)
 RETURNS record AS
 $body$
 DECLARE
@@ -149,7 +167,10 @@ DECLARE
  attoAmmStrTipoRag varchar(50):=null;
  -- siope plus
 
-
+ -- 11.05.2021 Sofia Jira SIAC-8128 
+ codiceContoSanita varchar(30):='';
+ codiceIstatSanita varchar(30):='';
+ 
  ORD_TIPO_CODE_P  CONSTANT  varchar :='P';
  ORD_TIPO_CODE_I  CONSTANT  varchar :='I';
  ORD_STATO_CODE_I CONSTANT  varchar :='I';
@@ -229,9 +250,16 @@ DECLARE
 
 
  -- 23.02.2018 Sofia jira siac-5849
- defNaturaPag  varchar(100):=null;
+ defNaturaPag    varchar(100):=null;
  famMacroTitCode varchar(100):=null;
  famMacroTitCodeId integer:=null;
+
+ -- 12.10.2020 Sofia SIAC-7448
+ docTipoCodeFSN varchar(10):=null;
+ defNaturaPagFSN varchar(10):=null;
+ utilizzoNCDSPR varchar(100):=null;
+ utilizzoNCDFSN varchar(100):=null;
+ docElettronico varchar(50):=null;
 
  FAM_TIT_ENT_TIPCATEG CONSTANT varchar:='Entrata - TitoliTipologieCategorie';
  CATEGORIA CONSTANT varchar:='CATEGORIA';
@@ -250,12 +278,17 @@ DECLARE
  FLUSSO_MIF_ELAB_TEST_RIFERIMENTO_ENTE CONSTANT integer:=11; -- riferimento_ente
  FLUSSO_MIF_ELAB_TEST_ESERCIZIO       CONSTANT integer:=12;  -- esercizio
 
- FLUSSO_MIF_ELAB_INIZIO_ORD     CONSTANT integer:=13;  -- tipo_operazione
- FLUSSO_MIF_ELAB_FATTURE        CONSTANT integer:=35;  -- codice_ipa_ente_siope
- FLUSSO_MIF_ELAB_FATT_CODFISC   CONSTANT integer:=40;  -- codice_fiscale_emittente_siope
+ FLUSSO_MIF_ELAB_INIZIO_ORD         CONSTANT integer:=13;  -- tipo_operazione
+ FLUSSO_MIF_ELAB_FATTURE            CONSTANT integer:=35;  -- codice_ipa_ente_siope
+ -- 12.10.2020 Sofia SIAC-7448
+ FLUSSO_MIF_ELAB_FATT_DOC_ELETTRONICO CONSTANT integer:=36;  -- codice_ipa_ente_siope
+ FLUSSO_MIF_ELAB_FATT_CODFISC       CONSTANT integer:=40;  -- codice_fiscale_emittente_siope
  FLUSSO_MIF_ELAB_FATT_DATASCAD_PAG  CONSTANT integer:=44;  -- data_scadenza_pagam_siope
- FLUSSO_MIF_ELAB_FATT_NATURA_PAG CONSTANT integer:=46;  -- natura_spesa_siope
- FLUSSO_MIF_ELAB_NUM_SOSPESO    CONSTANT integer:=62;  -- numero_provvisorio
+ FLUSSO_MIF_ELAB_FATT_NATURA_PAG    CONSTANT integer:=46;  -- natura_spesa_siope
+ -- 12.10.2020 Sofia SIAC-7448
+ FLUSSO_MIF_ELAB_FATT_UT_NOTA_CRED  CONSTANT integer:=74;  -- utilizzo_nota_di_credito
+ FLUSSO_MIF_ELAB_NUM_SOSPESO        CONSTANT integer:=62;  -- numero_provvisorio
+
 
 
 
@@ -1230,6 +1263,8 @@ BEGIN
                tipoDocs is not null and tipoDocs!='' and
                tipoGruppoDocs is not null and tipoGruppoDocs!='' then
                 tipoDocs:=tipoDocs||'|'||tipoGruppoDocs;
+                -- 31.03.2023 Sofia Jira SIAC-8880
+                tipoDocs:=tipoDocs||'|'||COALESCE(trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,4)),'X');
             	isGestioneFatture:=true;
             end if;
 		end if;
@@ -1360,6 +1395,57 @@ BEGIN
     end if;
 
    end if;
+
+   -- 12.10.2020 Sofia SIAC-7448 - inizio
+   if isGestioneFatture=true then
+    flussoElabMifElabRec:=null;
+    mifCountRec:=FLUSSO_MIF_ELAB_FATT_UT_NOTA_CRED;
+    flussoElabMifElabRec:=mifFlussoElabMifArr[mifCountRec];
+    strMessaggio:='Lettura dati configurazione per campo '||flussoElabMifElabRec.flusso_elab_mif_campo
+                 ||' mifCountRec='||mifCountRec
+                 ||' tipo flusso '||MANDMIF_TIPO||'.';
+    if flussoElabMifElabRec.flussoElabMifId is null then
+  		  RAISE EXCEPTION ' Configurazione tag/campo non presente in archivio.';
+    end if;
+    if flussoElabMifElabRec.flussoElabMifAttivo=true then
+   	 if flussoElabMifElabRec.flussoElabMifElab=true then
+    	if flussoElabMifElabRec.flussoElabMifParam is not null  then
+            docTipoCodeFSN:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,1));
+            defNaturaPagFSN:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,2));
+            utilizzoNCDSPR:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifDef,SEPARATORE,1));
+            utilizzoNCDFSN:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifDef,SEPARATORE,2));
+		end if;
+     else
+          RAISE EXCEPTION ' Configurazione tag/campo  non elaborabile.';
+     end if;
+    end if;
+
+   end if;
+
+    if isGestioneFatture=true then
+
+    flussoElabMifElabRec:=null;
+    mifCountRec:=FLUSSO_MIF_ELAB_FATT_DOC_ELETTRONICO;
+    flussoElabMifElabRec:=mifFlussoElabMifArr[mifCountRec];
+    strMessaggio:='Lettura dati configurazione per campo '||flussoElabMifElabRec.flusso_elab_mif_campo
+                 ||' mifCountRec='||mifCountRec
+                 ||' tipo flusso '||MANDMIF_TIPO||'.';
+    if flussoElabMifElabRec.flussoElabMifId is null then
+  		  RAISE EXCEPTION ' Configurazione tag/campo non presente in archivio.';
+    end if;
+    if flussoElabMifElabRec.flussoElabMifAttivo=true then
+   	 if flussoElabMifElabRec.flussoElabMifElab=true then
+    	if flussoElabMifElabRec.flussoElabMifParam is not null  then
+ 		    docElettronico:=flussoElabMifElabRec.flussoElabMifParam;
+		end if;
+     else
+    	RAISE EXCEPTION ' Configurazione tag/campo  non elaborabile.';
+     end if;
+    end if;
+
+   end if;
+
+   -- 12.10.2020 Sofia SIAC-7448 - fine
 
     --- lettura mif_t_ordinativo_entrata_id per popolamento mif_t_ordinativo_entrata
     codResult:=null;
@@ -1527,6 +1613,21 @@ BEGIN
 
         if flussoElabMifElabRec.flussoElabMifAttivo=true then
          if flussoElabMifElabRec.flussoElabMifElab=true then
+			-- 11.05.2021 Sofia Jira SIAC-8128
+			--raise notice '@@@@@@@@@@@@@@@@@@@@@@@@SANITA@@@@@@@@@@@@@@@@@@@@@@@@@=%',flussoElabMifElabRec.flussoElabMifParam;
+
+		    if flussoElabMifElabRec.flussoElabMifParam is not null then
+				if coalesce(codiceIstatSanita,'')='' or coalesce(codiceContoSanita,'')='' then
+					codiceContoSanita:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,1));
+					codiceIstatSanita:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,2));
+				--	raise notice '@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@@';
+				--	raise notice '@@@@@@@@@@@@@@@@@@@@@@@@SANITA@@@@@@@@@@@@@@@@@@@@@@@@@=%',mifOrdinativoIdRec.mif_ord_ord_numero::varchar;
+				--	raise notice '@@@@@@@@@@@@@@@@@@@@@@@@codiceContoSanita=%@@@@@@@@@@@@@@@@@@@@@@@@',codiceContoSanita;
+				--	raise notice '@@@@@@@@@@@@@@@@@@@@@@@@codiceIstatSanita=%@@@@@@@@@@@@@@@@@@@@@@@@',codiceIstatSanita;
+				end if;
+		    end if;
+		    -- 11.05.2021 Sofia Jira SIAC-8128		 
+			
          	if enteOilRec.ente_oil_codice_istat is not null then
             	mifFlussoOrdinativoRec.mif_ord_codice_ente_istat:=enteOilRec.ente_oil_codice_istat;
             elsif flussoElabMifElabRec.flussoElabMifDef is not null then
@@ -1848,6 +1949,15 @@ BEGIN
 			if flussoElabMifValore is not null then
              mifFlussoOrdinativoRec.mif_ord_destinazione:=flussoElabMifValore;
             end if;
+			
+			-- 11.05.2021 Sofia Jira SIAC-8128 
+			--raise notice '@@@@@@@@@@@@@@@@ PRIMA mifFlussoOrdinativoRec.mif_ord_destinazione=%',mifFlussoOrdinativoRec.mif_ord_destinazione;
+			if codiceContoSanita=mifFlussoOrdinativoRec.mif_ord_destinazione then
+				mifFlussoOrdinativoRec.mif_ord_codice_ente_istat:=codiceIstatSanita;
+			end if;
+			-- 11.05.2021 Sofia Jira SIAC-8128 
+			--raise notice '@@@@@@@@@@@@@@@@ DOPO  mifFlussoOrdinativoRec.mif_ord_destinazione=%',mifFlussoOrdinativoRec.mif_ord_destinazione;
+			
          else
             RAISE EXCEPTION ' Configurazione tag/campo  non elaborabile.';
          end if;
@@ -2689,6 +2799,18 @@ BEGIN
                     tipoRelREIORD:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,2));
                  end if;
 
+                 -- 12.10.2020 Sofia SIAC-7448 - spostato da sotto a qui
+                 if coalesce(tipoDocsComm,'')='' then
+--                      tipoDocsComm:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,3))||'|'||
+--                        trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,4))||'|'||
+--                        trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,5)); -- 31.03.2023 Sofia Jira SIAC-8880
+                      tipoDocsComm:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,3))||'|'||
+                        trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,4))||'|'||
+                        trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,5))||'|'||
+                        COALESCE(trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,7)),'X'); -- 31.03.2023 Sofia Jira SIAC-8880
+
+                 end if;
+
                  -- 20.03.2018 Sofia SIAC-5968
 			     if tipoRelSPR is not null and tipoRelSPR!='' then
 				  -- caso di ordinativo di incasso collegato a ordinativo di pagamento per Split
@@ -2709,7 +2831,7 @@ BEGIN
 				  and   tipo.ord_tipo_code='P'
 			      and   rstato.ord_id=ord.ord_id
 	              and   stato.ord_stato_id=rstato.ord_stato_id
-	              and   stato.ord_stato_code!='A'
+--	              and   stato.ord_stato_code!='A' -- 15.10.2020 Sofia Jira SIAC-7448
 				  and   tiporel.relaz_tipo_id=rOrd.relaz_tipo_id
                   --and   tiporel.relaz_tipo_code=flussoElabMifElabRec.flussoElabMifParam -- 20.03.2018 Sofia SIAC-5968
                   and   tiporel.relaz_tipo_code=tipoRelSPR
@@ -2765,11 +2887,12 @@ BEGIN
                        ||' mifCountRec='||mifCountRec
         			   ||' tipo flusso '||MANDMIF_TIPO||'. Lettura ordinativo di pagamento Rentroito. Commerciale.';
 
-                    if coalesce(tipoDocsComm,'')='' then
+                     -- 12.10.2020 Sofia SIAC-7448 - spostato sopra
+                    /*if coalesce(tipoDocsComm,'')='' then
                       tipoDocsComm:=trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,3))||'|'||
                         trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,4))||'|'||
                         trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,5));
-                    end if;
+                    end if;*/
 
                   	isOrdCommerciale:=fnc_mif_ordinativo_esiste_documenti_splus(ordinativoReintroitoId,
 			                                                                    tipoDocsComm,
@@ -2781,6 +2904,14 @@ BEGIN
 
                   end if;
 
+               end if;
+
+			   -- 12.10.2020 Sofia SIAC-7448
+               if isOrdCommerciale=false then
+               	isOrdCommerciale:=fnc_mif_ordinativo_esiste_documenti_e_splus(mifOrdinativoIdRec.mif_ord_ord_id,
+																	  		  trim (both ' ' from split_part(flussoElabMifElabRec.flussoElabMifParam,SEPARATORE,6)),
+                  				                                   	          enteProprietarioId
+                                                                              );
                end if;
 
                -- 20.03.2018 Sofia SIAC-5968
@@ -3021,6 +3152,8 @@ BEGIN
 	    end if; -- param
         if flussoElabMifValore is not null then
 	        mifFlussoOrdinativoRec.mif_ord_class_economico:=flussoElabMifValore;
+			-- SIAC-7807 06.10.2020 Sofia
+            mifFlussoOrdinativoRec.mif_ord_class_economico:=mifFlussoOrdinativoRec.mif_ord_class_codice_cge;
         end if;
        else
             RAISE EXCEPTION ' Configurazione tag/campo  non elaborabile.';
@@ -4258,7 +4391,8 @@ BEGIN
   -- dati fatture da valorizzare se ordinativo commerciale
   -- @@@@ sicuramente da completare
   -- <fattura_siope>
-  if isGestioneFatture = true and isOrdCommerciale=true then
+  if isGestioneFatture = true and isOrdCommerciale=true
+     and ordinativoSplitId is not null then -- 13.10.2020 Sofia SIAC-7448
    flussoElabMifElabRec:=null;
    mifCountRec:=FLUSSO_MIF_ELAB_FATTURE;
    titoloCap:=null;
@@ -4364,6 +4498,8 @@ BEGIN
 	       mif_ord_doc_data_scadenza,
 	       mif_ord_doc_motivo_scadenza,
 	       mif_ord_doc_natura_spesa,
+           -- 12.10.2020 Sofia SIAC-7448
+           mif_ord_doc_ut_nota_credito,
 		   validita_inizio,
 		   ente_proprietario_id,
 		   login_operazione
@@ -4385,12 +4521,95 @@ BEGIN
 		  ordRec.data_scadenza_pagam_siope,
 		  ordRec.motivo_scadenza_siope,
     	  ordRec.natura_spesa_siope,
+          (case when ordinativoReintroitoId is null then utilizzoNCDSPR else null end), -- 12.10.2020 Sofia SIAC-7448
           now(),
           enteProprietarioId,
           loginOperazione
          );
     end loop;
    end if;
+
+   -- 12.10.2020 Sofia SIAC-7448  - inizio
+   -- -- <fattura_siope> - documenti FSN - fatture attive collegate direttamente alla reversale
+   -- provenienti da NCD negative non integrabili nel pagamento
+   if isGestioneFatture = true and isOrdCommerciale=true then
+   flussoElabMifElabRec:=null;
+   mifCountRec:=FLUSSO_MIF_ELAB_FATTURE;
+   codResult:=null;
+   flussoElabMifElabRec:=mifFlussoElabMifArr[mifCountRec];
+
+
+   strMessaggio:='Lettura dati ordinativo numero='||mifOrdinativoIdRec.mif_ord_ord_numero
+                       ||' annoBilancio='||mifOrdinativoIdRec.mif_ord_anno_bil
+                       ||' ord_id='||mifOrdinativoIdRec.mif_ord_ord_id
+                       ||' mif_ord_id='||mifOrdinativoIdRec.mif_ord_id
+                       ||'. Lettura dati configurazione per campo '||flussoElabMifElabRec.flusso_elab_mif_campo
+                       ||' mifCountRec='||mifCountRec
+                       ||' tipo flusso '||MANDMIF_TIPO||'. Gestione fatture - FSN.';
+   ordRec:=null;
+   for ordRec in
+   (select * from fnc_mif_ordinativo_documenti_fsn_splus( mifOrdinativoIdRec.mif_ord_ord_id,
+											          numeroDocs::integer,
+                                                      docTipoCodeFSN,
+                                                      docAnalogico,
+                                                      docElettronico,
+                                                      attrCodeDataScad,
+                                                      defNaturaPagFSN,
+                                                      enteOilRec.ente_oil_codice_pcc_uff,
+		   		                        	          enteProprietarioId,
+	            		                              dataElaborazione,dataFineVal)
+   )
+    loop
+        strMessaggio:='Lettura dati ordinativo numero='||mifOrdinativoIdRec.mif_ord_ord_numero
+                       ||' annoBilancio='||mifOrdinativoIdRec.mif_ord_anno_bil
+                       ||' ord_id='||mifOrdinativoIdRec.mif_ord_ord_id
+                       ||' mif_ord_id='||mifOrdinativoIdRec.mif_ord_id
+                       ||'. Inserimento fatture '
+                       ||' in mif_t_ordinativo_spesa_documenti '
+                       ||' tipo flusso '||MANDMIF_TIPO||'.';
+         insert into  mif_t_ordinativo_spesa_documenti
+         ( mif_ord_id,
+		   mif_ord_documento,
+           mif_ord_doc_codice_ipa_ente,
+	       mif_ord_doc_tipo,
+           mif_ord_doc_tipo_a,
+		   mif_ord_doc_id_lotto_sdi,
+		   mif_ord_doc_tipo_analog,
+		   mif_ord_doc_codfisc_emis,
+		   mif_ord_doc_anno,
+	       mif_ord_doc_numero,
+	       mif_ord_doc_importo,
+	       mif_ord_doc_data_scadenza,
+	       mif_ord_doc_motivo_scadenza,
+	       mif_ord_doc_natura_spesa,
+           mif_ord_doc_ut_nota_credito,
+		   validita_inizio,
+		   ente_proprietario_id,
+		   login_operazione
+         )
+         values
+         (mifOrdSpesaId,
+          'E',
+		  ordRec.codice_ipa_ente_siope,
+		  ordRec.tipo_documento_siope,
+          ordRec.tipo_documento_siope_a,
+          ordRec.identificativo_lotto_sdi_siope,
+          ordRec.tipo_documento_analogico_siope,
+          trim ( both ' ' from ordRec.codice_fiscale_emittente_siope),
+		  ordRec.anno_emissione_fattura_siope,
+		  ordRec.numero_fattura_siope,
+          ordRec.importo_siope,
+		  ordRec.data_scadenza_pagam_siope,
+		  ordRec.motivo_scadenza_siope,
+    	  ordRec.natura_spesa_siope,
+          utilizzoNCDFSN, -- 12.10.2020 Sofia SIAC-7448
+          now(),
+          enteProprietarioId,
+          loginOperazione
+         );
+    end loop;
+   end if;
+   -- 12.10.2020 Sofia SIAC-7448  - fine
 
    numeroOrdinativiTrasm:=numeroOrdinativiTrasm+1;
 
@@ -4521,3 +4740,9 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter function siac.fnc_mif_ordinativo_entrata_splus 
+(
+   integer, varchar, varchar, varchar, timestamp, integer,
+   out integer, out integer, out integer, out varchar, out integer, out varchar
+) owner to siac;

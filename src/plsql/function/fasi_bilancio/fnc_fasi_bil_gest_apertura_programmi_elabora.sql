@@ -2,7 +2,8 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_programmi_elabora (
+/*drop function if exists siac.fnc_fasi_bil_gest_apertura_programmi_elabora
+(
   fasebilelabid integer,
   enteproprietarioid integer,
   annobilancio integer,
@@ -11,9 +12,60 @@
   dataelaborazione timestamp,
   out codicerisultato integer,
   out messaggiorisultato varchar
+);
+
+drop function if exists siac.fnc_fasi_bil_gest_apertura_programmi_elabora
+(
+  fasebilelabid integer,
+  enteproprietarioid integer,
+  annobilancio integer,
+  tipoapertura varchar,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);*/
+
+drop function if exists siac.fnc_fasi_bil_gest_apertura_programmi_elabora
+(
+fasebilelabid integer, 
+enteproprietarioid integer, 
+annobilancio integer, 
+tipoapertura varchar, 
+loginoperazione varchar, 
+dataelaborazione timestamp without time zone, 
+OUT codicerisultato integer, 
+OUT messaggiorisultato varchar
+);
+
+drop function if exists siac.fnc_fasi_bil_gest_apertura_programmi_elabora
+(
+fasebilelabid integer, 
+enteproprietarioid integer, 
+annobilancio integer, 
+tipoapertura varchar, 
+loginoperazione varchar, 
+dataelaborazione timestamp without time zone, 
+ribalta_coll_mov boolean, 
+OUT codicerisultato integer, 
+OUT messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi_elabora
+(
+fasebilelabid integer, 
+enteproprietarioid integer, 
+annobilancio integer, 
+tipoapertura varchar, 
+loginoperazione varchar, 
+dataelaborazione timestamp without time zone, 
+ribalta_coll_mov boolean DEFAULT true, 
+OUT codicerisultato integer, 
+OUT messaggiorisultato varchar
 )
-RETURNS record AS
-$body$
+RETURNS record
+AS $body$
+			 
 DECLARE
 	strMessaggio VARCHAR(1500):='';
 	strMessaggioFinale VARCHAR(1500):='';
@@ -33,8 +85,15 @@ DECLARE
 
     P_FASE							 CONSTANT varchar:='P';
     G_FASE					    	 CONSTANT varchar:='G';
-
+    -- Sofia SIAC-8633 24.05.2023      
+    GP_FASE					    	 CONSTANT varchar:='GP';
+   
 	STATO_AN 			    	     CONSTANT varchar:='AN';
+
+	-- 21.01.2022 Sofia Jira SIAC-8536
+    FL_RIL_FPV_ATTR                  CONSTANT varchar:='FlagRilevanteFPV';
+    FlagRilevanteFPVAttrId           integer:=NULL;
+
     numeroProgr                      integer:=null;
     numeroCronop					 integer:=null;
 
@@ -43,6 +102,8 @@ DECLARE
     annoRiaccAttrId                  integer:=null;
     numeroRiaccAttrId                integer:=null;
 
+   
+   
 BEGIN
 
    codiceRisultato:=null;
@@ -72,7 +133,7 @@ BEGIN
     select 1 into codResult
     from fase_bil_t_programmi fase
     where fase.fase_bil_elab_id=faseBilElabId
-    and   fase.data_cancellazione is null;
+    and     fase.data_cancellazione is null;
 
     if codResult is null then
 --      raise exception ' Nessun  programma da creare.';
@@ -115,14 +176,26 @@ BEGIN
    and   bil.data_cancellazione is null
    and   per.data_cancellazione is null;
 
-
-
+ /*
    if tipoApertura=P_FASE THEN
    	bilancioElabId:=bilancioPrecId;
    else
    	bilancioElabId:=bilancioId;
-   end if;
-
+   end if; Sofia SIAC-8633 24.05.2023      
+   */
+  
+  --  Sofia SIAC-8633 24.05.2023      
+   case 
+    when tipoApertura=P_FASE THEN
+	   	bilancioElabId:=bilancioPrecId;
+    when tipoApertura=G_FASE THEN
+	   	bilancioElabId:=bilancioId;
+	when tipoApertura=GP_FASE THEN   
+	   bilancioElabId:=bilancioId;
+	   tipoApertura =P_FASE;
+    end case;	  
+  
+  
    -- 30.07.2019 Sofia siac-6934
    strMessaggio:='Lettura identificativi attributi riaccertamento.';
    SELECT attr.attr_id
@@ -143,6 +216,16 @@ BEGIN
    WHERE  attr.attr_code ='numeroRiaccertato'
    AND    attr.ente_proprietario_id = enteproprietarioid;
 
+  
+  	
+   -- 21.01.2022 Sofia Jira SIAC-8536
+   strMessaggio:='Lettura identificativo attributo FlagRilevanteFPV.';
+   SELECT attr.attr_id
+   INTO   FlagRilevanteFPVAttrId
+   FROM   siac_t_attr attr
+   WHERE  attr.attr_code =FL_RIL_FPV_ATTR
+   AND    attr.ente_proprietario_id = enteproprietarioid;
+  
    strMessaggio:='Inizio inserimento dati programmi da  fase_bil_t_programmi - inizio.';
    codResult:=null;
    insert into fase_bil_t_elaborazione_log
@@ -155,6 +238,72 @@ BEGIN
    if codResult is null then
     	raise exception ' Errore in inserimento LOG.';
    end if;
+
+  
+  
+   -- 16.05.2023 Sofia SIAC-8633 - inizio 
+  --  gestione scarti per programma esistenti in bilancioId - devono essere riportati solo programmi non esistenti
+  strMessaggio:='Gestione scarti programmi esistenti da creare in fase_bil_t_programmi.';
+  codResult:=0;
+  update  fase_bil_t_programmi fase
+  set    fl_elab='X',
+           scarto_code='001',
+           scarto_desc ='PROGRAMMA ESISTENTE PER TIPO='||tipoApertura
+  from siac_t_programma progr,
+	        siac_t_programma progrNew,
+            siac_d_programma_tipo tipo,
+            siac_r_programma_stato rs,siac_d_programma_stato stato 
+   where fase.fase_bil_elab_id=faseBilElabId
+   and      fase.fl_elab='N'   
+   and      progr.programma_id=fase.programma_id
+   and      tipo.ente_proprietario_id=progr.ente_proprietario_id
+   and      tipo.programma_tipo_code=tipoApertura
+   and      progrNew.programma_tipo_id=tipo.programma_tipo_id 
+   and      progrNew.programma_code =progr.programma_code 
+   and      progrNew.bil_id=bilancioId 
+   and      rs.programma_id=progrNew.programma_id 
+   and      stato.programma_stato_id =rs.programma_stato_id 
+   and      stato.programma_stato_code !='AN'
+   and      progr.data_cancellazione  is null 
+   and      progr.validita_fine  is null 
+   and      fase.data_cancellazione is null
+   and      progrNew.data_cancellazione  is null 
+   and      progrNew.validita_fine  is null 
+   and      rs.data_cancellazione  is null 
+   and      rs.validita_fine  is null;
+   GET DIAGNOSTICS codResult = ROW_COUNT;
+   if codResult is null then codResult:=0; end if;
+   raise notice '% Scartati=%', strMessaggio,codResult;
+   
+   strMessaggio:='Numero di programmi scartati per esistenza='||coalesce(codResult,0)::varchar||'.';
+   raise notice '%', strMessaggio;
+   codResult:=null;
+   insert into fase_bil_t_elaborazione_log
+   (fase_bil_elab_id,fase_bil_elab_log_operazione,
+      validita_inizio, login_operazione, ente_proprietario_id
+   )
+   values
+   (faseBilElabId,strMessaggioFinale||'-'||strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+   returning fase_bil_elab_log_id into codResult;
+   if codResult is null then
+    	raise exception ' Errore in inserimento LOG.';
+   end if; 
+  
+   /*codResult:=null;
+   strMessaggio:='Verifica esistenza programmi da creare in fase_bil_t_programmi.';
+   select 1 into codResult
+   from fase_bil_t_programmi fase
+   where fase.fase_bil_elab_id=faseBilElabId
+   and      fase.fl_elab ='N'
+    and     fase.data_cancellazione is null;
+
+    if codResult is null then
+--      raise exception ' Nessun  programma da creare.';
+      codiceRisultato:=0;
+      messaggioRisultato:=strMessaggio||' Nessun  programma da creare.';
+      return;
+    end if;*/
+    -- 16.05.2023 Sofia SIAC-8633 - fine   
 
    -- siac_t_programma
 
@@ -203,7 +352,8 @@ BEGIN
    strMessaggio:='Numero di programmi inseriti='||coalesce(numeroProgr,0)::varchar||'.';
    raise notice '%', strMessaggio;
    codResult:=null;
-   insert into fase_bil_t_elaborazione_log
+
+  insert into fase_bil_t_elaborazione_log
    (fase_bil_elab_id,fase_bil_elab_log_operazione,
       validita_inizio, login_operazione, ente_proprietario_id
    )
@@ -220,11 +370,12 @@ BEGIN
     codResult:=null;
     update fase_bil_t_programmi fase
     set    programma_new_id=progr.programma_id,
-           fl_elab='S'
+             fl_elab='S'
     from   siac_t_programma progr
     where  fase.fase_bil_elab_id=faseBilElabId
     and    fase.fl_elab='N'
     and    progr.ente_proprietario_id=enteProprietarioId
+    and    progr.bil_id=bilancioId -- 03.12.2021 Sofia SIAC-SIAC-8470
     and    progr.login_operazione like loginOperazione||'@%'
     and    substring(progr.login_operazione from position ('@' in progr.login_operazione)+1)::integer=fase.fase_bil_programma_id
     and    fase.data_cancellazione is null
@@ -296,6 +447,8 @@ BEGIN
     GET DIAGNOSTICS codResult = ROW_COUNT;
     raise notice '% numIns=%', strMessaggio,codResult;
 
+ 
+
     strMessaggio:='Inserimento dati programmi da fase_bil_t_programmi [siac_r_programma_attr].';
     -- siac_r_programma_attr
     codResult:=null;
@@ -314,7 +467,10 @@ BEGIN
     )
     select fase.programma_new_id,
    	       rattr.attr_id,
- 		   rattr.boolean,
+---   	       rattr.boolean     -- 21.01.2022 Sofia Jira SIAC-8563
+   	       ( CASE WHEN tipoapertura=P_FASE AND rattr.attr_id=FlagRilevanteFPVAttrId THEN 'N'
+   	         ELSE  rattr.boolean END 
+   	       )  ,     -- 21.01.2022 Sofia Jira SIAC-8563
 		   rattr.testo,
 		   rattr.percentuale,
 	       rattr.numerico,
@@ -333,6 +489,8 @@ BEGIN
     GET DIAGNOSTICS codResult = ROW_COUNT;
     raise notice '% numIns=%', strMessaggio,codResult;
 
+   
+   
     strMessaggio:='Inserimento dati programmi da fase_bil_t_programmi [siac_r_programma_atto_amm].';
     -- siac_r_programma_atto_amm
     codResult:=null;
@@ -359,9 +517,87 @@ BEGIN
 
     GET DIAGNOSTICS codResult = ROW_COUNT;
     raise notice '% numIns=%', strMessaggio,codResult;
-  end if;
 
-
+   -- 19.04.2023 Sofia SIAC-TASK-21
+   if tipoApertura=G_FASE then 
+    strMessaggio:='Inserimento dati programmi da fase_bil_t_programmi [siac_r_mutuo_programma].';
+    -- siac_r_mutuo_programma
+    codResult:=null;
+    
+   insert into siac_r_mutuo_programma
+    (
+     programma_id,
+     mutuo_id,
+     mutuo_programma_importo_iniziale,
+     mutuo_programma_importo_finale,
+     validita_inizio,
+     login_operazione,
+     login_creazione,
+     login_modifica,
+     ente_proprietario_id
+    )
+    select query.programma_id,
+	            query.mutuo_id,
+	            query.mutuo_programma_importo_iniziale ,
+	            query.programma_importo,
+	            clock_timestamp(),
+                loginOperazione,
+                loginOperazione,
+                loginOperazione,
+                enteProprietarioId
+  from 
+  (
+    with 
+    progrNew as 
+    (
+     select p.programma_id, p.programma_code ,coalesce(rattr.numerico ,0) programma_importo
+     from fase_bil_t_programmi fase,
+               siac_t_programma p 
+                 left join siac_r_programma_attr rattr join siac_t_attr attr on (attr.attr_id=rattr.attr_id and   attr.attr_code='ValoreComplessivoProgramma')
+                  on (rattr.programma_id=p.programma_id and rattr.data_cancellazione  is null and  rattr.validita_fine is null )
+     where fase.fase_bil_elab_id=faseBilElabId
+     and      p.programma_id =fase.programma_new_id
+     and      fase.programma_new_id is not NULL
+     and      fase.data_cancellazione is null
+     and      p.data_cancellazione is null
+     and      p.validita_fine is null
+    ),
+    progrMutuo as
+    (
+     select p.programma_code, r.mutuo_id, r.mutuo_programma_importo_iniziale 
+     from siac_t_programma p , siac_d_programma_tipo tipo,  siac_r_programma_stato rs,siac_d_programma_stato statoP ,
+               siac_r_mutuo_programma r,siac_t_mutuo mutuo,siac_d_mutuo_stato stato
+    where tipo.ente_proprietario_id =enteProprietarioId 
+    and      tipo.programma_tipo_code =G_FASE
+    and      p.programma_tipo_id=tipo.programma_tipo_id 
+    and      p.bil_id=bilancioPrecId
+    and      rs.programma_id =p.programma_id 
+    and      statoP.programma_stato_id =rs.programma_stato_id 
+    and      statoP.programma_stato_code !='AN'
+    and      r.programma_id=p.programma_id
+    and      mutuo.mutuo_id=r.mutuo_id 
+    and      stato.mutuo_stato_id=mutuo.mutuo_stato_id 
+    and      stato.mutuo_stato_code!='A'
+    and      r.data_cancellazione is null
+    and      r.validita_fine is null
+    and      mutuo.data_cancellazione is null
+    and      mutuo.validita_fine is null
+    and      p.data_cancellazione is null
+    and      p.validita_fine is null
+    and      rs.data_cancellazione is null
+    and      rs.validita_fine is null
+    )
+	select progrNew.programma_id,
+		        progrNew.programma_importo,
+	            progrMutuo.mutuo_id,
+	            progrMutuo.mutuo_programma_importo_iniziale
+	from progrNew , progrMutuo 
+	where progrNew.programma_code=progrMutuo.programma_code
+  ) query;
+  GET DIAGNOSTICS codResult = ROW_COUNT;
+   raise notice '% numIns=%', strMessaggio,codResult;
+  end if;   
+ end if;
 
 
   strMessaggio:='Inserimento dati programmi da fase_bil_t_programmi - fine .';
@@ -377,10 +613,69 @@ BEGIN
    	raise exception ' Errore in inserimento LOG.';
   end if;
   -- fine inserimento dati programmi
+  
+  -- 16.05.2023 Sofia SIAC-8633 - cronop 
+ 
+   strMessaggio:='Inizio inserimento dati crono-programmi da  fase_bil_t_cronop - inizio.';
+   codResult:=null;
+   insert into fase_bil_t_elaborazione_log
+   (fase_bil_elab_id,fase_bil_elab_log_operazione,
+      validita_inizio, login_operazione, ente_proprietario_id
+   )
+   values
+   (faseBilElabId,strMessaggioFinale||'-'||strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+   returning fase_bil_elab_log_id into codResult;
+   if codResult is null then
+    	raise exception ' Errore in inserimento LOG.';
+   end if;
+  
+  strMessaggio:='Gestione scarti crono-programmi esistenti da creare in fase_bil_t_cronop.';
+  codResult:=0;
+  update  fase_bil_t_cronop fasec
+  set    fl_elab='X',
+           scarto_code='001',
+           scarto_desc ='CRONOP ESISTENTE PER TIPO='||tipoApertura
+ from siac_t_programma p, 
+            siac_t_programma pNew, siac_d_programma_tipo tipo,siac_r_programma_stato rs,siac_d_programma_stato stato,
+            siac_t_cronop cronop, 
+            siac_t_cronop cNew,siac_r_cronop_stato  rs_cronop,siac_d_cronop_stato  stato_cronop 
+  where fasec.fase_bil_elab_id=faseBilElabId
+  and     fasec.fl_elab='N'
+  and     p.programma_id =fasec.programma_id 
+  and     cronop.cronop_id =fasec.cronop_id 
+  and     cronop.programma_id =p.programma_id
+  and     tipo.ente_proprietario_id =p.ente_proprietario_id 
+  and     tipo.programma_tipo_code =tipoApertura
+  and     pNew.programma_tipo_id=tipo.programma_tipo_id 
+  and     pNew.programma_code =p.programma_code 
+  and     pNew.bil_id=bilancioId
+  and     rs.programma_id =pNew.programma_id 
+  and     stato.programma_stato_id =rs.programma_stato_id 
+  and     stato.programma_stato_code!='AN'
+  and     cNew.programma_id=pNew.programma_id 
+  and     cNew.cronop_code=cronop.cronop_code
+  and     cNew.bil_id=pNew.bil_id
+  and     rs_cronop.cronop_id=cNew.cronop_id 
+  and     stato_cronop.cronop_stato_id =rs_cronop.cronop_stato_id 
+  and     stato_cronop.cronop_stato_code !='AN'
+  and     fasec.data_cancellazione is null
+  and     cronop.data_cancellazione is null 
+  and     cronop.validita_fine is null
+  and     p.data_cancellazione is null 
+  and     p.validita_fine is null
+  and     pNew.data_cancellazione is null 
+  and     pNew.validita_fine is null
+  and     cNew.data_cancellazione is null 
+  and     cNew.validita_fine is null
+ and      rs.data_cancellazione is null 
+ and      rs.validita_fine is null
+ and      rs_cronop.data_cancellazione is null 
+ and      rs_cronop.validita_fine is null;
+ GET DIAGNOSTICS codResult = ROW_COUNT;
+ if codResult is null then codResult:=0; end if;
+ raise notice '% Scartati=%', strMessaggio,codResult;
 
-  strMessaggio:='Inserimento dati cronoprogrammi da fase_bil_t_cronop - verifica dati creare [fase_bil_t_cronop].';
-
-  codResult:=null;
+  /*codResult:=null;
   select 1 into codResult
   from fase_bil_t_programmi fasep, fase_bil_t_cronop fasec
   where fasep.fase_bil_elab_id=faseBilElabId
@@ -391,7 +686,52 @@ BEGIN
   and   fasec.fl_elab='N'
   and   fasep.data_cancellazione is null
   and   fasec.data_cancellazione is null;
+  16.05.2023 Sofia SIAC-8633 - cronop */
 
+  -- 16.05.2023 Sofia SIAC-8633 - cronop
+  strMessaggio:='Inserimento dati cronoprogrammi da fase_bil_t_cronop - verifica dati creare [fase_bil_t_cronop].';
+  codResult:=0;
+  select coalesce(count(*),0) into codResult
+  from fase_bil_t_cronop fasec,siac_t_programma p, 
+            siac_t_programma pNew, siac_d_programma_tipo tipo,siac_r_programma_stato rs,siac_d_programma_stato stato,
+            siac_t_cronop cronop
+  where fasec.fase_bil_elab_id=faseBilElabId
+  and     fasec.fl_elab='N'
+  and     p.programma_id =fasec.programma_id 
+  and     cronop.cronop_id =fasec.cronop_id 
+  and     cronop.programma_id =p.programma_id
+  and     tipo.ente_proprietario_id =p.ente_proprietario_id 
+  and     tipo.programma_tipo_code =tipoApertura
+  and     pNew.programma_tipo_id=tipo.programma_tipo_id 
+  and     pNew.programma_code =p.programma_code 
+  and     pNew.bil_id=bilancioId
+  and     rs.programma_id =pNew.programma_id 
+  and     stato.programma_stato_id =rs.programma_stato_id 
+  and     stato.programma_stato_code!='AN'
+  and     not exists 
+  (
+   select 1 
+   from   siac_t_cronop cNew,siac_r_cronop_stato  rs_cronop,siac_d_cronop_stato  stato_cronop
+   where cNew.programma_id=pNew.programma_id 
+   and      cNew.cronop_code=cronop.cronop_code
+   and      cNew.bil_id=pNew.bil_id
+   and      rs_cronop.cronop_id=cNew.cronop_id 
+   and      stato_cronop.cronop_stato_id =rs_cronop.cronop_stato_id 
+   and      stato_cronop.cronop_stato_code !='AN'
+   and      cNew.data_cancellazione is null 
+   and      cNew.validita_fine is null
+   and       rs_cronop.data_cancellazione is null 
+   and       rs_cronop.validita_fine is null
+  )
+  and     fasec.data_cancellazione is null
+  and     cronop.data_cancellazione is null 
+  and     cronop.validita_fine is null
+  and     p.data_cancellazione is null 
+  and     p.validita_fine is null
+  and     pNew.data_cancellazione is null 
+  and     pNew.validita_fine is null
+  and      rs.data_cancellazione is null 
+  and      rs.validita_fine is null;
   raise notice '% numdaIns=%', strMessaggio,codResult;
 
 
@@ -411,9 +751,10 @@ BEGIN
     end if;
 
 
-    strMessaggio:='Inserimento dati cronoprogrammi da fase_bil_t_cronop  [siac_t_cronop].';
+    
     -- siac_t_cronop
-   	insert into siac_t_cronop
+   	/*-- 16.05.2023 Sofia SIAC-8633 - cronop
+   	 * insert into siac_t_cronop
     (
     	 cronop_code,
 	     cronop_desc,
@@ -439,7 +780,10 @@ BEGIN
 	     cronop.cronop_desc,
 	     fasep.programma_new_id,
 	     bilancioId,
-	     cronop.usato_per_fpv,
+--	     cronop.usato_per_fpv,      -- 04.10.2022 Sofia Jira SIAC-8816
+   	       ( CASE WHEN tipoapertura=P_FASE  THEN false
+   	         ELSE  cronop.usato_per_fpv END 
+   	       )  ,     -- 04.10.2022 Sofia Jira SIAC-8816
          cronop.cronop_data_approvazione_fattibilita,
 	     cronop.cronop_data_approvazione_programma_def,
 		 cronop.cronop_data_approvazione_programma_esec,
@@ -464,10 +808,97 @@ BEGIN
     and   fasep.data_cancellazione is null
     and   fasec.data_cancellazione is null
     and   cronop.data_cancellazione is null
-    and   cronop.validita_fine is null;
-    GET DIAGNOSTICS numeroCronop = ROW_COUNT;
+    and   cronop.validita_fine is null;*/
+   
+    -- 16.05.2023 Sofia SIAC-8633 - cronop
+    numeroCronop:=0;
+    strMessaggio:='Inserimento dati cronoprogrammi da fase_bil_t_cronop  [siac_t_cronop].';
+    
+    insert into siac_t_cronop
+    (
+    	 cronop_code,
+	     cronop_desc,
+	     programma_id,
+	     bil_id,
+	     usato_per_fpv,
+         cronop_data_approvazione_fattibilita,
+	     cronop_data_approvazione_programma_def,
+		 cronop_data_approvazione_programma_esec,
+		 cronop_data_avvio_procedura,
+		 cronop_data_aggiudicazione_lavori,
+		 cronop_data_inizio_lavori,
+		 cronop_data_fine_lavori,
+		 cronop_giorni_durata,
+		 cronop_data_collaudo,
+	     gestione_quadro_economico,
+         validita_inizio,
+         login_operazione,
+         ente_proprietario_id
+    )
+    select
+         cronop.cronop_code,
+	     cronop.cronop_desc,
+	     pNew.programma_id,
+	     bilancioId,
+   	       ( CASE WHEN tipoapertura=P_FASE  THEN false
+   	         ELSE  cronop.usato_per_fpv END 
+   	       )  ,
+         cronop.cronop_data_approvazione_fattibilita,
+	     cronop.cronop_data_approvazione_programma_def,
+		 cronop.cronop_data_approvazione_programma_esec,
+		 cronop.cronop_data_avvio_procedura,
+		 cronop.cronop_data_aggiudicazione_lavori,
+		 cronop.cronop_data_inizio_lavori,
+		 cronop.cronop_data_fine_lavori,
+		 cronop.cronop_giorni_durata,
+		 cronop.cronop_data_collaudo,
+	     cronop.gestione_quadro_economico,
+         clock_timestamp(),
+         loginOperazione||'@'||fasec.fase_bil_cronop_id::varchar,
+         cronop.ente_proprietario_id
+    from fase_bil_t_cronop fasec,siac_t_programma p, 
+              siac_t_programma pNew, siac_d_programma_tipo tipo,siac_r_programma_stato rs,siac_d_programma_stato stato,
+              siac_t_cronop cronop 
+    where fasec.fase_bil_elab_id=faseBilElabId
+    and     fasec.fl_elab='N'
+    and     p.programma_id =fasec.programma_id 
+    and     cronop.cronop_id =fasec.cronop_id 
+    and     cronop.programma_id =p.programma_id
+    and     tipo.ente_proprietario_id =p.ente_proprietario_id 
+    and     tipo.programma_tipo_code =tipoApertura
+    and     pNew.programma_tipo_id=tipo.programma_tipo_id 
+    and     pNew.programma_code =p.programma_code 
+    and     pNew.bil_id=bilancioId
+    and     rs.programma_id =pNew.programma_id 
+    and     stato.programma_stato_id =rs.programma_stato_id 
+    and     stato.programma_stato_code!='AN'
+    and     not exists 
+    (
+    select 1 
+    from   siac_t_cronop cNew,siac_r_cronop_stato  rs_cronop,siac_d_cronop_stato  stato_cronop
+    where  cNew.programma_id=pNew.programma_id 
+    and       cNew.cronop_code=cronop.cronop_code 
+    and       cNew.bil_id=pNew.bil_id
+    and       rs_cronop.cronop_id=cNew.cronop_id 
+    and       stato_cronop.cronop_stato_id =rs_cronop.cronop_stato_id 
+    and       stato_cronop.cronop_stato_code !='AN'
+    and       cNew.data_cancellazione is null 
+    and       cNew.validita_fine is null
+    and       rs_cronop.data_cancellazione is null 
+    and       rs_cronop.validita_fine is null
+   )
+   and     fasec.data_cancellazione is null
+   and     cronop.data_cancellazione is null 
+   and     cronop.validita_fine is null
+   and     p.data_cancellazione is null 
+   and     p.validita_fine is null
+   and     pNew.data_cancellazione is null 
+   and     pNew.validita_fine is null
+   and     rs.data_cancellazione is null 
+   and     rs.validita_fine is null;
+   GET DIAGNOSTICS numeroCronop = ROW_COUNT;
 
-    if coalesce(numeroCronop,0)!=0 then
+  if coalesce(numeroCronop,0)!=0 then
 
      strMessaggio:='Inserimento dati cronoprogrammi da fase_bil_t_cronop inseriti numero='||coalesce(numeroCronop,0)::varchar||'.';
 	 codResult:=null;
@@ -486,11 +917,12 @@ BEGIN
      codResult:=null;
      update fase_bil_t_cronop fase
      set    cronop_new_id=cronop.cronop_id,
-           fl_elab='S'
+               fl_elab='S'
      from   siac_t_cronop cronop
      where  fase.fase_bil_elab_id=faseBilElabId
-     and    fase.fl_elab='N'
+     and       fase.fl_elab='N'
      and    cronop.ente_proprietario_id=enteProprietarioId
+     and    cronop.bil_id=bilancioId -- 03.12.2021 Sofia SIAC-8879
      and    cronop.login_operazione like loginOperazione||'@%'
      and    substring(cronop.login_operazione from position ('@' in cronop.login_operazione)+1)::integer=fase.fase_bil_cronop_id
      and    fase.data_cancellazione is null
@@ -794,6 +1226,7 @@ BEGIN
      GET DIAGNOSTICS codResult = ROW_COUNT;
      raise notice '% numdaIns=%', strMessaggio,codResult;
    end if;
+  
    strMessaggio:='Inserimento dati cronoprogrammi da fase_bil_t_cronop - fine.';
    codResult:=null;
    insert into fase_bil_t_elaborazione_log
@@ -815,7 +1248,11 @@ BEGIN
  --  quindi partendo da movimenti validi e programmi - cronop nuovi, riportare le relazioni da annoBilancioPrec
  --  convertendo gli id da annoPrec a annoBilancio
  -- 06.05.2019 Sofia siac-6255
- if tipoApertura=G_FASE then -- tutto da rivedere
+-- if tipoApertura=G_FASE then -- tutto da rivedere
+-- 06.02.2020 Sofia jira SIAC-7386 aggiunto par. non aggiornare tutti i collegamenti in caso di esecuzione da puntuale
+-- 16.05.2023 Sofia SIAC-8633 - aggiungere controlli su inesistenza dei legami 
+ if tipoApertura=G_FASE and ribalta_coll_mov=true then
+
   strMessaggio:='Ribaltamento legame tra movimenti di gestione e programmi-cronop - inizio.';
   codResult:=null;
   insert into fase_bil_t_elaborazione_log
@@ -843,21 +1280,21 @@ BEGIN
   )
   (
     select query.movgest_ts_id,
-           query.programma_new_id,
-           clock_timestamp(),
-           loginOperazione,
-           enteProprietarioId
+                query.programma_new_id,
+                clock_timestamp(),
+                loginOperazione,
+                enteProprietarioId
     from
     (
     with
     mov_res_anno as
     (
     select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-           (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-           mov.movgest_tipo_id,
-           ts.movgest_ts_id
+               (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+               mov.movgest_tipo_id,
+               ts.movgest_ts_id
     from siac_t_movgest mov,siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-         siac_d_movgest_Ts_tipo tipo
+               siac_d_movgest_Ts_tipo tipo
     where mov.bil_id=bilancioId
     and   mov.movgest_anno::integer<annoBilancio
     and   ts.movgest_id=mov.movgest_id
@@ -875,10 +1312,10 @@ BEGIN
     mov_res_anno_prec as
     (
     select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-           (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
-           mov.movgest_tipo_id, r.programma_id
+               (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
+               mov.movgest_tipo_id, r.programma_id
     from siac_t_movgest mov,siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-         siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_programma r
+               siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_programma r
     where mov.bil_id=bilancioPrecId
     and   mov.movgest_anno::integer<annoBilancio
     and   ts.movgest_id=mov.movgest_id
@@ -903,7 +1340,6 @@ BEGIN
       where stato.ente_proprietario_id=enteProprietarioId
 --      and   stato.programma_stato_code='VA'
       and   stato.programma_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
-
       and   rs.programma_stato_id=stato.programma_stato_id
       and   p.programma_id=rs.programma_id
       and   tipo.programma_tipo_id=p.programma_tipo_id
@@ -914,17 +1350,33 @@ BEGIN
       and   p.validita_fine is null
     )
     select mov_res_anno.movgest_ts_id,
-           progr_anno.programma_id programma_new_id
+               progr_anno.programma_id programma_new_id
     from mov_res_anno,
-         mov_res_anno_prec, progr progr_anno, progr progr_anno_prec
+              mov_res_anno_prec, 
+              progr progr_anno, 
+              progr progr_anno_prec
     where mov_res_anno.movgest_anno=mov_res_anno_prec.movgest_anno
-    and   mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
-    and   mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
-    and   mov_res_anno.movgest_tipo_id=mov_res_anno_prec.movgest_tipo_id
-    and   progr_anno_prec.programma_id=mov_res_anno_prec.programma_id
-    and   progr_anno.bil_id=bilancioId
-    and   progr_anno.programma_code=progr_anno_prec.programma_code
-    ) query
+    and      mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
+    and      mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
+    and      mov_res_anno.movgest_tipo_id=mov_res_anno_prec.movgest_tipo_id
+    and      progr_anno_prec.programma_id=mov_res_anno_prec.programma_id
+    and      progr_anno.bil_id=bilancioId
+    and      progr_anno.programma_code=progr_anno_prec.programma_code
+    and      not exists  -- 17.05.2023 Sofia SIAC-8633
+     (
+      select 1 from siac_r_movgest_ts_programma  rp 
+      where rp.movgest_ts_id =mov_res_anno.movgest_ts_id 
+      and      rp.programma_id=progr_anno.programma_id 
+      and      rp.data_cancellazione  is null  
+      and      rp.validita_fine is null 
+     )
+    ) query,fase_bil_t_programmi fase -- 29.05.2023 Sofia SIAC-8633 ribaltamento dei movimenti solo per i programmi effettivamente creati
+    where     -- 29.05.2023 Sofia SIAC-8633
+                fase.fase_bil_elab_id=faseBilElabId
+    and     fase.programma_new_id=query.programma_new_id
+    and     fase.programma_new_id is not NULL
+    and     fase.data_cancellazione is null
+    -- 29.05.2023 Sofia SIAC-8633
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_programma res.inserimenti =%', strMessaggio,codResult;
@@ -954,21 +1406,21 @@ BEGIN
   )
   (
     select query.movgest_ts_id,
-           query.programma_new_id,
-           clock_timestamp(),
-           loginOperazione,
-           enteProprietarioId
+                query.programma_new_id,
+                clock_timestamp(),
+                loginOperazione,
+                enteProprietarioId
     from
     (
     with
     mov_pluri_anno as
     (
     select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-           ( case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
-           mov.movgest_tipo_id,
-           ts.movgest_ts_id
+               ( case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
+               mov.movgest_tipo_id,
+               ts.movgest_ts_id
     from siac_t_movgest mov,siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-         siac_d_movgest_Ts_tipo tipo
+               siac_d_movgest_Ts_tipo tipo
     where mov.bil_id=bilancioId
     and   mov.movgest_anno::integer>=annoBilancio
     and   ts.movgest_id=mov.movgest_id
@@ -991,21 +1443,21 @@ BEGIN
     from siac_t_movgest mov,siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
          siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_programma r
     where mov.bil_id=bilancioPrecId
-    and   mov.movgest_anno::integer>=annoBilancio
-    and   ts.movgest_id=mov.movgest_id
-    and   r.movgest_ts_id=ts.movgest_ts_id
-    and   rs.movgest_ts_id=ts.movgest_ts_id
-    and   stato.movgest_stato_id=rs.movgest_stato_id
-    and   stato.movgest_stato_code!='A'
-    and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-    and   mov.data_cancellazione is null
-    and   mov.validita_fine is null
-    and   ts.data_cancellazione is null
-    and   ts.validita_fine is null
-    and   rs.data_cancellazione is null
-    and   rs.validita_fine is null
-    and   r.data_cancellazione is null
-    and   r.validita_fine is null
+    and     mov.movgest_anno::integer>=annoBilancio
+    and     ts.movgest_id=mov.movgest_id
+    and     r.movgest_ts_id=ts.movgest_ts_id
+    and     rs.movgest_ts_id=ts.movgest_ts_id
+    and     stato.movgest_stato_id=rs.movgest_stato_id
+    and     stato.movgest_stato_code!='A'
+    and     tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+    and     mov.data_cancellazione is null
+    and     mov.validita_fine is null
+    and     ts.data_cancellazione is null
+    and     ts.validita_fine is null
+    and     rs.data_cancellazione is null
+    and     rs.validita_fine is null
+    and     r.data_cancellazione is null
+    and     r.validita_fine is null
     ),
     progr as
     (
@@ -1024,18 +1476,33 @@ BEGIN
       and   p.validita_fine is null
     )
     select mov_pluri_anno.movgest_ts_id,
-           progr_anno.programma_id programma_new_id
+               progr_anno.programma_id programma_new_id
     from mov_pluri_anno,
-         mov_pluri_anno_prec, progr progr_anno_prec,
-         progr progr_anno
+               mov_pluri_anno_prec, progr progr_anno_prec,
+               progr progr_anno
     where mov_pluri_anno.movgest_anno=mov_pluri_anno_prec.movgest_anno
-    and   mov_pluri_anno.movgest_numero=mov_pluri_anno_prec.movgest_numero
-    and   mov_pluri_anno.movgest_subnumero=mov_pluri_anno_prec.movgest_subnumero
-    and   mov_pluri_anno.movgest_tipo_id=mov_pluri_anno_prec.movgest_tipo_id
-    and   progr_anno_prec.programma_id=mov_pluri_anno_prec.programma_id
-    and   progr_anno.bil_id=bilancioId
-    and   progr_anno.programma_code=progr_anno_prec.programma_code
-    ) query
+    and     mov_pluri_anno.movgest_numero=mov_pluri_anno_prec.movgest_numero
+    and     mov_pluri_anno.movgest_subnumero=mov_pluri_anno_prec.movgest_subnumero
+    and     mov_pluri_anno.movgest_tipo_id=mov_pluri_anno_prec.movgest_tipo_id
+    and     progr_anno_prec.programma_id=mov_pluri_anno_prec.programma_id
+    and     progr_anno.bil_id=bilancioId
+    and     progr_anno.programma_code=progr_anno_prec.programma_code
+    and      not exists  -- 17.05.2023 Sofia SIAC-8633
+    (
+     select 1 from siac_r_movgest_ts_programma  rp 
+     where rp.movgest_ts_id =mov_pluri_anno.movgest_ts_id 
+     and     rp.programma_id=progr_anno.programma_id 
+     and     rp.data_cancellazione  is null  
+     and     rp.validita_fine is null 
+    )
+    ) query,fase_bil_t_programmi fase -- 29.05.2023 Sofia SIAC-8633 ribaltamento dei movimenti solo per i programmi effettivamente creati
+    where 
+     -- 29.05.2023 Sofia SIAC-8633
+                 fase.fase_bil_elab_id=faseBilElabId
+    and     fase.programma_new_id=query.programma_new_id
+    and     fase.programma_new_id is not NULL
+    and     fase.data_cancellazione is null
+     -- 29.05.2023 Sofia SIAC-8633
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_programma res.inserimenti =%', strMessaggio,codResult;
@@ -1066,10 +1533,10 @@ BEGIN
   )
   (
     select query.movgest_ts_id,
-           query.programma_new_id,
-           clock_timestamp(),
-           loginOperazione,
-           enteProprietarioId
+                query.programma_new_id,
+                clock_timestamp(),
+                loginOperazione,
+                enteProprietarioId
     from
     (
     with
@@ -1079,12 +1546,12 @@ BEGIN
     mov_anno as
     (
       select mov.movgest_anno::integer movgest_anno,mov.movgest_numero::INTEGER movgest_numero,
-             ( case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                 ( case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
+                 mov.movgest_tipo_id,
+                 ts.movgest_ts_id
       from siac_t_movgest mov,siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,
-           siac_r_movgest_ts_attr rattr
+                siac_d_movgest_Ts_tipo tipo,
+                siac_r_movgest_ts_attr rattr
       where mov.bil_id=bilancioId
       and   ts.movgest_id=mov.movgest_id
       and   rs.movgest_ts_id=ts.movgest_ts_id
@@ -1126,9 +1593,9 @@ BEGIN
     and   rattr.validita_fine is null
     )
     select  mov_anno.*, annoRiacc.annoRiacc, numeroRiacc.numeroRiacc
-    from mov_anno, annoRiacc, numeroRiacc
+    from   mov_anno, annoRiacc, numeroRiacc
     where mov_anno.movgest_ts_id=annoRiacc.movgest_ts_id
-    and   mov_anno.movgest_ts_id=numeroRiacc.movgest_ts_id
+    and     mov_anno.movgest_ts_id=numeroRiacc.movgest_ts_id
     ),
     mov_riacc_anno_prec as
     (
@@ -1136,7 +1603,7 @@ BEGIN
            (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end) movgest_subnumero,
            mov.movgest_tipo_id, r.programma_id
     from siac_t_movgest mov,siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-         siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_programma r
+               siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_programma r
     where mov.bil_id=bilancioPrecId
     and   ts.movgest_id=mov.movgest_id
     and   r.movgest_ts_id=ts.movgest_ts_id
@@ -1171,17 +1638,32 @@ BEGIN
       and   p.validita_fine is null
     )
     select mov_riacc_anno.movgest_ts_id,
-           progr_anno.programma_id programma_new_id
+               progr_anno.programma_id programma_new_id
     from mov_riacc_anno,
-         mov_riacc_anno_prec, progr progr_anno_prec,
-         progr progr_anno
+               mov_riacc_anno_prec, progr progr_anno_prec,
+               progr progr_anno
     where mov_riacc_anno.annoRiacc=mov_riacc_anno_prec.movgest_anno
-    and   mov_riacc_anno.numeroRiacc=mov_riacc_anno_prec.movgest_numero
-    and   mov_riacc_anno.movgest_tipo_id=mov_riacc_anno_prec.movgest_tipo_id
-    and   progr_anno_prec.programma_id=mov_riacc_anno_prec.programma_id
-    and   progr_anno.bil_id=bilancioId
-    and   progr_anno.programma_code=progr_anno_prec.programma_code
-    ) query
+    and      mov_riacc_anno.numeroRiacc=mov_riacc_anno_prec.movgest_numero
+    and      mov_riacc_anno.movgest_tipo_id=mov_riacc_anno_prec.movgest_tipo_id
+    and      progr_anno_prec.programma_id=mov_riacc_anno_prec.programma_id
+    and      progr_anno.bil_id=bilancioId
+    and      progr_anno.programma_code=progr_anno_prec.programma_code
+    and      not exists  -- 17.05.2023 Sofia SIAC-8633
+    (
+     select 1 from siac_r_movgest_ts_programma  rp 
+     where rp.movgest_ts_id =mov_riacc_anno.movgest_ts_id 
+     and     rp.programma_id=progr_anno.programma_id 
+     and     rp.data_cancellazione  is null  
+     and     rp.validita_fine is null 
+    )
+    ) query,fase_bil_t_programmi fase -- 29.05.2023 Sofia SIAC-8633 ribaltamento dei movimenti solo per i programmi effettivamente creati
+        -- 29.05.2023 Sofia SIAC-8633
+   where  fase.fase_bil_elab_id=faseBilElabId
+    and     fase.programma_new_id=query.programma_new_id
+    and     fase.programma_new_id is not NULL
+    and     fase.data_cancellazione is null
+     -- 29.05.2023 Sofia SIAC-8633
+
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_programma res.inserimenti =%', strMessaggio,codResult;
@@ -1212,105 +1694,121 @@ BEGIN
   )
   (
   select query.movgest_ts_id,
-         query.cronop_new_id,
-         clock_timestamp(),
-         loginOperazione,
-         enteProprietarioId
+              query.cronop_new_id,
+              clock_timestamp(),
+              loginOperazione,
+              enteProprietarioId
   from
   (
     with
     mov_res_anno as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+                 mov.movgest_tipo_id,
+                 ts.movgest_ts_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo
+                siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                siac_d_movgest_Ts_tipo tipo
       where mov.bil_id=bilancioId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer<annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code in ('D','N')
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer<annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code in ('D','N')
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
     ),
     mov_res_anno_prec as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
-             mov.movgest_tipo_id, r.cronop_id
+                  (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
+                   mov.movgest_tipo_id, r.cronop_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
+                 siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                 siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
       where mov.bil_id=bilancioPrecId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer<annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   r.movgest_ts_id=ts.movgest_ts_id
-      and   r.cronop_elem_id is null
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code in ('D','N')
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   r.data_cancellazione is null
-      and   r.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer<annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      r.movgest_ts_id=ts.movgest_ts_id
+      and      r.cronop_elem_id is null
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code in ('D','N')
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      r.data_cancellazione is null
+      and      r.validita_fine is null
     ),
     cronop as
     (
      select  cronop.cronop_id, cronop.bil_id,
-             cronop.cronop_code,
-             prog.programma_id, prog.programma_code
+                  cronop.cronop_code,
+                  prog.programma_id, prog.programma_code
      from siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-          siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo
+               siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo
    	 where  tipo.ente_proprietario_id=enteProprietarioId
-     and    tipo.programma_tipo_code=G_FASE
-     and    prog.programma_tipo_id=tipo.programma_tipo_id
-     and    cronop.programma_id=prog.programma_id
-     and    rs.cronop_id=cronop.cronop_id
-     and    stato.cronop_stato_id=rs.cronop_stato_id
+     and      tipo.programma_tipo_code=G_FASE
+     and      prog.programma_tipo_id=tipo.programma_tipo_id
+     and      cronop.programma_id=prog.programma_id
+     and      rs.cronop_id=cronop.cronop_id
+     and      stato.cronop_stato_id=rs.cronop_stato_id
 --     and    stato.cronop_stato_code='VA' -- 06.08.2019 Sofia siac-6934
-     and    stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
-     and    rsp.programma_id=prog.programma_id
-     and    pstato.programma_stato_id=rsp.programma_stato_id
+     and      stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
+     and      rsp.programma_id=prog.programma_id
+     and      pstato.programma_stato_id=rsp.programma_stato_id
 --     and    pstato.programma_stato_code='VA'
-     and    pstato.programma_stato_code!='AN'      -- 06.08.2019 Sofia siac-6934
-     and    rs.data_cancellazione is null
-     and    rs.validita_fine is null
-     and    rsp.data_cancellazione is null
-     and    rsp.validita_fine is null
-     and    prog.data_cancellazione is null
-     and    prog.validita_fine is null
-     and    cronop.data_cancellazione is null
-     and    cronop.validita_fine is null
+     and      pstato.programma_stato_code!='AN'      -- 06.08.2019 Sofia siac-6934
+     and      rs.data_cancellazione is null
+     and      rs.validita_fine is null
+     and      rsp.data_cancellazione is null
+     and      rsp.validita_fine is null
+     and      prog.data_cancellazione is null
+     and      prog.validita_fine is null
+     and      cronop.data_cancellazione is null
+     and      cronop.validita_fine is null
     )
     select cronop_anno.cronop_id cronop_new_id,
-           mov_res_anno.movgest_ts_id
+                mov_res_anno.movgest_ts_id
     from mov_res_anno, mov_res_anno_prec, cronop cronop_anno, cronop cronop_anno_prec
     where mov_res_anno.movgest_anno=mov_res_anno_prec.movgest_anno
-    and   mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
-    and   mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
-    and   cronop_anno_prec.cronop_id=mov_res_anno_prec.cronop_id
-    and   cronop_anno.bil_id=bilancioId
-    and   cronop_anno.programma_code=cronop_anno_prec.programma_code
-    and   cronop_anno.cronop_code=cronop_anno_prec.cronop_code
-   ) query
+    and     mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
+    and     mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
+    and     cronop_anno_prec.cronop_id=mov_res_anno_prec.cronop_id
+    and     cronop_anno.bil_id=bilancioId
+    and     cronop_anno.programma_code=cronop_anno_prec.programma_code
+    and     cronop_anno.cronop_code=cronop_anno_prec.cronop_code
+    and     not exists  -- 17.05.2023 Sofia SIAC-8633
+    (
+    select 1 
+    from siac_r_movgest_ts_cronop_elem rc
+    where rc.cronop_id=cronop_anno.cronop_id 
+    and      rc.movgest_ts_id=mov_res_anno.movgest_ts_id 
+    and      rc.data_cancellazione is null 
+    and      rc.validita_fine is null 
+    )
+   ) query,fase_bil_t_cronop fase -- 29.05.2023 Sofia SIAC-8633
+   where    -- 29.05.2023 Sofia SIAC-8633
+                fase.fase_bil_elab_id=faseBilElabId
+    and     fase.fl_elab='S'
+    and     fase.cronop_new_id is not null
+    and     fase.cronop_new_id=query.cronop_new_id
+    and     fase.data_cancellazione  is null 
+    -- 29.05.2023 Sofia SIAC-8633
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_cronop_elem res.inserimenti =%', strMessaggio,codResult;
@@ -1342,105 +1840,122 @@ BEGIN
   )
   (
   select query.movgest_ts_id,
-         query.cronop_new_id,
-         clock_timestamp(),
-         loginOperazione,
-         enteProprietarioId
+             query.cronop_new_id,
+             clock_timestamp(),
+             loginOperazione,
+             enteProprietarioId
   from
   (
     with
     mov_res_anno as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+                 mov.movgest_tipo_id,
+                 ts.movgest_ts_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo
+                siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                siac_d_movgest_Ts_tipo tipo
       where mov.bil_id=bilancioId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer>=annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code!='A'
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer>=annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code!='A'
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
     ),
     mov_res_anno_prec as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
-             mov.movgest_tipo_id, r.cronop_id
+                  (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
+                  mov.movgest_tipo_id, r.cronop_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
+                siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
       where mov.bil_id=bilancioPrecId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer>=annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   r.movgest_ts_id=ts.movgest_ts_id
-      and   r.cronop_elem_id is null
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code !='A'
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   r.data_cancellazione is null
-      and   r.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer>=annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      r.movgest_ts_id=ts.movgest_ts_id
+      and      r.cronop_elem_id is null
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code !='A'
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      r.data_cancellazione is null
+      and      r.validita_fine is null
     ),
     cronop as
     (
      select  cronop.cronop_id, cronop.bil_id,
-             cronop.cronop_code,
-             prog.programma_id, prog.programma_code
+                  cronop.cronop_code,
+                  prog.programma_id, prog.programma_code
      from siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-          siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo
+                siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo
    	 where  tipo.ente_proprietario_id=enteProprietarioId
-     and    tipo.programma_tipo_code=G_FASE
-     and    prog.programma_tipo_id=tipo.programma_tipo_id
-     and    cronop.programma_id=prog.programma_id
-     and    rs.cronop_id=cronop.cronop_id
-     and    stato.cronop_stato_id=rs.cronop_stato_id
+     and      tipo.programma_tipo_code=G_FASE
+     and      prog.programma_tipo_id=tipo.programma_tipo_id
+     and      cronop.programma_id=prog.programma_id
+     and      rs.cronop_id=cronop.cronop_id
+     and      stato.cronop_stato_id=rs.cronop_stato_id
 --     and    stato.cronop_stato_code='VA'  -- 06.08.2019 Sofia siac-6934
-     and    stato.cronop_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
-     and    rsp.programma_id=prog.programma_id
-     and    pstato.programma_stato_id=rsp.programma_stato_id
+     and      stato.cronop_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
+     and      rsp.programma_id=prog.programma_id
+     and      pstato.programma_stato_id=rsp.programma_stato_id
 --     and    pstato.programma_stato_code='VA'   -- 06.08.2019 Sofia siac-6934
-     and    pstato.programma_stato_code!='AN'   -- 06.08.2019 Sofia siac-6934
-     and    rs.data_cancellazione is null
-     and    rs.validita_fine is null
-     and    rsp.data_cancellazione is null
-     and    rsp.validita_fine is null
-     and    prog.data_cancellazione is null
-     and    prog.validita_fine is null
-     and    cronop.data_cancellazione is null
-     and    cronop.validita_fine is null
+     and      pstato.programma_stato_code!='AN'   -- 06.08.2019 Sofia siac-6934
+     and      rs.data_cancellazione is null
+     and      rs.validita_fine is null
+     and      rsp.data_cancellazione is null
+     and      rsp.validita_fine is null
+     and      prog.data_cancellazione is null
+     and      prog.validita_fine is null
+     and      cronop.data_cancellazione is null
+     and      cronop.validita_fine is null
     )
     select cronop_anno.cronop_id cronop_new_id,
-           mov_res_anno.movgest_ts_id
+               mov_res_anno.movgest_ts_id
     from mov_res_anno, mov_res_anno_prec, cronop cronop_anno_prec, cronop cronop_anno
     where mov_res_anno.movgest_anno=mov_res_anno_prec.movgest_anno
-    and   mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
-    and   mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
-    and   cronop_anno_prec.cronop_id=mov_res_anno_prec.cronop_id
-    and   cronop_anno.bil_id=bilancioId
-    and   cronop_anno.programma_code=cronop_anno_prec.programma_code
-    and   cronop_anno.cronop_code=cronop_anno_prec.cronop_code
-   ) query
+    and     mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
+    and     mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
+    and     cronop_anno_prec.cronop_id=mov_res_anno_prec.cronop_id
+    and     cronop_anno.bil_id=bilancioId
+    and     cronop_anno.programma_code=cronop_anno_prec.programma_code
+    and     cronop_anno.cronop_code=cronop_anno_prec.cronop_code
+    and     not exists  -- 17.05.2023 Sofia SIAC-8633
+    (
+    select 1 
+    from siac_r_movgest_ts_cronop_elem rc
+    where rc.cronop_id=cronop_anno.cronop_id 
+    and      rc.movgest_ts_id=mov_res_anno.movgest_ts_id 
+    and      rc.data_cancellazione is null 
+    and      rc.validita_fine is null 
+    )
+   ) query, fase_bil_t_cronop fase  -- 29.05.2023 Sofia SIAC-8633
+   where     -- 29.05.2023 Sofia SIAC-8633
+                fase.fase_bil_elab_id=faseBilElabId
+    and     fase.fl_elab='S'
+    and     fase.cronop_new_id is not null
+    and     fase.cronop_new_id=query.cronop_new_id
+    and     fase.data_cancellazione  is null 
+    -- 29.05.2023 Sofia SIAC-8633
+
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_cronop_elem res.inserimenti =%', strMessaggio,codResult;
@@ -1472,10 +1987,10 @@ BEGIN
   )
   (
   select query.movgest_ts_id,
-         query.cronop_new_id,
-         clock_timestamp(),
-         loginOperazione,
-         enteProprietarioId
+              query.cronop_new_id,
+              clock_timestamp(),
+              loginOperazione,
+              enteProprietarioId
   from
   (
     with
@@ -1485,112 +2000,112 @@ BEGIN
     mov_anno as
     (
       select mov.movgest_anno::integer movgest_anno,mov.movgest_numero::INTEGER movgest_numero,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+                 mov.movgest_tipo_id,
+                 ts.movgest_ts_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_attr rattr
+                 siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                 siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_attr rattr
       where mov.bil_id=bilancioId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   ts.movgest_id=mov.movgest_id
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code!='A'
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   tipo.movgest_ts_tipo_code='T'
-      and   rattr.movgest_ts_id=ts.movgest_ts_id
-      and   rattr.attr_id=flagDaRiaccAttrId
-      and   rattr.boolean='S'
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      ts.movgest_id=mov.movgest_id
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code!='A'
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      tipo.movgest_ts_tipo_code='T'
+      and      rattr.movgest_ts_id=ts.movgest_ts_id
+      and      rattr.attr_id=flagDaRiaccAttrId
+      and      rattr.boolean='S'
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
     ),
     annoRiacc as
     (
-    select rattr.movgest_ts_id, rattr.testo::integer annoRiacc
-    from siac_r_movgest_ts_attr rattr
-    where rattr.attr_id=annoRiaccAttrId
-    and   rattr.testo is not null
-    and   rattr.testo!='null'
-    and   coalesce(rattr.testo ,'')!=''
-    and   rattr.data_cancellazione is null
-    and   rattr.validita_fine is null
+     select rattr.movgest_ts_id, rattr.testo::integer annoRiacc
+     from siac_r_movgest_ts_attr rattr
+     where rattr.attr_id=annoRiaccAttrId
+     and   rattr.testo is not null
+     and   rattr.testo!='null'
+     and   coalesce(rattr.testo ,'')!=''
+     and   rattr.data_cancellazione is null
+     and   rattr.validita_fine is null
     ),
     numeroRiacc as
     (
-    select rattr.movgest_ts_id, rattr.testo::integer numeroRiacc
-    from siac_r_movgest_ts_attr rattr
-    where rattr.attr_id=numeroRiaccAttrId
-    and   rattr.testo is not null
-    and   rattr.testo!='null'
-    and   coalesce(rattr.testo ,'')!=''
-    and   rattr.data_cancellazione is null
-    and   rattr.validita_fine is null
+     select rattr.movgest_ts_id, rattr.testo::integer numeroRiacc
+     from siac_r_movgest_ts_attr rattr
+     where rattr.attr_id=numeroRiaccAttrId
+     and   rattr.testo is not null
+     and   rattr.testo!='null'
+     and   coalesce(rattr.testo ,'')!=''
+     and   rattr.data_cancellazione is null
+     and   rattr.validita_fine is null
     )
     select  mov_anno.*, annoRiacc.annoRiacc, numeroRiacc.numeroRiacc
     from mov_anno, annoRiacc, numeroRiacc
     where mov_anno.movgest_ts_id=annoRiacc.movgest_ts_id
-    and   mov_anno.movgest_ts_id=numeroRiacc.movgest_ts_id
+    and     mov_anno.movgest_ts_id=numeroRiacc.movgest_ts_id
     ),
     mov_riacc_anno_prec as
     (
       select mov.movgest_anno::integer movgest_anno,mov.movgest_numero::INTEGER movgest_numero,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
-             mov.movgest_tipo_id, r.cronop_id
+                  (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
+                  mov.movgest_tipo_id, r.cronop_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
+                 siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                 siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
       where mov.bil_id=bilancioPrecId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   ts.movgest_id=mov.movgest_id
-      and   r.movgest_ts_id=ts.movgest_ts_id
-      and   r.cronop_elem_id is null
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code !='A'
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   r.data_cancellazione is null
-      and   r.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      ts.movgest_id=mov.movgest_id
+      and      r.movgest_ts_id=ts.movgest_ts_id
+      and      r.cronop_elem_id is null
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code !='A'
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      r.data_cancellazione is null
+      and      r.validita_fine is null
     ),
     cronop as
     (
      select  cronop.cronop_id, cronop.bil_id,
-             cronop.cronop_code,
-             prog.programma_id, prog.programma_code
+                  cronop.cronop_code,
+                  prog.programma_id, prog.programma_code
      from siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-          siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo
+                siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo
    	 where  tipo.ente_proprietario_id=enteProprietarioId
-     and    tipo.programma_tipo_code=G_FASE
-     and    prog.programma_tipo_id=tipo.programma_tipo_id
-     and    cronop.programma_id=prog.programma_id
-     and    rs.cronop_id=cronop.cronop_id
-     and    stato.cronop_stato_id=rs.cronop_stato_id
+     and       tipo.programma_tipo_code=G_FASE
+     and       prog.programma_tipo_id=tipo.programma_tipo_id
+     and       cronop.programma_id=prog.programma_id
+     and       rs.cronop_id=cronop.cronop_id
+     and       stato.cronop_stato_id=rs.cronop_stato_id
 --     and    stato.cronop_stato_code='VA' -- 06.08.2019 Sofia siac-6934
-     and    stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
-     and    rsp.programma_id=prog.programma_id
-     and    pstato.programma_stato_id=rsp.programma_stato_id
+     and       stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
+     and       rsp.programma_id=prog.programma_id
+     and       pstato.programma_stato_id=rsp.programma_stato_id
 --     and    pstato.programma_stato_code='VA'  -- 06.08.2019 Sofia siac-6934
-     and    pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
-     and    rs.data_cancellazione is null
-     and    rs.validita_fine is null
-     and    rsp.data_cancellazione is null
-     and    rsp.validita_fine is null
-     and    prog.data_cancellazione is null
-     and    prog.validita_fine is null
-     and    cronop.data_cancellazione is null
-     and    cronop.validita_fine is null
+     and       pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
+     and       rs.data_cancellazione is null
+     and       rs.validita_fine is null
+     and       rsp.data_cancellazione is null
+     and       rsp.validita_fine is null
+     and       prog.data_cancellazione is null
+     and       prog.validita_fine is null
+     and       cronop.data_cancellazione is null
+     and       cronop.validita_fine is null
     )
     select cronop_anno.cronop_id cronop_new_id,
            mov_riacc_anno.movgest_ts_id
@@ -1601,7 +2116,7 @@ BEGIN
     and   cronop_anno.bil_id=bilancioId
     and   cronop_anno.programma_code=cronop_anno_prec.programma_code
     and   cronop_anno.cronop_code=cronop_anno_prec.cronop_code
-   ) query
+   ) query,  fase_bil_t_cronop fase  -- 29.05.2023 Sofia SIAC-8633
    where
    not exists
    (select 1
@@ -1612,6 +2127,13 @@ BEGIN
     and   r1.data_cancellazione is null
     and   r1.validita_fine is null
    )
+   -- 29.05.2023 Sofia SIAC-8633
+    and     fase.fase_bil_elab_id=faseBilElabId
+    and     fase.fl_elab='S'
+    and     fase.cronop_new_id is not null
+    and     fase.cronop_new_id=query.cronop_new_id
+    and     fase.data_cancellazione  is null 
+    -- 29.05.2023 Sofia SIAC-8633
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_cronop_elem riacc.inserimenti =%', strMessaggio,codResult;
@@ -1644,137 +2166,136 @@ BEGIN
   )
   (
   select query.movgest_ts_id,
-  	     query.cronop_new_id,
-         query.cronop_elem_new_id,
-         clock_timestamp(),
-         loginOperazione,
-         enteProprietarioId
+  	          query.cronop_new_id,
+              query.cronop_elem_new_id,
+              clock_timestamp(),
+              loginOperazione,
+              enteProprietarioId
   from
   (
     with
     mov_res_anno as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+                 mov.movgest_tipo_id,
+                 ts.movgest_ts_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo
+                siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                siac_d_movgest_Ts_tipo tipo
       where mov.bil_id=bilancioId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer<annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code in ('D','N')
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer<annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code in ('D','N')
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
     ),
     mov_res_anno_prec as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
-             mov.movgest_tipo_id, r.cronop_elem_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
+                 mov.movgest_tipo_id, r.cronop_elem_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
+                siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
       where mov.bil_id=bilancioPrecId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer<annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   r.movgest_ts_id=ts.movgest_ts_id
-      and   r.cronop_elem_id is not null
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code in ('D','N')
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   r.data_cancellazione is null
-      and   r.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer<annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      r.movgest_ts_id=ts.movgest_ts_id
+      and      r.cronop_elem_id is not null
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code in ('D','N')
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      r.data_cancellazione is null
+      and      r.validita_fine is null
     ),
     cronop_elem as
     (
      select  cronop.cronop_id, cronop.bil_id,
-             cronop.cronop_code,
-             prog.programma_id, prog.programma_code,
-             celem.cronop_elem_id,
-             coalesce(celem.cronop_elem_code,'')  cronop_elem_code,
-             coalesce(celem.cronop_elem_code2,'') cronop_elem_code2,
-             coalesce(celem.cronop_elem_code3,'') cronop_elem_code3,
-             coalesce(celem.elem_tipo_id,0)       elem_tipo_id,
-             coalesce(celem.cronop_elem_desc,'')  cronop_elem_desc,
-             coalesce(celem.cronop_elem_desc2,'') cronop_elem_desc2,
-             coalesce(det.periodo_id,0)           periodo_id,
-             coalesce(det.cronop_elem_det_importo,0) cronop_elem_det_importo,
-             coalesce(det.cronop_elem_det_desc,'') cronop_elem_det_desc,
-             coalesce(det.anno_entrata,'')        anno_entrata,
-             coalesce(det.elem_det_tipo_id,0)     elem_det_tipo_id
+                 cronop.cronop_code,
+                 prog.programma_id, prog.programma_code,
+                 celem.cronop_elem_id,
+                 coalesce(celem.cronop_elem_code,'')  cronop_elem_code,
+                 coalesce(celem.cronop_elem_code2,'') cronop_elem_code2,
+                 coalesce(celem.cronop_elem_code3,'') cronop_elem_code3,
+                 coalesce(celem.elem_tipo_id,0)       elem_tipo_id,
+                 coalesce(celem.cronop_elem_desc,'')  cronop_elem_desc,
+                 coalesce(celem.cronop_elem_desc2,'') cronop_elem_desc2,
+                 coalesce(det.periodo_id,0)           periodo_id,
+                 coalesce(det.cronop_elem_det_importo,0) cronop_elem_det_importo,
+                 coalesce(det.cronop_elem_det_desc,'') cronop_elem_det_desc,
+                 coalesce(det.anno_entrata,'')        anno_entrata,
+                 coalesce(det.elem_det_tipo_id,0)     elem_det_tipo_id
      from siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-          siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo,
-          siac_t_cronop_elem celem,siac_t_cronop_elem_det det
+               siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo,
+               siac_t_cronop_elem celem,siac_t_cronop_elem_det det
    	 where  tipo.ente_proprietario_id=enteProprietarioId
-     and    tipo.programma_tipo_code=G_FASE
-     and    prog.programma_tipo_id=tipo.programma_tipo_id
-     and    cronop.programma_id=prog.programma_id
-     and    celem.cronop_id=cronop.cronop_id
-     and    det.cronop_elem_id=celem.cronop_elem_id
-     and    rs.cronop_id=cronop.cronop_id
-     and    stato.cronop_stato_id=rs.cronop_stato_id
+     and      tipo.programma_tipo_code=G_FASE
+     and      prog.programma_tipo_id=tipo.programma_tipo_id
+     and      cronop.programma_id=prog.programma_id
+     and      celem.cronop_id=cronop.cronop_id
+     and      det.cronop_elem_id=celem.cronop_elem_id
+     and      rs.cronop_id=cronop.cronop_id
+     and      stato.cronop_stato_id=rs.cronop_stato_id
 --     and    stato.cronop_stato_code='VA' -- 06.08.2019 Sofia siac-6934
-     and    stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
-     and    rsp.programma_id=prog.programma_id
-     and    pstato.programma_stato_id=rsp.programma_stato_id
+     and      stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
+     and      rsp.programma_id=prog.programma_id
+     and      pstato.programma_stato_id=rsp.programma_stato_id
 --     and    pstato.programma_stato_code='VA'  -- 06.08.2019 Sofia siac-6934
-     and    pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
-     and    rs.data_cancellazione is null
-     and    rs.validita_fine is null
-     and    rsp.data_cancellazione is null
-     and    rsp.validita_fine is null
-     and    prog.data_cancellazione is null
-     and    prog.validita_fine is null
-     and    cronop.data_cancellazione is null
-     and    cronop.validita_fine is null
-     and    celem.data_cancellazione is null
-     and    celem.validita_fine is null
-     and    det.data_cancellazione is null
-     and    det.validita_fine is null
-
+     and      pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
+     and      rs.data_cancellazione is null
+     and      rs.validita_fine is null
+     and      rsp.data_cancellazione is null
+     and      rsp.validita_fine is null
+     and      prog.data_cancellazione is null
+     and      prog.validita_fine is null
+     and      cronop.data_cancellazione is null
+     and      cronop.validita_fine is null
+     and      celem.data_cancellazione is null
+     and      celem.validita_fine is null
+     and      det.data_cancellazione is null
+     and      det.validita_fine is null
     )
     select cronop_elem_anno.cronop_elem_id cronop_elem_new_id,
-           cronop_elem_anno.cronop_id cronop_new_id,
-           mov_res_anno.movgest_ts_id
+                cronop_elem_anno.cronop_id cronop_new_id,
+                mov_res_anno.movgest_ts_id
     from mov_res_anno, mov_res_anno_prec, cronop_elem cronop_elem_anno_prec, cronop_elem cronop_elem_anno
     where mov_res_anno.movgest_anno=mov_res_anno_prec.movgest_anno
-    and   mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
-    and   mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
-    and   cronop_elem_anno_prec.cronop_elem_id=mov_res_anno_prec.cronop_elem_id
-    and   cronop_elem_anno.bil_id=bilancioId
-    and   cronop_elem_anno.programma_code=cronop_elem_anno_prec.programma_code
-    and   cronop_elem_anno.cronop_code=cronop_elem_anno_prec.cronop_code
-    and   cronop_elem_anno.cronop_elem_code=cronop_elem_anno_prec.cronop_elem_code
-    and   cronop_elem_anno.cronop_elem_code2=cronop_elem_anno_prec.cronop_elem_code2
-    and   cronop_elem_anno.cronop_elem_code3=cronop_elem_anno_prec.cronop_elem_code3
-    and   cronop_elem_anno.elem_tipo_id=cronop_elem_anno_prec.elem_tipo_id
-    and   cronop_elem_anno.cronop_elem_desc=cronop_elem_anno_prec.cronop_elem_desc
-    and   cronop_elem_anno.cronop_elem_desc2=cronop_elem_anno_prec.cronop_elem_desc2
-    and   cronop_elem_anno.periodo_id=cronop_elem_anno_prec.periodo_id
-    and   cronop_elem_anno.cronop_elem_det_importo=cronop_elem_anno_prec.cronop_elem_det_importo
-    and   cronop_elem_anno.cronop_elem_det_desc=cronop_elem_anno_prec.cronop_elem_det_desc
-    and   cronop_elem_anno.anno_entrata=cronop_elem_anno_prec.anno_entrata
-    and   cronop_elem_anno.elem_det_tipo_id=cronop_elem_anno_prec.elem_det_tipo_id
+    and     mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
+    and     mov_res_anno.movgest_subnumero=mov_res_anno_prec.movgest_subnumero
+    and     cronop_elem_anno_prec.cronop_elem_id=mov_res_anno_prec.cronop_elem_id
+    and     cronop_elem_anno.bil_id=bilancioId
+    and     cronop_elem_anno.programma_code=cronop_elem_anno_prec.programma_code
+    and     cronop_elem_anno.cronop_code=cronop_elem_anno_prec.cronop_code
+    and     cronop_elem_anno.cronop_elem_code=cronop_elem_anno_prec.cronop_elem_code
+    and     cronop_elem_anno.cronop_elem_code2=cronop_elem_anno_prec.cronop_elem_code2
+    and     cronop_elem_anno.cronop_elem_code3=cronop_elem_anno_prec.cronop_elem_code3
+    and     cronop_elem_anno.elem_tipo_id=cronop_elem_anno_prec.elem_tipo_id
+    and     cronop_elem_anno.cronop_elem_desc=cronop_elem_anno_prec.cronop_elem_desc
+    and     cronop_elem_anno.cronop_elem_desc2=cronop_elem_anno_prec.cronop_elem_desc2
+    and     cronop_elem_anno.periodo_id=cronop_elem_anno_prec.periodo_id
+    and     cronop_elem_anno.cronop_elem_det_importo=cronop_elem_anno_prec.cronop_elem_det_importo
+    and     cronop_elem_anno.cronop_elem_det_desc=cronop_elem_anno_prec.cronop_elem_det_desc
+    and     cronop_elem_anno.anno_entrata=cronop_elem_anno_prec.anno_entrata
+    and     cronop_elem_anno.elem_det_tipo_id=cronop_elem_anno_prec.elem_det_tipo_id
     and   exists
     (
     	select 1
@@ -1817,7 +2338,24 @@ BEGIN
         and   rc.data_cancellazione is null
         and   rc.validita_fine is null
     )
-   ) query
+    and not exists -- 17.05.2023 Sofia SIAC-8633
+    (
+	 select 1 
+	 from siac_r_movgest_ts_cronop_elem r
+  	 where r.movgest_ts_id=mov_res_anno.movgest_ts_id
+  	 and     r.cronop_id=cronop_elem_anno.cronop_id
+  	 and     r.cronop_elem_id=cronop_elem_anno.cronop_elem_id
+  	 and     r.data_cancellazione is null 
+  	 and     r.validita_fine is null
+    )
+   ) query,   fase_bil_t_cronop fase  -- 29.05.2023 Sofia SIAC-8633
+   where   -- 29.05.2023 Sofia SIAC-8633
+               fase.fase_bil_elab_id=faseBilElabId
+   and     fase.fl_elab='S'
+   and     fase.cronop_new_id is not null
+   and     fase.cronop_new_id=query.cronop_new_id
+   and     fase.data_cancellazione  is null 
+    -- 29.05.2023 Sofia SIAC-8633
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_cronop_elem res.inserimenti =%', strMessaggio,codResult;
@@ -1849,118 +2387,117 @@ BEGIN
   )
   (
   select query.movgest_ts_id,
-  	     query.cronop_new_id,
-         query.cronop_elem_new_id,
-         clock_timestamp(),
-         loginOperazione,
-         enteProprietarioId
+  	          query.cronop_new_id,
+              query.cronop_elem_new_id,
+              clock_timestamp(),
+              loginOperazione,
+              enteProprietarioId
   from
   (
     with
     mov_res_anno as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                  (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+                  mov.movgest_tipo_id,
+                  ts.movgest_ts_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo
+                siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                siac_d_movgest_Ts_tipo tipo
       where mov.bil_id=bilancioId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer>=annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code!='A'
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer>=annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code!='A'
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
     ),
     mov_res_anno_prec as
     (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
-             mov.movgest_tipo_id, r.cronop_elem_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
+                 mov.movgest_tipo_id, r.cronop_elem_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
+                 siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                 siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
       where mov.bil_id=bilancioPrecId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   mov.movgest_anno::integer>=annoBilancio
-      and   ts.movgest_id=mov.movgest_id
-      and   r.movgest_ts_id=ts.movgest_ts_id
-      and   r.cronop_elem_id is not null
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code!='A'
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   r.data_cancellazione is null
-      and   r.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      mov.movgest_anno::integer>=annoBilancio
+      and      ts.movgest_id=mov.movgest_id
+      and      r.movgest_ts_id=ts.movgest_ts_id
+      and      r.cronop_elem_id is not null
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code!='A'
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      r.data_cancellazione is null
+      and      r.validita_fine is null
     ),
     cronop_elem as
     (
      select  cronop.cronop_id, cronop.bil_id,
-             cronop.cronop_code,
-             prog.programma_id, prog.programma_code,
-             celem.cronop_elem_id,
-             coalesce(celem.cronop_elem_code,'')  cronop_elem_code,
-             coalesce(celem.cronop_elem_code2,'') cronop_elem_code2,
-             coalesce(celem.cronop_elem_code3,'') cronop_elem_code3,
-             coalesce(celem.elem_tipo_id,0)      elem_tipo_id,
-             coalesce(celem.cronop_elem_desc,'')  cronop_elem_desc,
-             coalesce(celem.cronop_elem_desc2,'')  cronop_elem_desc2,
-             coalesce(det.periodo_id,0)           periodo_id,
-             coalesce(det.cronop_elem_det_importo,0) cronop_elem_det_importo,
-             coalesce(det.cronop_elem_det_desc,'') cronop_elem_det_desc,
-             coalesce(det.anno_entrata,'')        anno_entrata,
-             coalesce(det.elem_det_tipo_id,0)     elem_det_tipo_id
+                  cronop.cronop_code,
+                  prog.programma_id, prog.programma_code,
+                  celem.cronop_elem_id,
+                  coalesce(celem.cronop_elem_code,'')  cronop_elem_code,
+                  coalesce(celem.cronop_elem_code2,'') cronop_elem_code2,
+                  coalesce(celem.cronop_elem_code3,'') cronop_elem_code3,
+                  coalesce(celem.elem_tipo_id,0)      elem_tipo_id,
+                  coalesce(celem.cronop_elem_desc,'')  cronop_elem_desc,
+                  coalesce(celem.cronop_elem_desc2,'')  cronop_elem_desc2,
+                  coalesce(det.periodo_id,0)           periodo_id,
+                  coalesce(det.cronop_elem_det_importo,0) cronop_elem_det_importo,
+                  coalesce(det.cronop_elem_det_desc,'') cronop_elem_det_desc,
+                  coalesce(det.anno_entrata,'')        anno_entrata,
+                  coalesce(det.elem_det_tipo_id,0)     elem_det_tipo_id
      from siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-          siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo,
-          siac_t_cronop_elem celem,siac_t_cronop_elem_det det
+               siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo,
+               siac_t_cronop_elem celem,siac_t_cronop_elem_det det
    	 where  tipo.ente_proprietario_id=enteProprietarioId
-     and    tipo.programma_tipo_code=G_FASE
-     and    prog.programma_tipo_id=tipo.programma_tipo_id
-     and    cronop.programma_id=prog.programma_id
-     and    celem.cronop_id=cronop.cronop_id
-     and    det.cronop_elem_id=celem.cronop_elem_id
-     and    rs.cronop_id=cronop.cronop_id
-     and    stato.cronop_stato_id=rs.cronop_stato_id
+     and      tipo.programma_tipo_code=G_FASE
+     and      prog.programma_tipo_id=tipo.programma_tipo_id
+     and      cronop.programma_id=prog.programma_id
+     and      celem.cronop_id=cronop.cronop_id
+     and      det.cronop_elem_id=celem.cronop_elem_id
+     and      rs.cronop_id=cronop.cronop_id
+     and      stato.cronop_stato_id=rs.cronop_stato_id
 --     and    stato.cronop_stato_code='VA' -- 06.08.2019 Sofia siac-6934
-     and    stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
-     and    rsp.programma_id=prog.programma_id
-     and    pstato.programma_stato_id=rsp.programma_stato_id
+     and      stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
+     and      rsp.programma_id=prog.programma_id
+     and      pstato.programma_stato_id=rsp.programma_stato_id
 --     and    pstato.programma_stato_code='VA'  -- 06.08.2019 Sofia siac-6934
-     and    pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
-     and    rs.data_cancellazione is null
-     and    rs.validita_fine is null
-     and    rsp.data_cancellazione is null
-     and    rsp.validita_fine is null
-     and    prog.data_cancellazione is null
-     and    prog.validita_fine is null
-     and    cronop.data_cancellazione is null
-     and    cronop.validita_fine is null
-     and    celem.data_cancellazione is null
-     and    celem.validita_fine is null
-     and    det.data_cancellazione is null
-     and    det.validita_fine is null
-
+     and      pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
+     and      rs.data_cancellazione is null
+     and      rs.validita_fine is null
+     and      rsp.data_cancellazione is null
+     and      rsp.validita_fine is null
+     and      prog.data_cancellazione is null
+     and      prog.validita_fine is null
+     and      cronop.data_cancellazione is null
+     and      cronop.validita_fine is null
+     and      celem.data_cancellazione is null
+     and      celem.validita_fine is null
+     and      det.data_cancellazione is null
+     and      det.validita_fine is null
     )
     select cronop_elem_anno.cronop_elem_id cronop_elem_new_id,
-           cronop_elem_anno.cronop_id cronop_new_id,
-           mov_res_anno.movgest_ts_id
+               cronop_elem_anno.cronop_id cronop_new_id,
+               mov_res_anno.movgest_ts_id
     from mov_res_anno, mov_res_anno_prec, cronop_elem cronop_elem_anno_prec, cronop_elem cronop_elem_anno
     where mov_res_anno.movgest_anno=mov_res_anno_prec.movgest_anno
     and   mov_res_anno.movgest_numero=mov_res_anno_prec.movgest_numero
@@ -2020,7 +2557,26 @@ BEGIN
         and   rc.data_cancellazione is null
         and   rc.validita_fine is null
     )
-   ) query
+    and not exists -- 17.05.2023 Sofia SIAC-8633
+    (
+	 select 1 
+	 from siac_r_movgest_ts_cronop_elem r
+  	 where r.movgest_ts_id=mov_res_anno.movgest_ts_id
+  	 and     r.cronop_id=cronop_elem_anno.cronop_id
+  	 and     r.cronop_elem_id=cronop_elem_anno.cronop_elem_id
+  	 and     r.data_cancellazione is null 
+  	 and     r.validita_fine is null
+    )
+   ) query,  fase_bil_t_cronop fase  -- 29.05.2023 Sofia SIAC-8633
+   where 
+    -- 29.05.2023 Sofia SIAC-8633
+                fase.fase_bil_elab_id=faseBilElabId
+    and     fase.fl_elab='S'
+    and     fase.cronop_new_id is not null
+    and     fase.cronop_new_id=query.cronop_new_id
+    and     fase.data_cancellazione  is null 
+    -- 29.05.2023 Sofia SIAC-8633
+   
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_cronop_elem res.inserimenti =%', strMessaggio,codResult;
@@ -2054,11 +2610,11 @@ BEGIN
   )
   (
   select query.movgest_ts_id,
-  	     query.cronop_new_id,
-         query.cronop_elem_new_id,
-         clock_timestamp(),
-         loginOperazione,
-         enteProprietarioId
+  	         query.cronop_new_id,
+             query.cronop_elem_new_id,
+             clock_timestamp(),
+             loginOperazione,
+             enteProprietarioId
   from
   (
     with
@@ -2068,32 +2624,32 @@ BEGIN
      mov_anno as
      (
       select mov.movgest_anno::integer,mov.movgest_numero::INTEGER,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
-             mov.movgest_tipo_id,
-             ts.movgest_ts_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end ) movgest_subnumero,
+                 mov.movgest_tipo_id,
+                 ts.movgest_ts_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_attr rattr
+                 siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                 siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_attr rattr
       where mov.bil_id=bilancioId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   ts.movgest_id=mov.movgest_id
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code in ('D','N')
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   tipo.movgest_ts_tipo_code='T'
-      and   rattr.movgest_ts_id=ts.movgest_ts_id
-      and   rattr.attr_id=flagDaRiaccAttrId
-      and   rattr.boolean='S'
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   rattr.data_cancellazione is null
-      and   rattr.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      ts.movgest_id=mov.movgest_id
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code in ('D','N')
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      tipo.movgest_ts_tipo_code='T'
+      and      rattr.movgest_ts_id=ts.movgest_ts_id
+      and      rattr.attr_id=flagDaRiaccAttrId
+      and      rattr.boolean='S'
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      rattr.data_cancellazione is null
+      and      rattr.validita_fine is null
      ),
      annoRiacc as
      (
@@ -2118,36 +2674,36 @@ BEGIN
       and   rattr.validita_fine is null
      )
      select  mov_anno.*, annoRiacc.annoRiacc, numeroRiacc.numeroRiacc
-     from mov_anno, annoRiacc, numeroRiacc
+     from   mov_anno, annoRiacc, numeroRiacc
      where mov_anno.movgest_ts_id=annoRiacc.movgest_ts_id
-     and   mov_anno.movgest_ts_id=numeroRiacc.movgest_ts_id
+     and     mov_anno.movgest_ts_id=numeroRiacc.movgest_ts_id
     ),
     mov_riacc_anno_prec as
     (
       select mov.movgest_anno::integer movgest_anno,mov.movgest_numero::INTEGER movgest_numero,
-             (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
-             mov.movgest_tipo_id, r.cronop_elem_id
+                 (case when tipo.movgest_ts_tipo_code='T' then 0 else ts.movgest_ts_code::integer end)  movgest_subnumero,
+                  mov.movgest_tipo_id, r.cronop_elem_id
       from siac_t_movgest mov,siac_d_movgest_tipo tipomov,
-           siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
-           siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
+                 siac_t_movgest_ts ts,siac_r_movgest_ts_stato rs,siac_d_movgest_stato stato,
+                 siac_d_movgest_Ts_tipo tipo,siac_r_movgest_ts_cronop_elem r
       where mov.bil_id=bilancioPrecId
-      and   tipomov.movgest_tipo_id=mov.movgest_tipo_id
-      and   tipomov.movgest_tipo_code='I'
-      and   ts.movgest_id=mov.movgest_id
-      and   r.movgest_ts_id=ts.movgest_ts_id
-      and   r.cronop_elem_id is not null
-      and   rs.movgest_ts_id=ts.movgest_ts_id
-      and   stato.movgest_stato_id=rs.movgest_stato_id
-      and   stato.movgest_stato_code in ('D','N')
-      and   tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
-      and   mov.data_cancellazione is null
-      and   mov.validita_fine is null
-      and   ts.data_cancellazione is null
-      and   ts.validita_fine is null
-      and   rs.data_cancellazione is null
-      and   rs.validita_fine is null
-      and   r.data_cancellazione is null
-      and   r.validita_fine is null
+      and      tipomov.movgest_tipo_id=mov.movgest_tipo_id
+      and      tipomov.movgest_tipo_code='I'
+      and      ts.movgest_id=mov.movgest_id
+      and      r.movgest_ts_id=ts.movgest_ts_id
+      and      r.cronop_elem_id is not null
+      and      rs.movgest_ts_id=ts.movgest_ts_id
+      and      stato.movgest_stato_id=rs.movgest_stato_id
+      and      stato.movgest_stato_code in ('D','N')
+      and      tipo.movgest_ts_tipo_id=ts.movgest_ts_tipo_id
+      and      mov.data_cancellazione is null
+      and      mov.validita_fine is null
+      and      ts.data_cancellazione is null
+      and      ts.validita_fine is null
+      and      rs.data_cancellazione is null
+      and      rs.validita_fine is null
+      and      r.data_cancellazione is null
+      and      r.validita_fine is null
     ),
     cronop_elem as
     (
@@ -2167,39 +2723,38 @@ BEGIN
              coalesce(det.anno_entrata,'')        anno_entrata,
              coalesce(det.elem_det_tipo_id,0)     elem_det_tipo_id
      from siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-          siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo,
-          siac_t_cronop_elem celem,siac_t_cronop_elem_det det
+                siac_t_programma prog,siac_r_programma_stato rsp,siac_d_programma_stato pstato, siac_d_programma_tipo tipo,
+                siac_t_cronop_elem celem,siac_t_cronop_elem_det det
    	 where  tipo.ente_proprietario_id=enteProprietarioId
-     and    tipo.programma_tipo_code=G_FASE
-     and    prog.programma_tipo_id=tipo.programma_tipo_id
-     and    cronop.programma_id=prog.programma_id
-     and    celem.cronop_id=cronop.cronop_id
-     and    det.cronop_elem_id=celem.cronop_elem_id
-     and    rs.cronop_id=cronop.cronop_id
-     and    stato.cronop_stato_id=rs.cronop_stato_id
+     and      tipo.programma_tipo_code=G_FASE
+     and      prog.programma_tipo_id=tipo.programma_tipo_id
+     and      cronop.programma_id=prog.programma_id
+     and      celem.cronop_id=cronop.cronop_id
+     and      det.cronop_elem_id=celem.cronop_elem_id
+     and      rs.cronop_id=cronop.cronop_id
+     and      stato.cronop_stato_id=rs.cronop_stato_id
 ---     and    stato.cronop_stato_code='VA' -- 06.08.2019 Sofia siac-6934
-     and    stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
-     and    rsp.programma_id=prog.programma_id
-     and    pstato.programma_stato_id=rsp.programma_stato_id
+     and      stato.cronop_stato_code!='AN' -- 06.08.2019 Sofia siac-6934
+     and      rsp.programma_id=prog.programma_id
+     and      pstato.programma_stato_id=rsp.programma_stato_id
 --     and    pstato.programma_stato_code='VA'  -- 06.08.2019 Sofia siac-6934
-     and    pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
-     and    rs.data_cancellazione is null
-     and    rs.validita_fine is null
-     and    rsp.data_cancellazione is null
-     and    rsp.validita_fine is null
-     and    prog.data_cancellazione is null
-     and    prog.validita_fine is null
-     and    cronop.data_cancellazione is null
-     and    cronop.validita_fine is null
-     and    celem.data_cancellazione is null
-     and    celem.validita_fine is null
-     and    det.data_cancellazione is null
-     and    det.validita_fine is null
-
+     and      pstato.programma_stato_code!='AN'  -- 06.08.2019 Sofia siac-6934
+     and      rs.data_cancellazione is null
+     and      rs.validita_fine is null
+     and      rsp.data_cancellazione is null
+     and      rsp.validita_fine is null
+     and      prog.data_cancellazione is null
+     and      prog.validita_fine is null
+     and      cronop.data_cancellazione is null
+     and      cronop.validita_fine is null
+     and      celem.data_cancellazione is null
+     and      celem.validita_fine is null
+     and      det.data_cancellazione is null
+     and      det.validita_fine is null
     )
     select cronop_elem_anno.cronop_elem_id cronop_elem_new_id,
-           cronop_elem_anno.cronop_id cronop_new_id,
-           mov_riacc_anno.movgest_ts_id
+               cronop_elem_anno.cronop_id cronop_new_id,
+               mov_riacc_anno.movgest_ts_id
     from mov_riacc_anno, mov_riacc_anno_prec, cronop_elem cronop_elem_anno_prec, cronop_elem cronop_elem_anno
     where mov_riacc_anno.annoRiacc=mov_riacc_anno_prec.movgest_anno
     and   mov_riacc_anno.numeroRiacc=mov_riacc_anno_prec.movgest_numero
@@ -2260,7 +2815,7 @@ BEGIN
         and   rc.data_cancellazione is null
         and   rc.validita_fine is null
     )
-   ) query
+   ) query,  fase_bil_t_cronop fase  -- 29.05.2023 Sofia SIAC-8633
    where not exists
    (
    select 1
@@ -2271,6 +2826,13 @@ BEGIN
    and   r1.data_cancellazione is null
    and   r1.validita_fine is null
    )
+   -- 29.05.2023 Sofia SIAC-8633
+  and     fase.fase_bil_elab_id=faseBilElabId
+  and     fase.fl_elab='S'
+  and     fase.cronop_new_id is not null
+  and     fase.cronop_new_id=query.cronop_elem_new_id
+  and     fase.data_cancellazione  is null 
+   -- 29.05.2023 Sofia SIAC-8633
   );
   GET DIAGNOSTICS codResult = ROW_COUNT;
   raise notice '% siac_r_movgest_ts_cronop_elem riacc.inserimenti =%', strMessaggio,codResult;
@@ -2321,7 +2883,7 @@ BEGIN
  end if;
 
 
- if codiceRisultato=0 then
+ if coalesce(codiceRisultato,0)=0 then
    	messaggioRisultato:=strMessaggioFinale||'- FINE.';
  else messaggioRisultato:=strMessaggioFinale||strMessaggio;
  end if;
@@ -2354,3 +2916,16 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi_elabora
+(
+integer, 
+integer, 
+integer, 
+varchar, 
+varchar, 
+timestamp without time zone, 
+boolean, 
+OUT integer, 
+OUT  varchar
+) owner to siac;

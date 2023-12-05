@@ -24,13 +24,14 @@ RETURNS TABLE (
   spese_da_impeg_anno2_e numeric,
   spese_da_impeg_anni_succ_f numeric,
   spese_da_impeg_non_def_g numeric,
-  fondo_plur_anno_h numeric
+  fondo_plur_anno_h numeric,
+  spese_da_impeg_anno1_d2 numeric
 ) AS
 $body$
 DECLARE
 
 classifBilRec record;
-
+impegniPrecRec record;
 
 annoCapImp varchar;
 annoCapImp1 varchar;
@@ -54,6 +55,7 @@ h_count integer :=0;
 v_fam_missioneprogramma varchar :='00001';
 v_fam_titolomacroaggregato varchar := '00002';
 id_bil INTEGER;
+bilancio_id_prec integer;
 
 BEGIN
 
@@ -100,6 +102,12 @@ fondo_plur_anno_h=0;
     BILR011_allegato_fpv_previsione_con_dati_gestione (ex BILR171).
 */
 
+/* 25/01/2023: revisione per SIAC-8866.
+ La funzione e' stata in parte semplificata perche' erano eseguite piu' volte le stesse query.
+ Inoltre sono state introdotte le modifiche richieste nelle jira SIAC-8866 per le colonne D, E, F.
+
+
+*/
 select t_bil.bil_id
 	into id_bil
 from siac_t_bil t_bil,
@@ -113,6 +121,19 @@ IF NOT FOUND THEN
 	raise notice 'Codice del bilancio non trovato';
     return;
 END IF;
+
+select a.bil_id
+into bilancio_id_prec 
+from siac_t_bil a,
+	siac_t_periodo b
+where a.ente_proprietario_id = p_ente_prop_id 
+and b.periodo_id = a.periodo_id
+and b.anno::integer = (p_anno::integer - 1)
+ and a.data_cancellazione IS NULL
+ and b.data_cancellazione IS NULL;
+
+raise notice 'id_bil di anno % = %', p_anno, id_bil;
+raise notice 'id_bil di anno precedente % = %', (p_anno::integer - 1), bilancio_id_prec;
 
 for classifBilRec in
 	with strutt_capitoli as (select *
@@ -342,6 +363,9 @@ for classifBilRec in
             on importi_capitoli_anno2.elem_id = capitoli.elem_id
         left join importi_capitoli_anno3
             on importi_capitoli_anno3.elem_id = capitoli.elem_id
+--27/12/2021 SIAC-8508
+-- Occorre eliminare le missioni '20', '50', '60', '99'.             
+    where strutt_capitoli.missione_code not in('20', '50', '60', '99')
     group by strutt_capitoli.missione_tipo_desc, strutt_capitoli.missione_code, 
     	strutt_capitoli.missione_desc, strutt_capitoli.programma_tipo_desc, 
         strutt_capitoli.programma_code, strutt_capitoli.programma_desc
@@ -366,404 +390,6 @@ loop
         fondo_plur_anno_h=classifBilRec.stanziamento_fpv_anno3;
     end if;      
     
-    if  annoProspInt > annoBilInt and a_dacapfpv=false and flagretrocomp=false then       
-        	--il campo spese_impe_anni_prec_b non viene piu' calcolato in questa
-            --procedura.
-	      spese_impe_anni_prec_b=0;
-           
-        /*  select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_impe_anni_prec_b
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f,
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno = p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata::integer < p_anno_prospetto::integer-1 -- anno prospetto  
-          and e.periodo_id = f.periodo_id
-          and f.anno= (p_anno_prospetto::integer-1)::varchar -- anno prospetto
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;		*/
-       	    
-          spese_da_impeg_anno1_d=0;
-        
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anno1_d 
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f,
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id= p_ente_prop_id
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata = (p_anno_prospetto::integer -1)::varchar -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer=p_anno_prospetto::integer  -- anno prospetto + 1
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-
-          spese_da_impeg_anno2_e=0;  
-                  
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anno2_e  
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f,
-          --siac_r_cronop_elem_class rcl1, siac_d_class_tipo clt1,siac_t_class cl1, 
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno di bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata =(p_anno_prospetto::integer-1)::varchar -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer=p_anno_prospetto::integer+1 -- anno prospetto + 2
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-
-          spese_da_impeg_anni_succ_f=0;
-                  
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anni_succ_f 
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f, 
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata =(p_anno_prospetto::INTEGER-1)::varchar -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer > p_anno_prospetto::INTEGER+1 -- anno prospetto + 2
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-
-
-        if  annoProspInt = annoBilInt+1 then
-          	fondo_plur_anno_prec_a=classifBilRec.fondo_pluri_anno_prec - spese_impe_anni_prec_b +
-            spese_da_impeg_anno1_d + spese_da_impeg_anno2_e + spese_da_impeg_anni_succ_f;
-          	raise notice 'Anno prospetto = %',annoProspInt;
-            
-        elsif  annoProspInt = annoBilInt+2  then
-          fondo_plur_anno_prec_a= - spese_impe_anni_prec_b +
-          spese_da_impeg_anno1_d + spese_da_impeg_anno2_e + spese_da_impeg_anni_succ_f;
-          	
-          	--il campo spese_impe_anni_prec_b non viene piu' calcolato in questa
-            --procedura.
-          spese_impe_anni_prec_b=0;
-            
-          /*select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_impe_anni_prec_b
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f,
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno = p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata::integer < p_anno_prospetto::integer-2 -- anno prospetto  
-          and e.periodo_id = f.periodo_id
-          and f.anno= (p_anno_prospetto::integer-2)::varchar -- anno prospetto
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;		
-       	    */
-          spese_da_impeg_anno1_d=0;
-        
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anno1_d
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f, 
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id= p_ente_prop_id
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata = (p_anno_prospetto::integer -2)::varchar -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer=p_anno_prospetto::integer-1  -- anno prospetto + 1
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-
-          spese_da_impeg_anno2_e=0;  
-                  
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anno2_e  
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f,
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno di bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata =(p_anno_prospetto::integer-2)::varchar -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer=p_anno_prospetto::integer -- anno prospetto + 2
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-
-          spese_da_impeg_anni_succ_f=0;
-                  
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anni_succ_f
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f,
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata =(p_anno_prospetto::INTEGER-2)::varchar -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer > p_anno_prospetto::INTEGER -- anno prospetto + 2
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-          --and rcl1.data_cancellazione is null
-
-		fondo_plur_anno_prec_a=fondo_plur_anno_prec_a+classifBilRec.fondo_pluri_anno_prec - spese_impe_anni_prec_b +
-            spese_da_impeg_anno1_d + spese_da_impeg_anno2_e + spese_da_impeg_anni_succ_f;            
-            
-        end if; --if annoProspInt = annoBilInt+1 then 
-
-       end if; -- if  annoProspInt > annoBilInt
-
---raise notice 'programma_code = %', programma_code;
---raise notice '  spese_impe_anni_prec_b = %', spese_impe_anni_prec_b;
---raise notice '  quota_fond_plur_anni_prec_c = %', quota_fond_plur_anni_prec_c;
---raise notice '  spese_da_impeg_anno1_d = %', spese_da_impeg_anno1_d;
---raise notice '  spese_da_impeg_anno2_e = %', spese_da_impeg_anno2_e;
---raise notice '  spese_da_impeg_anni_succ_f = %', spese_da_impeg_anni_succ_f;
---raise notice '  spese_da_impeg_non_def_g = %', spese_da_impeg_non_def_g;
-
-
-/* 17/05/2016: al momento questi campi sono impostati a zero in attesa di
-	capire le modalita' di valorizzazione */
-		spese_impe_anni_prec_b=0;
-        quota_fond_plur_anni_prec_c=0;
-        spese_da_impeg_anno1_d=0;
-        spese_da_impeg_anno2_e=0;  
-        spese_da_impeg_anni_succ_f=0;
-        spese_da_impeg_non_def_g=0;
-        
-        /*COLONNA B -Spese impegnate negli anni precedenti con copertura costituita dal FPV e imputate all’esercizio N
-		Occorre prendere tutte le quote di spesa previste nei cronoprogrammi con FPV selezionato, 
-		con anno di entrata 2016 (o precedenti) e anno di spesa uguale al 2017.*/ 
-       if flagretrocomp = false then
 
 	   		--il campo spese_impe_anni_prec_b non viene piu' calcolato in questa
             --procedura.
@@ -812,182 +438,176 @@ loop
           
          -- raise notice 'spese_impe_anni_prec_b %' , spese_impe_anni_prec_b; 
         
-        /* 3.	Colonna (c) – e' data dalla differenza tra la colonna b e la colonna a genera e
+        /* 3.	Colonna (c) â€“ e' data dalla differenza tra la colonna b e la colonna a genera e
         rappresenta il valore del fondo costituito che verra' utilizzato negli anni 2018 e seguenti; */
         quota_fond_plur_anni_prec_c=fondo_plur_anno_prec_a-spese_impe_anni_prec_b ;  
        -- raise notice 'quota_fond_plur_anni_prec_c = %', quota_fond_plur_anni_prec_c;  
         
         /*
-        Colonna d – Occorre prendere tutte le quote di spesa previste nei cronoprogrammi 
-        con FPV selezionato, con anno di entrata 2017 e anno di spesa uguale al 2018;
+        Colonna D â€“ Occorre prendere tutte le quote di spesa previste nei cronoprogrammi 
+        con FPV selezionato, con anno di entrata = anno Prospetto e anno di spesa uguale a anno Prospetto+1.
+        25/01/2023 SIAC-8866: i progetti devono essere solo quelli di Previsione.
         */
-          
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anno1_d
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f, 
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id= p_ente_prop_id
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata = p_anno_prospetto -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer=p_anno_prospetto::integer+1  -- anno prospetto + 1
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-          --and rcl1.data_cancellazione is null;
+        
+         
+          select COALESCE(sum(cronop_elem_det.cronop_elem_det_importo),0) 
+          	into spese_da_impeg_anno1_d
+          from siac_t_programma progetto, siac_t_cronop crono, 
+              siac_t_bil bil, siac_t_periodo anno_bil, siac_d_programma_tipo tipo_prog,
+              siac_t_cronop_elem cronop_elem, siac_d_bil_elem_tipo tipo_cap,
+              siac_t_cronop_elem_det cronop_elem_det, siac_t_periodo anno_crono, 
+              siac_r_cronop_elem_class r_cronop_elem_class, siac_d_class_tipo d_class_tipo, siac_t_class class,
+              siac_r_cronop_stato r_cronop_stato , siac_d_cronop_stato cronop_stato,
+              siac_r_programma_stato r_progetto_stato, siac_d_programma_stato progetto_stato
+          where progetto.programma_id=crono.programma_id
+              and crono.bil_id = bil.bil_id
+              and bil.periodo_id=anno_bil.periodo_id
+              and tipo_prog.programma_tipo_id = progetto.programma_tipo_id
+              and cronop_elem.cronop_id=crono.cronop_id
+              and cronop_elem.cronop_elem_id=cronop_elem_det.cronop_elem_id
+              and tipo_cap.elem_tipo_id=cronop_elem.elem_tipo_id
+              and cronop_elem_det.periodo_id = anno_crono.periodo_id
+              and r_cronop_elem_class.cronop_elem_id = cronop_elem.cronop_elem_id
+              and r_cronop_elem_class.classif_id=class.classif_id
+              and class.classif_tipo_id=d_class_tipo.classif_tipo_id
+              and r_cronop_stato.cronop_stato_id=cronop_stato.cronop_stato_id
+              and r_cronop_stato.cronop_id=crono.cronop_id
+              and r_progetto_stato.programma_id=progetto.programma_id
+              and r_progetto_stato.programma_stato_id=progetto_stato.programma_stato_id              
+              and progetto.ente_proprietario_id= p_ente_prop_id
+              and anno_bil.anno=p_anno -- anno bilancio
+              and crono.usato_per_fpv::boolean = conflagfpv              
+              and cronop_elem_det.anno_entrata = p_anno_prospetto -- anno prospetto               
+              and anno_crono.anno::integer=p_anno_prospetto::integer+1  -- anno prospetto + 1              
+              and d_class_tipo.classif_tipo_code='PROGRAMMA'
+              and class.classif_code=classifBilRec.programma_code                            
+              and cronop_stato.cronop_stato_code='VA'   
+              and tipo_prog.programma_tipo_code ='P'  --Solo progetti della previsione.             
+              and progetto_stato.programma_stato_code='VA'
+              and r_progetto_stato.data_cancellazione is null
+              and r_cronop_stato.data_cancellazione is null
+              and crono.data_cancellazione is null
+              and progetto.data_cancellazione is null
+              and bil.data_cancellazione is null
+              and anno_bil.data_cancellazione is null
+              and cronop_elem.data_cancellazione is null
+              and cronop_elem_det.data_cancellazione is null
+              and r_cronop_elem_class.data_cancellazione is null;
+             -- raise notice 'Query 3: Progr: % - campo D dopo = %', classifBilRec.programma_code,spese_da_impeg_anno1_d;
+        
+        raise notice 'Programma % - spese_da_impeg_anno1_d da progetti = %', classifBilRec.programma_code ,
+        	spese_da_impeg_anno1_d;
+        
+        /*
+        Colonna E - Occorre prendere tutte le quote di spesa previste nei cronoprogrammi 
+        con FPV selezionato, con anno di entrata = anno Prospetto e anno di spesa uguale a anno Prospetto+2.
+        25/01/2023 SIAC-8866: i progetti devono essere solo quelli di Previsione.
+        */
+          select COALESCE(sum(cronop_elem_det.cronop_elem_det_importo),0) 
+          	into spese_da_impeg_anno2_e
+          from siac_t_programma progetto, siac_t_cronop crono, 
+              siac_t_bil bil, siac_t_periodo anno_bil, siac_d_programma_tipo tipo_prog,
+              siac_t_cronop_elem cronop_elem, siac_d_bil_elem_tipo tipo_cap,
+              siac_t_cronop_elem_det cronop_elem_det, siac_t_periodo anno_crono, 
+              siac_r_cronop_elem_class r_cronop_elem_class, siac_d_class_tipo d_class_tipo, siac_t_class class,
+              siac_r_cronop_stato r_cronop_stato , siac_d_cronop_stato cronop_stato,
+              siac_r_programma_stato r_progetto_stato, siac_d_programma_stato progetto_stato
+          where progetto.programma_id=crono.programma_id
+              and crono.bil_id = bil.bil_id
+              and bil.periodo_id=anno_bil.periodo_id
+              and tipo_prog.programma_tipo_id = progetto.programma_tipo_id
+              and cronop_elem.cronop_id=crono.cronop_id
+              and cronop_elem.cronop_elem_id=cronop_elem_det.cronop_elem_id
+              and tipo_cap.elem_tipo_id=cronop_elem.elem_tipo_id
+              and cronop_elem_det.periodo_id = anno_crono.periodo_id
+              and r_cronop_elem_class.cronop_elem_id = cronop_elem.cronop_elem_id
+              and r_cronop_elem_class.classif_id=class.classif_id
+              and class.classif_tipo_id=d_class_tipo.classif_tipo_id
+              and r_cronop_stato.cronop_stato_id=cronop_stato.cronop_stato_id
+              and r_cronop_stato.cronop_id=crono.cronop_id
+              and r_progetto_stato.programma_id=progetto.programma_id
+              and r_progetto_stato.programma_stato_id=progetto_stato.programma_stato_id              
+              and progetto.ente_proprietario_id= p_ente_prop_id
+              and anno_bil.anno=p_anno -- anno bilancio
+              and crono.usato_per_fpv::boolean = conflagfpv              
+              and cronop_elem_det.anno_entrata = p_anno_prospetto -- anno prospetto               
+              and anno_crono.anno::integer=p_anno_prospetto::integer+2 -- anno prospetto + 2        
+              and d_class_tipo.classif_tipo_code='PROGRAMMA'
+              and class.classif_code=classifBilRec.programma_code                            
+              and cronop_stato.cronop_stato_code='VA'   
+              and tipo_prog.programma_tipo_code ='P'  --Solo progetti della previsione.             
+              and progetto_stato.programma_stato_code='VA'
+              and r_progetto_stato.data_cancellazione is null
+              and r_cronop_stato.data_cancellazione is null
+              and crono.data_cancellazione is null
+              and progetto.data_cancellazione is null
+              and bil.data_cancellazione is null
+              and anno_bil.data_cancellazione is null
+              and cronop_elem.data_cancellazione is null
+              and cronop_elem_det.data_cancellazione is null
+              and r_cronop_elem_class.data_cancellazione is null;
               
         
-        /*
-        Colonna e - Occorre prendere tutte le quote di spesa previste nei cronoprogrammi 
-        con FPV selezionato, con anno di entrata 2017 e anno di spesa uguale al 2019;
-        */
-                  
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anno2_e
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f, 
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno di bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata =p_anno_prospetto -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer=p_anno_prospetto::integer+2 -- anno prospetto + 2
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-
         
-        
-        /* Colonna f - Occorre prendere tutte le quote di 
+        /* Colonna F - Occorre prendere tutte le quote di 
         spesa previste nei cronoprogrammi con FPV selezionato, 
-        con anno di entrata 2017 e anno di spesa uguale al 2020 e successivi;*/
-                          
-          select COALESCE(sum(e.cronop_elem_det_importo),0) into
-          spese_da_impeg_anni_succ_f 
-          from siac_t_programma pr, siac_t_cronop a, 
-          siac_t_bil b, siac_t_periodo c,
-          siac_t_cronop_elem d, siac_d_bil_elem_tipo dt,
-          siac_t_cronop_elem_det e, siac_t_periodo f, 
-          siac_r_cronop_elem_class rcl2, siac_d_class_tipo clt2, siac_t_class cl2,
-          siac_r_cronop_stato stc , siac_d_cronop_stato stct,
-          siac_r_programma_stato stpr, siac_d_programma_stato stprt
-          where pr.ente_proprietario_id=p_ente_prop_id 
-          and pr.programma_id=a.programma_id
-          and a.bil_id = b.bil_id
-          and b.periodo_id=c.periodo_id
-          and c.anno=p_anno -- anno bilancio
-          and a.usato_per_fpv::boolean = conflagfpv
-          and d.cronop_id=a.cronop_id
-          and d.cronop_elem_id=e.cronop_elem_id
-          and dt.elem_tipo_id=d.elem_tipo_id
-          and e.anno_entrata =p_anno_prospetto -- anno prospetto 
-          and e.periodo_id = f.periodo_id
-          and f.anno::integer > p_anno_prospetto::INTEGER+2 -- anno prospetto + 2
-          and rcl2.cronop_elem_id = d.cronop_elem_id
-          and rcl2.classif_id=cl2.classif_id
-          and cl2.classif_tipo_id=clt2.classif_tipo_id
-          and clt2.classif_tipo_code='PROGRAMMA'
-          and cl2.classif_code=classifBilRec.programma_code
-          and stc.cronop_id=a.cronop_id
-          and stc.cronop_stato_id=stct.cronop_stato_id
-          and stct.cronop_stato_code='VA'
-          and stpr.programma_id=pr.programma_id
-          and stpr.programma_stato_id=stprt.programma_stato_id
-          and stprt.programma_stato_code='VA'
-          and stpr.data_cancellazione is null
-          and stc.data_cancellazione is null
-          and a.data_cancellazione is null
-          and pr.data_cancellazione is null
-          and b.data_cancellazione is null
-          and c.data_cancellazione is null
-          and d.data_cancellazione is null
-          and e.data_cancellazione is null
-          and rcl2.data_cancellazione is null;
-        
-        /*
-        d.	Colonna g – Occorre prendere l’importo previsto nella sezione spese dei progetti. 
-        E’ necessario quindi implementare una tipologia “Cronoprogramma da  definire”, 
-        agganciato al progetto per il quale sono necessarie solo due informazioni: 
-        l’importo e la Missione/Programma. Rimane incognito l’anno relativo alla spesa 
-        (anche se apparira' formalmente agganciato al 2017). 
-        Nel momento in cui saranno note le altre informazioni relative al progetto, 
-        l’ente operera' nel modo consueto, ovvero inserendo una nuova versione di cronoprogramma 
-        e selezionandone il relativo FPV. Operativamente e' sufficiente inserire un flag "Cronoprogramma da definire". 
-        L'operatore entrera' comunque nelle due maschere (cosi' come sono ad oggi) di entrata e 
-        spesa e inserira' l'importo e la spesa agganciandola a uno o piu' missioni per la spesa e analogamente per le entrate... 
-        Inserira' 2017 sia nelle entrate che nella spesa. Essendo anno entrata=anno spesa non si creera' FPV 
-        ma avendo il Flag "Cronoprogramma da Definire" l'unione delle due informazione generera' il 
-        popolamento della colonna G. Questo escamotage peraltro potra' essere utilizzato anche dagli enti 
-        che vorranno tracciare la loro 
-        programmazione anche laddove non ci sia la generazione di FPV, ovviamente senza flaggare il campo citato.
-        */
+         con FPV selezionato, con anno di entrata = anno Prospetto e anno di spesa > anno Prospetto+2.
+         25/01/2023 SIAC-8866: i progetti devono essere solo quelli di Previsione.
+         */
          
+          select COALESCE(sum(cronop_elem_det.cronop_elem_det_importo),0) 
+          	into spese_da_impeg_anni_succ_f
+          from siac_t_programma progetto, siac_t_cronop crono, 
+              siac_t_bil bil, siac_t_periodo anno_bil, siac_d_programma_tipo tipo_prog,
+              siac_t_cronop_elem cronop_elem, siac_d_bil_elem_tipo tipo_cap,
+              siac_t_cronop_elem_det cronop_elem_det, siac_t_periodo anno_crono, 
+              siac_r_cronop_elem_class r_cronop_elem_class, siac_d_class_tipo d_class_tipo, siac_t_class class,
+              siac_r_cronop_stato r_cronop_stato , siac_d_cronop_stato cronop_stato,
+              siac_r_programma_stato r_progetto_stato, siac_d_programma_stato progetto_stato
+          where progetto.programma_id=crono.programma_id
+              and crono.bil_id = bil.bil_id
+              and bil.periodo_id=anno_bil.periodo_id
+              and tipo_prog.programma_tipo_id = progetto.programma_tipo_id
+              and cronop_elem.cronop_id=crono.cronop_id
+              and cronop_elem.cronop_elem_id=cronop_elem_det.cronop_elem_id
+              and tipo_cap.elem_tipo_id=cronop_elem.elem_tipo_id
+              and cronop_elem_det.periodo_id = anno_crono.periodo_id
+              and r_cronop_elem_class.cronop_elem_id = cronop_elem.cronop_elem_id
+              and r_cronop_elem_class.classif_id=class.classif_id
+              and class.classif_tipo_id=d_class_tipo.classif_tipo_id
+              and r_cronop_stato.cronop_stato_id=cronop_stato.cronop_stato_id
+              and r_cronop_stato.cronop_id=crono.cronop_id
+              and r_progetto_stato.programma_id=progetto.programma_id
+              and r_progetto_stato.programma_stato_id=progetto_stato.programma_stato_id              
+              and progetto.ente_proprietario_id= p_ente_prop_id
+              and anno_bil.anno=p_anno -- anno bilancio
+              and crono.usato_per_fpv::boolean = conflagfpv              
+              and cronop_elem_det.anno_entrata = p_anno_prospetto -- anno prospetto               
+              and anno_crono.anno::integer > p_anno_prospetto::integer+2 -- maggiore di anno prospetto + 2       
+              and d_class_tipo.classif_tipo_code='PROGRAMMA'
+              and class.classif_code=classifBilRec.programma_code                            
+              and cronop_stato.cronop_stato_code='VA'   
+              and tipo_prog.programma_tipo_code ='P'  --Solo progetti della previsione.             
+              and progetto_stato.programma_stato_code='VA'
+              and r_progetto_stato.data_cancellazione is null
+              and r_cronop_stato.data_cancellazione is null
+              and crono.data_cancellazione is null
+              and progetto.data_cancellazione is null
+              and bil.data_cancellazione is null
+              and anno_bil.data_cancellazione is null
+              and cronop_elem.data_cancellazione is null
+              and cronop_elem_det.data_cancellazione is null
+              and r_cronop_elem_class.data_cancellazione is null;
+                            
+          
+        
         
         /*5.	La colonna h  e' la somma dalla colonna c alla colonna g.
-        		NON e' piu' calcolata in questa procedura. */
+        		In realta' NON e' piu' calcolata in questa procedura. */
         
-    	if h_dacapfpv = false then
-        	fondo_plur_anno_h=quota_fond_plur_anni_prec_c+spese_da_impeg_anno1_d+
-            	spese_da_impeg_anno2_e+spese_da_impeg_anni_succ_f+spese_da_impeg_non_def_g;
-        end if;
-     end if; --if flagretrocomp = false then
+
+        fondo_plur_anno_h=quota_fond_plur_anni_prec_c+spese_da_impeg_anno1_d+
+            spese_da_impeg_anno2_e+spese_da_impeg_anni_succ_f+spese_da_impeg_non_def_g;
     
 /*raise notice 'programma_codeXXX = %', programma_code;
 raise notice '  spese_impe_anni_prec_b = %', spese_impe_anni_prec_b;
@@ -997,6 +617,184 @@ raise notice '  spese_da_impeg_anno2_e = %', spese_da_impeg_anno2_e;
 raise notice '  spese_da_impeg_anni_succ_f = %', spese_da_impeg_anni_succ_f;
 raise notice '  spese_da_impeg_non_def_g = %', spese_da_impeg_non_def_g;*/
     
+/* 25/01/2023 SIAC-8866.
+	Occorre estrarre dalla gestione anno precedente l'anno del bilancio gli importi degli impegni secondo la seguente logica:
+  - Colonna D
+      Impegni anno = Anno di Prospetto+1 con vincolo ad Accertamento = Anno di Prospetto
+  - Colonna E
+      Impegni anno = Anno di Prospetto+2 con vincolo ad Accertamento = Anno di Prospetto
+  - Colonna F
+      Impegni anno > Anno di Prospetto+2 con vincolo ad Accertamento = Anno di Prospetto
+
+Gli impegni estratti NON devono essere legati a progetti con cronoprogemmi con vincolo per FPV perche'
+tali impegni sono giaÃ¬ stati calcolati nelle query precedenti.
+
+Gli importi estratti sono sommati a quelli delle query precedenti relativi agli impegni legati ai progetti.
+
+*/
+--raise notice 'bilancio_id_prec = %', bilancio_id_prec;
+for impegniPrecRec in
+    with struttura as (
+    select *
+    from fnc_bilr_struttura_cap_bilancio_spese (p_ente_prop_id,(p_anno::integer - 1)::varchar, null)
+    ),
+    capitoli as (
+    select 	programma.classif_id programma_id,
+            macroaggr.classif_id macroaggregato_id,
+            capitolo.elem_code, capitolo.elem_desc, capitolo.elem_code2,
+            capitolo.elem_desc2, capitolo.elem_code3, capitolo.elem_id
+    from siac_t_bil_elem capitolo,
+         siac_d_bil_elem_tipo tipo_elemento,
+         siac_r_bil_elem_stato r_capitolo_stato,
+         siac_d_bil_elem_stato stato_capitolo,      
+         siac_r_bil_elem_class r_capitolo_programma,
+         siac_r_bil_elem_class r_capitolo_macroaggr, 	 
+         siac_d_bil_elem_categoria cat_del_capitolo,
+         siac_r_bil_elem_categoria r_cat_capitolo,
+         siac_d_class_tipo programma_tipo,
+         siac_t_class programma,
+         siac_d_class_tipo macroaggr_tipo,
+         siac_t_class macroaggr
+    where capitolo.elem_tipo_id = tipo_elemento.elem_tipo_id 						
+    and capitolo.elem_id = r_capitolo_stato.elem_id							
+    and	r_capitolo_stato.elem_stato_id = stato_capitolo.elem_stato_id		
+    and	capitolo.elem_id = r_capitolo_programma.elem_id							
+    and capitolo.elem_id = r_capitolo_macroaggr.elem_id							
+    and programma.classif_tipo_id = programma_tipo.classif_tipo_id 				
+    and programma.classif_id = r_capitolo_programma.classif_id					
+    and macroaggr.classif_tipo_id = macroaggr_tipo.classif_tipo_id 				
+    and macroaggr.classif_id = r_capitolo_macroaggr.classif_id					
+    and	capitolo.elem_id = r_cat_capitolo.elem_id				
+    and r_cat_capitolo.elem_cat_id = cat_del_capitolo.elem_cat_id		
+    and capitolo.ente_proprietario_id = p_ente_prop_id							
+    and capitolo.bil_id = bilancio_id_prec --anno precedente													
+    and programma_tipo.classif_tipo_code = 'PROGRAMMA'							
+    and	macroaggr_tipo.classif_tipo_code = 'MACROAGGREGATO'						
+    and	tipo_elemento.elem_tipo_code = 'CAP-UG'						     		
+    and stato_capitolo.elem_stato_code = 'VA' 
+    -- and cat_del_capitolo.elem_cat_code in ('FPV','FPVC')    
+    and	programma_tipo.data_cancellazione 			is null
+    and	programma.data_cancellazione 				is null
+    and	macroaggr_tipo.data_cancellazione 			is null
+    and	macroaggr.data_cancellazione 				is null
+    and	capitolo.data_cancellazione 				is null
+    and	tipo_elemento.data_cancellazione 			is null
+    and	r_capitolo_programma.data_cancellazione 	is null
+    and	r_capitolo_macroaggr.data_cancellazione 	is null 
+    and	stato_capitolo.data_cancellazione 			is null 
+    and	r_capitolo_stato.data_cancellazione 		is null
+    and	cat_del_capitolo.data_cancellazione 		is null
+    and	r_cat_capitolo.data_cancellazione           is null
+    ),
+    impegni as(
+    select distinct accert.*, imp.*, ts_impegni_legati.movgest_ts_b_id
+    from siac_r_movgest_ts ts_impegni_legati    	
+         join (	--accertamenti
+         		select ts_mov_acc.movgest_ts_id,
+                        mov_acc.movgest_anno anno_acc, 
+                        mov_acc.movgest_numero numero_acc,
+                        ts_mov_det_acc.movgest_ts_det_importo importo_acc
+                    from siac_t_movgest mov_acc,
+                         siac_t_movgest_ts ts_mov_acc,					
+                         siac_t_movgest_ts_det ts_mov_det_acc,
+                         siac_r_movgest_ts_stato r_stato_acc,
+                         siac_d_movgest_stato stato_acc
+                    where mov_acc.movgest_id=ts_mov_acc.movgest_id
+                        and ts_mov_acc.movgest_ts_id=ts_mov_det_acc.movgest_ts_id
+                        and ts_mov_acc.movgest_ts_id=r_stato_acc.movgest_ts_id
+                        and r_stato_acc.movgest_stato_id=stato_acc.movgest_stato_id
+                        and mov_acc.ente_proprietario_id=p_ente_prop_id
+                        and mov_acc.movgest_anno = annoProspInt --accertamenti sempre dell'anno prospetto
+                        and stato_acc.movgest_stato_code in ('D','N')
+                        and r_stato_acc.data_cancellazione IS NULL
+                        and mov_acc.data_cancellazione IS NULL
+                        and ts_mov_acc.data_cancellazione IS NULL) accert
+            on accert.movgest_ts_id =  ts_impegni_legati.movgest_ts_a_id
+          join (--impegni
+          		select ts_mov_imp.movgest_ts_id,
+                        mov_imp.movgest_anno anno_imp, 
+                        mov_imp.movgest_numero numero_imp,
+                        r_imp_bil_elem.elem_id,
+                        ts_mov_det_imp.movgest_ts_det_importo importo_imp
+                    from siac_t_movgest mov_imp,
+                         siac_t_movgest_ts ts_mov_imp,					
+                         siac_t_movgest_ts_det ts_mov_det_imp,
+                         siac_r_movgest_ts_stato r_stato_imp,
+                         siac_d_movgest_stato stato_imp,
+                         siac_r_movgest_bil_elem r_imp_bil_elem
+                    where mov_imp.movgest_id=ts_mov_imp.movgest_id
+                        and ts_mov_imp.movgest_ts_id=ts_mov_det_imp.movgest_ts_id
+                        and ts_mov_imp.movgest_ts_id=r_stato_imp.movgest_ts_id
+                        and r_stato_imp.movgest_stato_id=stato_imp.movgest_stato_id
+                        and r_imp_bil_elem.movgest_id=mov_imp.movgest_id
+                        and mov_imp.ente_proprietario_id=p_ente_prop_id
+                        and mov_imp.bil_id = bilancio_id_prec --anno precedente di gestione
+                        and mov_imp.movgest_anno >= annoProspInt + 1 --impegni a partire dell'anno prospetto + 1
+                        and stato_imp.movgest_stato_code in ('D','N')
+                        and r_stato_imp.data_cancellazione IS NULL
+                        and mov_imp.data_cancellazione IS NULL
+                        and ts_mov_imp.data_cancellazione IS NULL
+                        and r_imp_bil_elem.data_cancellazione IS NULL) imp              
+            on imp.movgest_ts_id =  ts_impegni_legati.movgest_ts_b_id
+          left join (--legame con i progetti 
+          		select r_mov_progr.movgest_ts_id, progetto.programma_id
+                  from siac_t_programma progetto, siac_t_cronop crono, 
+                      siac_t_bil bil, siac_t_periodo anno_bil,
+                      siac_r_cronop_stato r_cronop_stato , siac_d_cronop_stato cronop_stato,
+                      siac_r_programma_stato r_progetto_stato, siac_d_programma_stato progetto_stato,
+                     siac_r_movgest_ts_programma r_mov_progr             
+                  where progetto.programma_id=crono.programma_id
+                      and crono.bil_id = bil.bil_id
+                      and bil.periodo_id=anno_bil.periodo_id
+                      and r_cronop_stato.cronop_stato_id=cronop_stato.cronop_stato_id
+                      and r_cronop_stato.cronop_id=crono.cronop_id
+                      and r_progetto_stato.programma_id=progetto.programma_id
+                      and r_progetto_stato.programma_stato_id=progetto_stato.programma_stato_id     
+                      and r_mov_progr.programma_id=progetto.programma_id                      
+                      and progetto.ente_proprietario_id= p_ente_prop_id
+                      and anno_bil.anno::integer=annoBilInt - 1 -- anno precedente quello del bilancio?
+                      and crono.usato_per_fpv::boolean = true--conflagfpv                                                  
+                      and cronop_stato.cronop_stato_code='VA'              
+                      and progetto_stato.programma_stato_code='VA'
+                      and r_progetto_stato.data_cancellazione is null
+                      and r_cronop_stato.data_cancellazione is null
+                      and crono.data_cancellazione is null
+                      and progetto.data_cancellazione is null
+                      and bil.data_cancellazione is null
+                      and r_mov_progr.data_cancellazione is null) progetti
+             on ts_impegni_legati.movgest_ts_b_id = progetti.movgest_ts_id
+    where ts_impegni_legati.ente_proprietario_id=p_ente_prop_id      
+        and ts_impegni_legati.avav_id is null
+        and ts_impegni_legati.data_cancellazione is null  
+        	--progetti.programma_id IS NULL cioe' non sono compresi negli impegni legati ai progetti estratti
+            --nelle query precedenti. In pratica non devo contarli 2 volte.
+        and progetti.programma_id IS NULL )
+    select --struttura.programma_code::varchar programma,
+        anno_imp anno_impegno,
+        sum(impegni.importo_imp) importo_impegni
+    from impegni
+        left join capitoli 
+            on impegni.elem_id=capitoli.elem_id 
+        left join struttura 
+            on struttura.programma_id = capitoli.programma_id
+                and struttura.macroag_id = capitoli.macroaggregato_id        
+    where struttura.programma_code = classifBilRec.programma_code
+    group by anno_impegno
+loop
+	--raise notice 'anno impegno = % - progetto = %', impegniPrecRec.anno_impegno, impegniPrecRec;
+	case impegniPrecRec.anno_impegno
+    	when annoProspInt +1 then
+    		raise notice '% = Anno % - importo %',classifBilRec.programma_code,annoProspInt +1, impegniPrecRec.importo_impegni;
+            spese_da_impeg_anno1_d:= spese_da_impeg_anno1_d + impegniPrecRec.importo_impegni;
+            spese_da_impeg_anno1_d2:=impegniPrecRec.importo_impegni;
+      	when annoProspInt +2 then
+    		raise notice '% = Anno % - importo %',classifBilRec.programma_code, annoProspInt +2, impegniPrecRec.importo_impegni;
+            spese_da_impeg_anno2_e:= spese_da_impeg_anno2_e + impegniPrecRec.importo_impegni;
+	 	else -->  > annoProspInt +2 then
+    		raise notice '% = Anno > % - importo %',classifBilRec.programma_code, annoProspInt +2, impegniPrecRec.importo_impegni;
+            spese_da_impeg_anni_succ_f:= spese_da_impeg_anni_succ_f + impegniPrecRec.importo_impegni;
+    end case;
+end loop;
 
   return next;
 
@@ -1018,6 +816,7 @@ raise notice '  spese_da_impeg_non_def_g = %', spese_da_impeg_non_def_g;*/
   spese_da_impeg_anni_succ_f=0;
   spese_da_impeg_non_def_g=0;
   fondo_plur_anno_h=0;        
+  spese_da_impeg_anno1_d2:=0;
 end loop;  
 
 raise notice 'fine OK';
@@ -1035,4 +834,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR011_Allegato_B_Fondo_Pluriennale_vincolato" (p_ente_prop_id integer, p_anno varchar, p_anno_prospetto varchar)
+  OWNER TO siac;

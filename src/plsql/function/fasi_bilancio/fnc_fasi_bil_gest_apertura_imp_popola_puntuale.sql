@@ -3,14 +3,14 @@
 *SPDX-License-Identifier: EUPL-1.2
 */
 
-CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_imp_popola_puntuale(
-  enteProprietarioId     integer,
-  annoBilancio           integer,
-  loginOperazione        varchar,
-  dataElaborazione       timestamp,
-  out faseBilElabRetId   integer,
-  out codiceRisultato    integer,
-  out messaggioRisultato varchar
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_imp_popola_puntuale (
+  enteproprietarioid integer,
+  annobilancio integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out fasebilelabretid integer,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
 )
 RETURNS record AS
 $body$
@@ -244,6 +244,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -257,6 +258,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -350,6 +352,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -363,6 +366,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -476,6 +480,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -489,6 +494,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -545,6 +551,7 @@ BEGIN
                 detm.movgest_ts_det_importo,
                 mov.bil_id,
                 re.elem_id,
+                re.elem_det_comp_tipo_id,
                 bilancioId,
    			    mov.ente_proprietario_id
        having detm.movgest_ts_det_importo-sum(det.ord_ts_det_importo)>0
@@ -596,6 +603,7 @@ BEGIN
       imp_orig_importo,
       bil_orig_id,
       elem_orig_id,
+      elem_orig_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
       bil_id,
       ente_proprietario_id,
       login_operazione,
@@ -609,6 +617,7 @@ BEGIN
               detm.movgest_ts_det_importo, -- imp_orig_importo
               mov.bil_id,
               re.elem_id,
+              re.elem_det_comp_tipo_id, -- 14.05.2020 Sofia jira siac-7593
               bilancioId,
 			  mov.ente_proprietario_id,
               loginOperazione,
@@ -787,7 +796,8 @@ BEGIN
 
 
      update fase_bil_t_gest_apertura_liq_imp liq
-     set  elem_id=e.elem_id
+     set  elem_id=e.elem_id,
+          elem_det_comp_tipo_id=liq.elem_orig_det_comp_tipo_id -- 14.05.2020 Sofia jira siac-7593
      from siac_t_bil_elem eprec, siac_t_bil_elem e, siac_r_bil_elem_stato r
      where liq.fase_bil_elab_id=faseBilElabId
      and   liq.fl_elab='N'

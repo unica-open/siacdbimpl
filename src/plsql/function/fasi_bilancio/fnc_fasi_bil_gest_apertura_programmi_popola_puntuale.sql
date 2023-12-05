@@ -2,7 +2,20 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_programmi_pop_puntuale (
+drop FUNCTION if exists siac.fnc_fasi_bil_gest_apertura_programmi_pop_puntuale 
+(
+  fasebilelabid integer,
+  enteproprietarioid integer,
+  annobilancio integer,
+  tipoapertura varchar,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi_pop_puntuale 
+(
   fasebilelabid integer,
   enteproprietarioid integer,
   annobilancio integer,
@@ -33,6 +46,8 @@ DECLARE
 
     P_FASE							 CONSTANT varchar:='P';
     G_FASE					    	 CONSTANT varchar:='G';
+    --- Sofia SIAC-8633 24.05.2023       
+    GP_FASE                        CONSTANT varchar:='GP';  
 
 	STATO_AN 			    	     CONSTANT varchar:='AN';
     numeroProgr                      integer:=null;
@@ -97,14 +112,30 @@ BEGIN
    --siac_r_cronop_elem_bil_elem
    --siac_t_cronop_elem_det
 
+  -- Sofia SIAC-8633 24.05.2023
+  /*
    if tipoApertura=P_FASE THEN
    	bilancioElabId:=bilancioPrecId;
     programmaTipoCode=G_FASE;
    else
    	bilancioElabId:=bilancioId;
     programmaTipoCode=P_FASE;
-   end if;
+   end if;*/
 
+  -- Sofia SIAC-8633 24.05.2023         
+  case  
+   when tipoApertura=P_FASE then
+	   	bilancioElabId:=bilancioPrecId;
+    	programmaTipoCode=G_FASE;
+   when tipoApertura=G_FASE then
+	   bilancioElabId:=bilancioId;
+       programmaTipoCode=P_FASE;
+   when tipoApertura=GP_FASE then   
+       bilancioElabId:=bilancioId;
+       programmaTipoCode=G_FASE;
+       tipoApertura=P_FASE;
+  end case ;
+ 
    strMessaggio:='Inserimento dati programmi in fase_bil_t_programmi.';
    codResult:=null;
    insert into fase_bil_t_elaborazione_log
@@ -203,10 +234,14 @@ BEGIN
            cronop.bil_id,
            loginOperazione,
            cronop.ente_proprietario_id
-    from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato
+    from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
+               fase_bil_t_programmi_puntuale  punt     --- Sofia SIAC-8633 19.06.2023
     where fase.fase_bil_elab_id=faseBilElabId
-    and   cronop.programma_id=fase.programma_id
-    and   cronop.bil_id=bilancioElabId
+    and      punt.programma_id =fase.programma_id  --- Sofia SIAC-8633 19.06.2023
+    and      cronop.programma_id=fase.programma_id
+    and      cronop.bil_id=bilancioElabId
+    --- Sofia SIAC-8633 19.06.2023    
+    and   coalesce(punt.cronop_id, cronop.cronop_id) = cronop.cronop_id 
     and   cronop.usato_per_fpv=true
     and   rs.cronop_id=cronop.cronop_id
     and   stato.cronop_stato_id=rs.cronop_stato_id
@@ -256,10 +291,14 @@ BEGIN
            loginOperazione,
            cronop.ente_proprietario_id
     from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
-         siac_r_cronop_atto_amm ratto,siac_r_atto_amm_stato rsatto,siac_d_atto_amm_stato statoatto
+         siac_r_cronop_atto_amm ratto,siac_r_atto_amm_stato rsatto,siac_d_atto_amm_stato statoatto,
+         fase_bil_t_programmi_puntuale  punt     --- Sofia SIAC-8633 19.06.2023
     where fase.fase_bil_elab_id=faseBilElabId
-    and   cronop.programma_id=fase.programma_id
-    and   cronop.bil_id=bilancioElabId
+    and      punt.programma_id =fase.programma_id --- Sofia SIAC-8633 19.06.2023
+    and      cronop.programma_id=fase.programma_id
+    and      cronop.bil_id=bilancioElabId
+    --- Sofia SIAC-8633 19.06.2023    
+    and   coalesce(punt.cronop_id, cronop.cronop_id) = cronop.cronop_id 
     and   rs.cronop_id=cronop.cronop_id
     and   stato.cronop_stato_id=rs.cronop_stato_id
     and   stato.cronop_stato_code!=STATO_AN
@@ -315,10 +354,14 @@ BEGIN
            cronop.bil_id,
            loginOperazione,
            cronop.ente_proprietario_id
-    from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato
+    from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
+              fase_bil_t_programmi_puntuale  punt     --- Sofia SIAC-8633 21.06.2023
     where fase.fase_bil_elab_id=faseBilElabId
+    and     punt.programma_id=fase.programma_id --- Sofia SIAC-8633 21.06.2023
     and   cronop.programma_id=fase.programma_id
     and   cronop.bil_id=bilancioElabId
+    --- Sofia SIAC-8633 21.06.2023    
+    and   coalesce(punt.cronop_id, cronop.cronop_id) = cronop.cronop_id 
     and   rs.cronop_id=cronop.cronop_id
     and   stato.cronop_stato_id=rs.cronop_stato_id
     and   stato.cronop_stato_code!=STATO_AN
@@ -385,10 +428,15 @@ BEGIN
            cronop.bil_id,
            loginOperazione,
            cronop.ente_proprietario_id
-    from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato
+    from fase_bil_t_programmi fase,siac_t_cronop cronop,siac_r_cronop_stato rs,siac_d_cronop_stato stato,
+               fase_bil_t_programmi_puntuale  punt     --- Sofia SIAC-8633 21.06.2023
     where fase.fase_bil_elab_id=faseBilElabId
     and   cronop.programma_id=fase.programma_id
+    --- Sofia SIAC-8633 21.06.2023
+    and  punt.programma_id =fase.programma_id 
     and   cronop.bil_id=bilancioElabId
+    --- Sofia SIAC-8633 21.06.2023    
+    and   coalesce(punt.cronop_id, cronop.cronop_id) = cronop.cronop_id 
     and   rs.cronop_id=cronop.cronop_id
     and   stato.cronop_stato_id=rs.cronop_stato_id
     and   stato.cronop_stato_code!=STATO_AN
@@ -520,3 +568,15 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+alter FUNCTION siac.fnc_fasi_bil_gest_apertura_programmi_pop_puntuale 
+(
+  integer,
+  integer,
+  integer,
+  varchar,
+  varchar,
+  timestamp,
+  out  integer,
+  out  varchar
+) owner to siac;

@@ -8,7 +8,7 @@ CREATE OR REPLACE FUNCTION siac.fnc_siac_bko_configura_report_ente (
 RETURNS void AS
 $body$
 DECLARE
-
+ 
 ciclo integer;
 rec record;
 rec2 record;
@@ -27,11 +27,14 @@ login_operazione_loc:= 'fnc_siac_bko_configura_report';
 login_operazione_loc:= login_operazione_loc||' '||login_operazione_data;
 
 
-delete from siac_r_report_importi where ente_proprietario_id=ente_prop_in;
-delete from siac_s_report_importi where ente_proprietario_id=ente_prop_in;
-delete from siac_t_report_importi where ente_proprietario_id=ente_prop_in;
+--delete from siac_r_report_importi where ente_proprietario_id=ente_prop_in;
+--delete from siac_s_report_importi where ente_proprietario_id=ente_prop_in;
+--delete from siac_t_report_importi where ente_proprietario_id=ente_prop_in;
 
 
+--17/03/2020. SIAC-7192.
+-- Aggiunta gestione del campo posizione_stampa sulla tabella bko_t_report_importi che deve essere
+-- riporto sulla tabella siac_r_report_importi.
 
 for rec in 
 select * from siac_t_report 
@@ -75,7 +78,8 @@ end if;
     re.validita_inizio,
     re.validita_fine,
     re.ente_proprietario_id,
-    login_operazione_loc
+    login_operazione_loc,
+    bi.posizione_stampa
     from 
     bko_t_report_importi bi, 
     siac_t_report re,
@@ -114,17 +118,7 @@ end if;
     loop
 
 
-    if rec.rep_codice='BILR048' and rec2.repimp_codice='ava_amm' 
-      then
-	  raise notice '2.2 rec2.repimp_codice %', rec2.repimp_codice;
-      raise notice '2.3 rec2.repimp_desc %', rec2.repimp_desc;
-      raise notice '2.4 rec2.repimp_progr_riga %', rec2.repimp_progr_riga;
-      raise notice '2.5 rec2.bil_id %',rec2.bil_id;
-      raise notice '2.6 rec2.periodo_id %',rec2.periodo_id;
-       end if;
-
-
-    INSERT INTO 
+INSERT INTO 
     siac.siac_t_report_importi
     (
     repimp_codice,
@@ -169,7 +163,7 @@ end if;
     VALUES(
     rec.rep_id,
     currtiins,
-    1,rec2.validita_inizio,
+    rec2.posizione_stampa,rec2.validita_inizio,
     rec2.validita_fine,
     rec2.ente_proprietario_id,
     login_operazione_loc
@@ -192,7 +186,8 @@ end if;
     re.validita_inizio,
     re.validita_fine,
     re.ente_proprietario_id,
-    login_operazione_loc
+    login_operazione_loc,
+    bi.posizione_stampa
     from 
     bko_t_report_importi bi, 
     siac_t_report re,
@@ -241,7 +236,7 @@ end if;
       ente_proprietario_id,
       login_operazione
       ) 
-      select c.rep_id,g.repimp_id,1,g.validita_inizio,g.validita_fine,g.ente_proprietario_id,login_operazione_loc
+      select c.rep_id,g.repimp_id,a.posizione_stampa,g.validita_inizio,g.validita_fine,g.ente_proprietario_id,login_operazione_loc
       from 
       siac_t_report c, 
       bko_t_report_importi a, siac_t_report_importi g

@@ -4,7 +4,7 @@
 */
 drop VIEW siac.siac_v_dwh_fattura_sirfel
 
-CREATE OR REPLACE VIEW siac_v_dwh_fattura_sirfel (
+CREATE OR REPLACE VIEW siac_v_dwh_fattura_sirfel (CREATE OR REPLACE VIEW siac.siac_v_dwh_fattura_sirfel (
     ente_proprietario_id,
     fornitore_cod,
     fornitore_desc,
@@ -41,7 +41,8 @@ CREATE OR REPLACE VIEW siac_v_dwh_fattura_sirfel (
     cod_sogg_doc,
     esito_stato_fattura_fel, -- siac-6125 Sofia 23.05.2018
     data_scadenza_pagamento_pcc, -- siac-6125 Sofia 23.05.2018
-    stato_sdi -- SIAC-6565
+    stato_sdi , -- SIAC-6565
+    lotto_sdi -- 02.10.2023 Sofia SIAC-TASK-172
     ) 
 AS
 SELECT tab.ente_proprietario_id, tab.fornitore_cod, tab.fornitore_desc,
@@ -57,7 +58,8 @@ SELECT tab.ente_proprietario_id, tab.fornitore_cod, tab.fornitore_desc,
     tab.cod_tipo_doc, tab.cod_sogg_doc,
     tab.esito_stato_fattura_fel, -- siac-6125 Sofia 23.05.2018
     tab.data_scadenza_pagamento_pcc, -- siac-6125 Sofia 23.05.2018
-    tab.stato_sdi -- SIAC-6565
+    tab.stato_sdi, -- SIAC-6565
+    tab.lotto_sdi -- 02.10.2023 Sofia SIAC-TASK-172
 FROM ( WITH dati_sirfel AS (
     SELECT tf.ente_proprietario_id,
                     tp.codice_prestatore AS fornitore_cod,
@@ -117,6 +119,7 @@ FROM ( WITH dati_sirfel AS (
                     tdoc.doc_data_emissione AS data_emissione_doc,
                     ddoctipo.doc_tipo_code AS cod_tipo_doc,
                     tdoc.stato_sdi as stato_sdi, -- SIAC-6565
+                    tdoc.doc_sdi_lotto_siope lotto_sdi, -- 02.10.2023 Sofia SIAC-TASK-172
                     tsogg.soggetto_code AS cod_sogg_doc
     FROM siac_r_doc_sirfel rdoc
               JOIN siac_t_doc tdoc ON tdoc.doc_id = rdoc.doc_id
@@ -148,8 +151,13 @@ FROM ( WITH dati_sirfel AS (
             dati_fattura.cod_sogg_doc,
             dati_sirfel.esito_stato_fattura_fel, -- siac-6125 Sofia 23.05.2018
             dati_sirfel.data_scadenza_pagamento_pcc, -- siac-6125 Sofia 23.05.2018
-            dati_fattura.stato_sdi -- SIAC-6565
+            dati_fattura.stato_sdi, -- SIAC-6565
+            dati_fattura.lotto_sdi -- 10.02.2023 Sofia SIAC-TASK-172
     FROM dati_sirfel
       LEFT JOIN dati_fattura ON dati_sirfel.id_fattura =
           dati_fattura.id_fattura AND dati_sirfel.ente_proprietario_id = dati_fattura.ente_proprietario_id
     ) tab;
+    
+   
+   
+   alter view siac.siac_v_dwh_fattura_sirfel owner to siac;

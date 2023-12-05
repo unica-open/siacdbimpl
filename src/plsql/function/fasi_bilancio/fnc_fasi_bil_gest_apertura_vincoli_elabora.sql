@@ -2,6 +2,16 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
+drop function if exists siac.fnc_fasi_bil_gest_apertura_vincoli_elabora (
+  enteproprietarioid integer,
+  annobilancio integer,
+  fasebilelabid integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
 CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_vincoli_elabora (
   enteproprietarioid integer,
   annobilancio integer,
@@ -30,7 +40,8 @@ DECLARE
     bilancioPrecId    integer:=null;
     --- 26.06.2019 Sofia siac-6702
     bilancioId        integer:=null;
-    numeroVincoliIns  integer:=null;
+    numeroVincoliAccIns  integer:=null;
+	numeroVincoliAvavIns  integer:=null;
 
 BEGIN
     codiceRisultato:=null;
@@ -183,35 +194,195 @@ BEGIN
     if codResult is null then
     	raise exception ' Errore in inserimento LOG.';
     end if;
-
+    
+    -- 20.05.2022 Sofia SIAC-8406
+    update siac_r_movgest_ts rUPD 
+    set    data_cancellazione=clock_timestamp(),
+           validita_fine=clock_timestamp(), 
+           login_operazione=rUPD.login_operazione ||'_APE_VINC@'||faseBilElabId::varchar
+	from  fase_bil_t_gest_apertura_vincoli fase       
+    where fase.fase_bil_elab_id=faseBilElabId
+	and   fase.fl_elab='N'
+	and   fase.movgest_ts_a_id is not null 
+    and   rUPD.movgest_ts_b_id =fase.movgest_ts_b_id
+    and   rUPD.movgest_ts_a_id =fase.movgest_ts_a_id
+    and   rUPD.data_cancellazione  is null 
+    and   rUPD.validita_fine  is null
+    and   fase.data_cancellazione is null
+	and   fase.validita_fine is null;
+   
+    -- 20.05.2022 Sofia SIAC-8406
+   	update siac_r_movgest_ts rUPD 
+    set    data_cancellazione=clock_timestamp(),
+           validita_fine=clock_timestamp(), 
+           login_operazione=rUPD.login_operazione ||'_APE_VINC@'||faseBilElabId::varchar
+    from fase_bil_t_gest_apertura_vincoli fase       
+  	where fase.fase_bil_elab_id=faseBilElabId
+    and   fase.fl_elab='N'
+    and   fase.avav_id  is not null 
+  	and   rUPD.movgest_ts_b_id =fase.movgest_ts_b_id
+   	and   rUPD.avav_id = fase.avav_id
+   	and   rUPD.data_cancellazione  is null 
+   	and   rUPD.validita_fine  is null
+   	and   fase.data_cancellazione is null
+    and   fase.validita_fine is null;
+    
+    -- 20.05.2022 Sofia SIAC-8406
 	insert into siac_r_movgest_ts
     (
-     movgest_ts_a_id,
-     movgest_ts_b_id,
-     movgest_ts_importo,
-     avav_id,
-     validita_inizio,
-     login_operazione,
-     ente_proprietario_id
+	     movgest_ts_b_id,
+	     movgest_ts_a_id,
+	     movgest_ts_importo,
+	     validita_inizio,
+	     login_operazione,
+	     ente_proprietario_id
+    )
+    (
+        select fase.movgest_ts_b_id,
+	           fase.movgest_ts_a_id,
+	           sum(fase.importo_vinc),
+	           now(),
+	           loginOperazione||'_APE_VINC@'||faseBilElabId::varchar,
+               enteProprietarioId
+	     from fase_bil_t_gest_apertura_vincoli fase
+	     where fase.fase_bil_elab_id=faseBilElabId
+	     and   fase.fl_elab='N'
+	     and   fase.movgest_ts_a_id  is not null
+	     and   fase.data_cancellazione is null
+	     and   fase.validita_fine is null
+	     and   not exists 
+	     (
+	     select 1
+	     from siac_r_movgest_ts r 
+	     where r.movgest_ts_a_id =fase.movgest_ts_a_id 
+	     and   r.movgest_ts_b_id =fase.movgest_ts_b_id 
+	     and   r.data_cancellazione  is null 
+	     and   r.validita_fine  is null 
+	     )
+	     group by fase.movgest_ts_b_id,
+	     	      fase.movgest_ts_a_id
+	     having sum(fase.importo_vinc)!=0
+	 );
+	 GET DIAGNOSTICS numeroVincoliAccIns = ROW_COUNT;
+     raise notice 'numeroVincoliAccIns=%',coalesce(numeroVincoliAccIns,0)::varchar;
+
+	 -- 20.05.2022 Sofia SIAC-8406  
+     insert into siac_r_movgest_ts
+     (
+	     movgest_ts_b_id,
+	     avav_id,
+	     movgest_ts_importo,
+	     validita_inizio,
+	     login_operazione,
+	     ente_proprietario_id
+    )
+    (
+    	select fase.movgest_ts_b_id,
+            fase.avav_id ,
+            sum(fase.importo_vinc),
+	        now(),
+            loginOperazione||'_APE_VINC@'||faseBilElabId::varchar, 
+            enteProprietarioId
+	     from fase_bil_t_gest_apertura_vincoli fase
+	     where fase.fase_bil_elab_id=faseBilElabId
+	     and   fase.fl_elab='N'
+	     and   fase.avav_id  is not null 
+	     and   fase.data_cancellazione is null
+	     and   fase.validita_fine is null
+	     and   not exists 
+	     (
+	     select 1
+	     from siac_r_movgest_ts r 
+	     where r.movgest_ts_b_id =fase.movgest_ts_b_id 
+	     and   r.avav_id =fase.avav_id 
+	     and   r.data_cancellazione  is null 
+	     and   r.validita_fine  is null 
+	     )
+	     group by fase.movgest_ts_b_id,
+	     		  fase.avav_id
+	     having sum(fase.importo_vinc)!=0
+    );
+	GET DIAGNOSTICS numeroVincoliAvavIns = ROW_COUNT;
+	raise notice 'numeroVincoliAvavIns=%',coalesce(numeroVincoliAvavIns,0)::varchar;
+
+    -- 20.05.2022 Sofia SIAC-8406
+    strMessaggio:='Aggiornamento fase_bil_t_gest_apertura_vincoli.';
+    update  fase_bil_t_gest_apertura_vincoli fase
+    set    movgest_ts_r_id=r.movgest_ts_r_id,
+           fl_elab='S'
+    from  siac_r_movgest_ts r
+    where fase.fase_bil_elab_id=faseBilElabId
+    and   fase.fl_elab='N'
+    and   r.ente_proprietario_id=fase.ente_proprietario_id
+    and   r.movgest_ts_b_id =fase.movgest_ts_b_id 
+    and   r.movgest_ts_a_id =fase.movgest_ts_a_id 
+    and   r.login_operazione like '%_APE_VINC@%'
+    and   r.data_cancellazione is null
+    and   r.validita_fine is null
+    and   fase.data_cancellazione is null
+    and   fase.validita_fine is null;
+
+    strMessaggio:='Aggiornamento fase_bil_t_gest_apertura_vincoli.';
+    update  fase_bil_t_gest_apertura_vincoli fase
+    set    movgest_ts_r_id=r.movgest_ts_r_id,
+           fl_elab='S'
+    from  siac_r_movgest_ts r
+    where fase.fase_bil_elab_id=faseBilElabId
+    and   fase.fl_elab='N'
+    and   r.ente_proprietario_id=fase.ente_proprietario_id
+    and   r.movgest_ts_b_id =fase.movgest_ts_b_id 
+    and   r.avav_id =fase.avav_id 
+    and   r.login_operazione like '%_APE_VINC@%'
+    and   r.data_cancellazione is null
+    and   r.validita_fine is null
+    and   fase.data_cancellazione is null
+    and   fase.validita_fine is null;
+
+    update  fase_bil_t_gest_apertura_vincoli fase
+    set   movgest_ts_r_id=r.movgest_ts_r_id,  
+          fl_elab='S'
+    from  siac_r_movgest_ts r
+    where fase.fase_bil_elab_id=faseBilElabId
+    and   fase.fl_elab='N'
+    and   r.ente_proprietario_id=fase.ente_proprietario_id
+    and   r.movgest_ts_b_id =fase.movgest_ts_b_id 
+    and   r.login_operazione like '%_APE_VINC@%'
+    and   substring(r.login_operazione , position('@' in r.login_operazione)+1)::integer=faseBilElabId
+--    and   fase.importo_vinc =0
+    and   r.data_cancellazione is null
+    and   r.validita_fine is null
+    and   fase.data_cancellazione is null
+    and   fase.validita_fine is null;
+
+   
+  
+/*  -- 20.05.2022 Sofia SIAC-8406	    
+	insert into siac_r_movgest_ts
+    (
+	     movgest_ts_a_id,
+	     movgest_ts_b_id,
+	     movgest_ts_importo,
+	     avav_id,
+	     validita_inizio,
+	     login_operazione,
+	     ente_proprietario_id
     )
     (select fase.movgest_ts_a_id,
-            fase.movgest_ts_b_id,
-            fase.importo_vinc,
-            fase.avav_id, -- 06.12.2017 Sofia jira siac-5276
-            --dataInizioVal,
-            clock_timestamp(), -- 12.01.2018 Sofia
-            loginOperazione||'_APE_VINC@'||fase.fase_bil_gest_ape_vinc_id::varchar, -- 06.12.2017 Sofia jira siac-5276
-            enteProprietarioId
-     from fase_bil_t_gest_apertura_vincoli fase
-     where fase.fase_bil_elab_id=faseBilElabId
-     and   fase.fl_elab='N'
-     and   fase.data_cancellazione is null
-     and   fase.validita_fine is null
-    );
+	            fase.movgest_ts_b_id,
+	            fase.importo_vinc,
+	            fase.avav_id, -- 06.12.2017 Sofia jira siac-5276
+	            --dataInizioVal,
+	            clock_timestamp(), -- 12.01.2018 Sofia
+	            loginOperazione||'_APE_VINC@'||fase.fase_bil_gest_ape_vinc_id::varchar, -- 06.12.2017 Sofia jira siac-5276
+	            enteProprietarioId
+	     from fase_bil_t_gest_apertura_vincoli fase
+	     where fase.fase_bil_elab_id=faseBilElabId
+	     and   fase.fl_elab='N'
+	     and   fase.data_cancellazione is null
+	     and   fase.validita_fine is null
+	    );
     -- 29.07.2019 Sofia SIAC-6702
     GET DIAGNOSTICS numeroVincoliIns = ROW_COUNT;
-
-
 
     strMessaggio:='Aggiornamento fase_bil_t_gest_apertura_vincoli.';
     update  fase_bil_t_gest_apertura_vincoli fase
@@ -228,7 +399,13 @@ BEGIN
     and   r.validita_fine is null
     and   fase.data_cancellazione is null
     and   fase.validita_fine is null;
+    
+    **/
+    
 
+
+
+   
 
     strMessaggio:='Inserimento siac_r_movgest_ts. FINE.';
     codResult:=null;
@@ -481,3 +658,14 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+ALTER FUNCTION siac.fnc_fasi_bil_gest_apertura_vincoli_elabora 
+(
+  integer,
+  integer,
+  integer,
+  varchar,
+  timestamp,
+  out integer,
+  out varchar
+)  OWNER TO siac;

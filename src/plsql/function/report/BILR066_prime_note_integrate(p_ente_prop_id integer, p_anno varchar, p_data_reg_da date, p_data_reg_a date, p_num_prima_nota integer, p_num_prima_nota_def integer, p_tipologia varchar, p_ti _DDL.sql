@@ -1,5 +1,5 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
 CREATE OR REPLACE FUNCTION siac."BILR066_prime_note_integrate" (
@@ -40,7 +40,12 @@ RETURNS TABLE (
   causale_ep_tipo_code varchar,
   pnota_stato_code varchar,
   num_prima_nota_def integer,
-  data_registrazione_def date
+  data_registrazione_def date,
+  code_missione varchar,
+  desc_missione varchar,
+  code_programma varchar,
+  desc_programma varchar,
+  miss_prog_display varchar
 ) AS
 $body$
 DECLARE
@@ -62,7 +67,12 @@ prec_cod_beneficiario varchar;
 prec_ragione_sociale varchar;
 prec_imp_movimento numeric;
 prec_classif_bilancio varchar;
-
+elem_id_curr integer;
+elem_id_prec integer;
+code_missione_prec varchar;
+desc_missione_prec varchar;
+code_programma_prec varchar;
+desc_programma_prec varchar;
 
 DEF_NULL	constant varchar:=''; 
 RTN_MESSAGGIO 		varchar(1000):=DEF_NULL;
@@ -102,6 +112,7 @@ BEGIN
     causale_ep_tipo_code='';
     pnota_stato_code='';
     
+    
     prec_num_prima_nota=0;
 	prec_num_movimento_key =0;
 	prec_num_movimento ='';
@@ -120,84 +131,21 @@ BEGIN
     soggetto_code_mod='';
     soggetto_desc_mod='';
     
+    code_missione:='';
+    desc_missione:='';
+    code_programma:='';
+    desc_programma:='';
+    miss_prog_display:='';
+                
+    elem_id_prec:=0;
+    code_missione_prec :='';
+	desc_missione_prec  :='';
+	code_programma_prec  :='';
+	desc_programma_prec  :='';
+
     select fnc_siac_random_user()
 	into	user_table;
 	
-    /* carico su una tabella temporanea i dati della struttura dei capitolo di spesa */
-/*insert into siac_rep_mis_pro_tit_mac_riga_anni
-select v.*,user_table from
-(SELECT missione_tipo.classif_tipo_desc AS missione_tipo_desc,
-    missione.classif_id AS missione_id, missione.classif_code AS missione_code,
-    missione.classif_desc AS missione_desc,
-    missione.validita_inizio AS missione_validita_inizio,
-    missione.validita_fine AS missione_validita_fine,
-    programma_tipo.classif_tipo_desc AS programma_tipo_desc,
-    programma.classif_id AS programma_id,
-    programma.classif_code AS programma_code,
-    programma.classif_desc AS programma_desc,
-    programma.validita_inizio AS programma_validita_inizio,
-    programma.validita_fine AS programma_validita_fine,
-    titusc_tipo.classif_tipo_desc AS titusc_tipo_desc,
-    titusc.classif_id AS titusc_id, titusc.classif_code AS titusc_code,
-    titusc.classif_desc AS titusc_desc,
-    titusc.validita_inizio AS titusc_validita_inizio,
-    titusc.validita_fine AS titusc_validita_fine,
-    macroaggr_tipo.classif_tipo_desc AS macroag_tipo_desc,
-    macroaggr.classif_id AS macroag_id, macroaggr.classif_code AS macroag_code,
-    macroaggr.classif_desc AS macroag_desc,
-    macroaggr.validita_inizio AS macroag_validita_inizio,
-    macroaggr.validita_fine AS macroag_validita_fine,
-    macroaggr.ente_proprietario_id
-FROM siac_d_class_fam missione_fam, siac_t_class_fam_tree missione_tree,
-    siac_r_class_fam_tree missione_r_cft, siac_t_class missione,
-    siac_d_class_tipo missione_tipo, siac_d_class_tipo programma_tipo,
-    siac_t_class programma, siac_d_class_fam titusc_fam,
-    siac_t_class_fam_tree titusc_tree, siac_r_class_fam_tree titusc_r_cft,
-    siac_t_class titusc, siac_d_class_tipo titusc_tipo,
-    siac_d_class_tipo macroaggr_tipo, siac_t_class macroaggr
-WHERE missione_fam.classif_fam_desc::text = 'Spesa - MissioniProgrammi'::text
-    AND missione_fam.classif_fam_id = missione_tree.classif_fam_id 
-    AND missione_tree.classif_fam_tree_id = missione_r_cft.classif_fam_tree_id 
-    AND missione_r_cft.classif_id_padre = missione.classif_id 
-    AND missione.classif_tipo_id = missione_tipo.classif_tipo_id 
-    AND missione_tipo.classif_tipo_code::text = 'MISSIONE'::text 
-    AND programma_tipo.classif_tipo_code::text = 'PROGRAMMA'::text 
-    AND missione_r_cft.classif_id = programma.classif_id 
-    AND programma.classif_tipo_id = programma_tipo.classif_tipo_id 
-    AND titusc_fam.classif_fam_desc::text = 'Spesa - TitoliMacroaggregati'::text 
-    AND titusc_fam.classif_fam_id = titusc_tree.classif_fam_id 
-    AND titusc_tree.classif_fam_tree_id = titusc_r_cft.classif_fam_tree_id 
-    AND titusc_r_cft.classif_id_padre = titusc.classif_id 
-    AND titusc_tipo.classif_tipo_code::text = 'TITOLO_SPESA'::text 
-    AND titusc.classif_tipo_id = titusc_tipo.classif_tipo_id 
-    AND macroaggr_tipo.classif_tipo_code::text = 'MACROAGGREGATO'::text 
-    AND titusc_r_cft.classif_id = macroaggr.classif_id 
-    AND macroaggr.classif_tipo_id = macroaggr_tipo.classif_tipo_id 
-    AND missione.ente_proprietario_id = programma.ente_proprietario_id 
-    AND programma.ente_proprietario_id = titusc.ente_proprietario_id 
-    AND titusc.ente_proprietario_id = macroaggr.ente_proprietario_id
-ORDER BY missione.classif_code, programma.classif_code, titusc.classif_code,
-    macroaggr.classif_code) v
---------siac_v_mis_pro_tit_macr_anni 
- where v.ente_proprietario_id=p_ente_prop_id 
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between  v.macroag_validita_inizio and
-COALESCE(v.macroag_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between  v.missione_validita_inizio and
-COALESCE(v.missione_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between  v.programma_validita_inizio and
-COALESCE(v.programma_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-and 
-to_timestamp('01/01/'||p_anno,'dd/mm/yyyy')
-between  v.titusc_validita_inizio and
-COALESCE(v.titusc_validita_fine, to_timestamp('31/12/'||p_anno,'dd/mm/yyyy'))
-order by missione_code, programma_code,titusc_code,macroag_code;
-*/
 
 -- 05/09/2016: sostituita la query di caricamento struttura del bilancio
 --   per migliorare prestazioni
@@ -505,12 +453,55 @@ order by titolo_code, tipologia_code,categoria_code;
             prima_nota.pnota_dataregistrazionegiornale pnota_data_def,
              causale_ep.causale_ep_code cod_causale, causale_ep.causale_ep_desc, mov_ep.movep_code,
             mov_ep.movep_desc, mov_ep_det.movep_det_code num_riga, mov_ep_det.movep_det_desc,
-            mov_ep_det.movep_det_segno, mov_ep_det.movep_det_importo
+            mov_ep_det.movep_det_segno, mov_ep_det.movep_det_importo,
+            --INC000006526089 09/11/2022:
+            --Missione e programma per le prime note libere sono 
+            --gestite al fondo della procedura.
+            prima_nota.pnota_id
+          --  COALESCE(programmi.programma_code,'') programma_code_lib,
+          --  COALESCE(programmi.programma_desc,'') programma_desc_lib,
+          --  COALESCE(missioni.missione_code,'') missione_code_lib,
+          --  COALESCE(missioni.missione_desc,'') missione_desc_lib
     from siac_t_ente_proprietario	ente_prop,
             siac_t_periodo	 		anno_eserc,	
             siac_t_bil	 			bilancio,
             siac_t_prima_nota prima_nota,
+              --23/07/2021 SIAC-8295.
+              -- Aggiunto il filtro sull'ambito FIN            
+            siac_d_ambito amb,
             siac_t_mov_ep_det	mov_ep_det,
+            --SIAC-8656 20/10/2022.
+            --Aggiunta gestione di missione/programma per le prime
+            --note libere.
+            --INC000006526089 09/11/2022:
+            --Missione e programma per le prime note libere sono 
+            --gestite al fondo della procedura.
+			/*	left join (select class_progr.classif_code programma_code,
+                			class_progr.classif_desc programma_desc,
+                            r_mov_ep_det_class_progr.movep_det_id
+                          from siac_t_class class_progr,
+                          	siac_d_class_tipo tipo_class_progr,
+                            siac_r_mov_ep_det_class r_mov_ep_det_class_progr
+                          where tipo_class_progr.classif_tipo_id=class_progr.classif_tipo_id
+                          and r_mov_ep_det_class_progr.classif_id=class_progr.classif_id
+                          and tipo_class_progr.ente_proprietario_id=p_ente_prop_id
+                          and   tipo_class_progr.classif_tipo_code='PROGRAMMA'
+                          and  r_mov_ep_det_class_progr.data_cancellazione IS NULL 
+                          and class_progr.data_cancellazione IS NULL) programmi                          
+                   on programmi.movep_det_id=mov_ep_det.movep_det_id
+				left join (select class_miss.classif_code missione_code,
+                			class_miss.classif_desc missione_desc,
+                            r_mov_ep_det_class_miss.movep_det_id
+                          from siac_t_class class_miss,
+                          	siac_d_class_tipo tipo_class_miss,
+                            siac_r_mov_ep_det_class r_mov_ep_det_class_miss
+                          where tipo_class_miss.classif_tipo_id=class_miss.classif_tipo_id
+                          and r_mov_ep_det_class_miss.classif_id=class_miss.classif_id
+                          and tipo_class_miss.ente_proprietario_id=p_ente_prop_id
+                          and   tipo_class_miss.classif_tipo_code='MISSIONE'
+                          and  r_mov_ep_det_class_miss.data_cancellazione IS NULL 
+                          and class_miss.data_cancellazione IS NULL) missioni                   
+                  on missioni.movep_det_id=mov_ep_det.movep_det_id, */           
             siac_r_prima_nota_stato r_pnota_stato,
             siac_d_prima_nota_stato pnota_stato,
             siac_t_pdce_conto	pdce_conto,
@@ -545,6 +536,7 @@ order by titolo_code, tipologia_code,categoria_code;
             and pdce_conto.pdce_conto_id=mov_ep_det.pdce_conto_id
             and causale_ep.causale_ep_id=mov_ep.causale_ep_id
             and d_tipo_causale.causale_ep_tipo_id=causale_ep.causale_ep_tipo_id 
+            and amb.ambito_id=prima_nota.ambito_id
             and ente_prop.ente_proprietario_id=p_ente_prop_id   
             and anno_eserc.anno=p_anno 
             AND (((p_data_reg_da is NULL OR p_data_reg_a is NULL) 
@@ -568,7 +560,10 @@ order by titolo_code, tipologia_code,categoria_code;
             	(trim(p_tipo_evento) = 'Tutti'))                   
             AND ((trim(p_evento) <> 'Tutti' AND  evento.evento_code = p_evento)  OR
 					(trim(p_evento) = 'Tutti' ))            
-            AND pnota_stato.pnota_stato_code <> 'A'        
+            AND pnota_stato.pnota_stato_code <> 'A'  
+              --23/07/2021 SIAC-8295.
+              -- Aggiunto il filtro sull'ambito FIN            
+            and amb.ambito_code='AMBITO_FIN'     
             and ente_prop.data_cancellazione is NULL
             and bilancio.data_cancellazione is NULL
             and anno_eserc.data_cancellazione is NULL
@@ -610,11 +605,13 @@ order by titolo_code, tipologia_code,categoria_code;
                   importo_dare=elenco_prime_note.movep_det_importo;
                   importo_avere=0;                            
             end if;
+                        
                 /* Tipo Impegno o Tipo Accertamento */
-raise notice 'Gestisco tipo_code = %, evento_code =%, collegamento_code =%',
-	           elenco_prime_note.evento_tipo_code, elenco_prime_note.evento_code,
-                elenco_prime_note.collegamento_tipo_code;  
-raise notice 'CHIAVE MOV = %, NUM PN PROVV = %',   elenco_prime_note.key_movimento,elenco_prime_note.num_prima_nota;                  
+--raise notice 'Gestisco tipo_code = %, evento_code =%, collegamento_code =%',
+--	           elenco_prime_note.evento_tipo_code, elenco_prime_note.evento_code,
+--                elenco_prime_note.collegamento_tipo_code;  
+
+--raise notice 'CHIAVE MOV = %, NUM PN PROVV = %',   elenco_prime_note.key_movimento,elenco_prime_note.num_prima_nota;                  
 --raise notice 'Tipo: %. Num mov % (prec %). numPnota % (prec %)',elenco_prime_note.evento_tipo_code, elenco_prime_note.key_movimento,prec_num_movimento_key, elenco_prime_note.num_prima_nota,prec_num_prima_nota;               
             if elenco_prime_note.evento_tipo_code='I' OR
                     elenco_prime_note.evento_tipo_code='A' THEN				                 
@@ -637,7 +634,7 @@ raise notice 'CHIAVE MOV = %, NUM PN PROVV = %',   elenco_prime_note.key_movimen
                     	/* impegno o accertamento: devo andare sulla tabella
                         	siac_t_movgest 
                            Devo testare tutti i possibili codici!!*/	
-                        raise notice 'Evento %', elenco_prime_note.evento_code;
+                       -- raise notice 'Evento %', elenco_prime_note.evento_code;
                    /* if elenco_prime_note.evento_code = 'IMP-INS' OR
                     	elenco_prime_note.evento_code = 'MIM-INS-I' OR
                         elenco_prime_note.evento_code = 'MIM-INS-S' OR
@@ -750,7 +747,7 @@ raise notice 'CHIAVE MOV = %, NUM PN PROVV = %',   elenco_prime_note.key_movimen
     					    soggetto_desc_mod='';
                         END IF;     
                     ELSIF elenco_prime_note.collegamento_tipo_code in('MMGS','MMGE') THEN      
-                    raise notice 'TIPO_CODE = % - KEY = %', elenco_prime_note.collegamento_tipo_code,elenco_prime_note.key_movimento;
+                    --raise notice 'TIPO_CODE = % - KEY = %', elenco_prime_note.collegamento_tipo_code,elenco_prime_note.key_movimento;
                                       
                   SELECT t_modifica.mod_id,r_modifica_stato.mod_stato_id, movgest.movgest_numero, movgest.movgest_desc,movgest.movgest_anno,
                           bil_elem.elem_code cod_capitolo, bil_elem.elem_code2 num_articolo,bil_elem.elem_id,
@@ -760,7 +757,7 @@ raise notice 'CHIAVE MOV = %, NUM PN PROVV = %',   elenco_prime_note.key_movimen
                           soggetto_mod.soggetto_code code_sogg_mod,
                           d_soggetto_classe.soggetto_classe_desc,
                           d_soggetto_classe.soggetto_classe_code,
-                          ts_det_movgest.movgest_ts_det_importo imp_movimento, ts_movgest.movgest_ts_code                            
+                          ts_det_movgest.movgest_ts_det_importo imp_movimento, ts_movgest.movgest_ts_code
                             INTO dati_movimento
                             from siac_t_movgest movgest,                         
                              siac_t_movgest_ts_det ts_det_movgest,
@@ -816,11 +813,12 @@ raise notice 'CHIAVE MOV = %, NUM PN PROVV = %',   elenco_prime_note.key_movimen
     						soggetto_desc_mod=COALESCE(dati_movimento.desc_sogg_mod,'');
                          END IF;
                     END IF;
-raise notice 'Sogg=%, Sogg_mod=%, Fam_sogg=%', dati_movimento.soggetto_code,  
-		soggetto_code_mod, dati_movimento.soggetto_classe_code; 
-if soggetto_code_mod <>''then
-	raise notice 'SOGGETTO MODIF= X%X',soggetto_code_mod;
-end if;
+--raise notice 'Sogg=%, Sogg_mod=%, Fam_sogg=%', dati_movimento.soggetto_code,  
+		--soggetto_code_mod, dati_movimento.soggetto_classe_code; 
+        
+--if soggetto_code_mod <>''then
+	--raise notice 'SOGGETTO MODIF= X%X',soggetto_code_mod;
+--end if;
                      
                     	/* 25/02/2016: se non esiste il movimento non carico i dati */
                     if descr_movimento ='' THEN      
@@ -1022,8 +1020,8 @@ end if;
                        -- return;
                        descr_movimento='Non esiste il movimento';
                     ELSE
-                    raise notice ' LIQUID = %', dati_movimento.liq_numero;
-                    raise notice 'MOV = %', elenco_prime_note.key_movimento;
+                    --raise notice ' LIQUID = %', dati_movimento.liq_numero;
+                    --raise notice 'MOV = %', elenco_prime_note.key_movimento;
                         num_movimento=concat('LIQ/',dati_movimento.liq_numero);
                         num_capitolo=dati_movimento.cod_capitolo;
                         num_articolo=dati_movimento.num_articolo;
@@ -1475,7 +1473,173 @@ end if;
                   end if;                                 
             end if;	/* fine IF su evento_tipo_code */
                     
-        return next;
+--raise notice ' Tipo prima nota: %', elenco_prime_note.causale_ep_tipo_code;
+--raise notice 'code_programma1 = %, code_programma_prec = %', 
+	--code_programma, code_programma_prec;
+    
+--SIAC-8656 20/10/2022.
+--Occorre visualizzare la missione e programma.
+--Nel caso delle prime note libere sono lette nella prima query
+--che estrae le prime note.
+if elenco_prime_note.causale_ep_tipo_code = 'LIB' then
+	/*
+        --INC000006526089 09/11/2022:
+        Missione e programma non possono essere lette in fase
+        di estrazione delle prime note in quanto esistono solo
+        per i movimenti "Dare".
+        Invece devo caricare questi dati in entrambi i movimenti
+        perche' nel report raggruppo per prima nota e se il record
+        "Avere" e' il primo per una certa prima nota non visualizzo
+        il dato di Missione/Programma.
+    code_missione:=elenco_prime_note.missione_code_lib;
+    desc_missione:=elenco_prime_note.missione_desc_lib;
+    code_programma:=elenco_prime_note.programma_code_lib;
+    desc_programma:=elenco_prime_note.programma_desc_lib;  
+    
+    */    
+    select COALESCE(class_progr.classif_code,'') programma_code,
+         	COALESCE(class_progr.classif_desc,'') programma_desc
+  		into code_programma, desc_programma
+        from siac_t_mov_ep		mov_ep,
+            siac_t_mov_ep_det	mov_ep_det,
+            siac_t_class class_progr,
+            siac_d_class_tipo tipo_class_progr,
+            siac_r_mov_ep_det_class r_mov_ep_det_class_progr
+        where mov_ep.movep_id=mov_ep_det.movep_id     
+        and tipo_class_progr.classif_tipo_id=class_progr.classif_tipo_id
+        and r_mov_ep_det_class_progr.classif_id=class_progr.classif_id
+        and r_mov_ep_det_class_progr.movep_det_id=mov_ep_det.movep_det_id
+        and tipo_class_progr.ente_proprietario_id=p_ente_prop_id
+        	--regep_id contiene l'id della prima nota
+        and mov_ep.regep_id =elenco_prime_note.pnota_id 
+        and tipo_class_progr.classif_tipo_code='PROGRAMMA'
+        and r_mov_ep_det_class_progr.data_cancellazione IS NULL 
+        and class_progr.data_cancellazione IS NULL  
+        and mov_ep.data_cancellazione IS NULL   
+        and mov_ep_det.data_cancellazione IS NULL;
+          
+        
+        select COALESCE(class_progr.classif_code,'') missione_code,
+               COALESCE(class_progr.classif_desc,'') missione_desc
+          into code_missione, desc_missione
+        from siac_t_mov_ep		mov_ep,
+            siac_t_mov_ep_det	mov_ep_det,
+            siac_t_class class_progr,
+            siac_d_class_tipo tipo_class_progr,
+            siac_r_mov_ep_det_class r_mov_ep_det_class_progr
+        where mov_ep.movep_id=mov_ep_det.movep_id     
+        and tipo_class_progr.classif_tipo_id=class_progr.classif_tipo_id
+        and r_mov_ep_det_class_progr.classif_id=class_progr.classif_id
+        and r_mov_ep_det_class_progr.movep_det_id=mov_ep_det.movep_det_id
+        and tipo_class_progr.ente_proprietario_id=p_ente_prop_id
+        	--regep_id contiene l'id della prima nota
+        and mov_ep.regep_id =elenco_prime_note.pnota_id
+        and tipo_class_progr.classif_tipo_code='MISSIONE'
+        and r_mov_ep_det_class_progr.data_cancellazione IS NULL 
+        and class_progr.data_cancellazione IS NULL  
+        and mov_ep.data_cancellazione IS NULL   
+        and mov_ep_det.data_cancellazione IS NULL;
+else
+	--nel caso delle prime note integrate occorre prendere la missione
+    --e programma relative al capitolo.
+    --Vale solo per i capitoli di spesa.
+	--raise notice ' ELEM_ID = %, elem_id_prec = %', 
+    	--dati_movimento.elem_id, elem_id_prec; 
+        
+    --eseguo la query solo se il capitolo e' diverso da quello del record
+    --precedente in modo da appesantire meno la gestione.
+    if elem_id_prec = dati_movimento.elem_id then     	        
+        code_missione:=code_missione_prec;
+		desc_missione:=desc_missione_prec;
+		code_programma:=code_programma_prec;
+		desc_programma:=desc_programma_prec;        
+    else
+      with capitoli as(
+        select distinct programma.classif_id programma_id,
+                macroaggr.classif_id macroaggregato_id,          
+                capitolo.elem_id
+        from siac_d_class_tipo programma_tipo,
+             siac_t_class programma,
+             siac_d_class_tipo macroaggr_tipo,
+             siac_t_class macroaggr,
+             siac_t_bil_elem capitolo,
+             siac_d_bil_elem_tipo tipo_elemento,
+             siac_r_bil_elem_class r_capitolo_programma,
+             siac_r_bil_elem_class r_capitolo_macroaggr, 
+             siac_d_bil_elem_stato stato_capitolo, 
+             siac_r_bil_elem_stato r_capitolo_stato,
+             siac_d_bil_elem_categoria cat_del_capitolo,
+             siac_r_bil_elem_categoria r_cat_capitolo 
+        where 	
+            programma.classif_tipo_id=programma_tipo.classif_tipo_id 		
+            and	programma.classif_id=r_capitolo_programma.classif_id			    
+            and	macroaggr.classif_tipo_id=macroaggr_tipo.classif_tipo_id 		
+            and	macroaggr.classif_id=r_capitolo_macroaggr.classif_id			    
+            and	capitolo.elem_tipo_id=tipo_elemento.elem_tipo_id 					
+            and	capitolo.elem_id=r_capitolo_programma.elem_id					
+            and	capitolo.elem_id=r_capitolo_macroaggr.elem_id						
+            and	capitolo.elem_id				=	r_capitolo_stato.elem_id	
+            and	r_capitolo_stato.elem_stato_id	=	stato_capitolo.elem_stato_id		
+            and	capitolo.elem_id				=	r_cat_capitolo.elem_id		
+            and	r_cat_capitolo.elem_cat_id		=	cat_del_capitolo.elem_cat_id	   	
+            and	capitolo.ente_proprietario_id=p_ente_prop_id 											 
+            and	programma_tipo.classif_tipo_code='PROGRAMMA'							
+            and	macroaggr_tipo.classif_tipo_code='MACROAGGREGATO'						
+            and	tipo_elemento.elem_tipo_code = 'CAP-UG'						     	
+            and	stato_capitolo.elem_stato_code	=	'VA'	
+            and capitolo.elem_id = dati_movimento.elem_id					     							
+            and	programma_tipo.data_cancellazione 			is null
+            and	programma.data_cancellazione 				is null
+            and	macroaggr_tipo.data_cancellazione 			is null
+            and	macroaggr.data_cancellazione 				is null
+            and	capitolo.data_cancellazione 				is null
+            and	tipo_elemento.data_cancellazione 			is null
+            and	r_capitolo_programma.data_cancellazione 	is null
+            and	r_capitolo_macroaggr.data_cancellazione 	is null 
+            and	stato_capitolo.data_cancellazione 			is null 
+            and	r_capitolo_stato.data_cancellazione 		is null
+            and	cat_del_capitolo.data_cancellazione 		is null
+            and	r_cat_capitolo.data_cancellazione 			is null),
+         strut_bilancio as(
+              select *
+              from siac_rep_mis_pro_tit_mac_riga_anni a
+              where a.ente_proprietario_id=p_ente_prop_id
+                  and a.utente=user_table)
+        select COALESCE(strut_bilancio.missione_code,'') code_missione,
+          COALESCE(strut_bilancio.missione_desc,'') desc_missione,
+          COALESCE(strut_bilancio.programma_code,'') code_programma,
+          COALESCE(strut_bilancio.programma_desc,'') desc_programma
+        into code_missione, desc_missione, code_programma, desc_programma
+        from capitoli  
+          left JOIN strut_bilancio on (strut_bilancio.programma_id =  capitoli.programma_id
+                          AND strut_bilancio.macroag_id =  capitoli.macroaggregato_id);         
+		IF NOT FOUND THEN
+        	code_missione:='';
+          	desc_missione:='';
+          	code_programma:='';
+          	desc_programma:='';
+         end if;
+         
+        code_missione_prec:=code_missione;
+        desc_missione_prec:=desc_missione;
+        code_programma_prec:=code_programma;
+        desc_programma_prec:=desc_programma;
+        elem_id_prec = dati_movimento.elem_id;
+        
+        --raise notice 'code_programma2 = % ', code_programma;
+    end if;
+    
+    
+end if;   
+
+
+--Nel campo miss_prog_display carico il dato di missione/programma da
+--visualizzare nel report.
+--In questo modo sara' piu' semplice modificarlo se si vuole in un
+--formato diverso.
+miss_prog_display := code_programma;
+      
+    return next;
         
         nome_ente='';
         num_movimento='';
@@ -1503,7 +1667,12 @@ end if;
         sub_impegno='';
         soggetto_code_mod='';
     	soggetto_desc_mod='';
-    
+        code_missione:='';
+    	desc_missione:='';
+    	code_programma:='';
+    	desc_programma:='';
+        miss_prog_display:='';
+        
         end loop;
   
     	/* cancello le strutture temporanee dei capitoli */
@@ -1524,4 +1693,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac."BILR066_prime_note_integrate" (p_ente_prop_id integer, p_anno varchar, p_data_reg_da date, p_data_reg_a date, p_num_prima_nota integer, p_num_prima_nota_def integer, p_tipologia varchar, p_tipo_evento varchar, p_evento varchar)
+  OWNER TO siac;

@@ -1,3 +1,9 @@
+/*
+*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-License-Identifier: EUPL-1.2
+*/
+
+
 CREATE OR REPLACE PACKAGE PCK_MIGRAZIONE_SIAC AS
   procedure migrazione_cpu(p_anno_esercizio varchar2,p_ente number,pCodRes out number,pMsgRes out varchar2);
   procedure migrazione_cpe(p_anno_esercizio varchar2,p_ente number,pCodRes out number,pMsgRes out varchar2);
@@ -29,7 +35,7 @@ CREATE OR REPLACE PACKAGE PCK_MIGRAZIONE_SIAC AS
   TIPO_CAP_ENTRATA CONSTANT VARCHAR2(1) := 'E'; -- per accertamenti / subaccertamenti
   STATO_IMPEGNO_P CONSTANT  VARCHAR2(1):='P'; -- 22.09.2015 Sofia
   STATO_IMPEGNO_D CONSTANT  VARCHAR2(1):='D'; -- 08.10.2015 Daniela  
-  COD_SOGGETTO_NULL CONSTANT VARCHAR2(3) := '999'; -- per i mov. di gestione se il soggetto di riferimento non è valorizzato troviamo  il valore 999
+  COD_SOGGETTO_NULL CONSTANT VARCHAR2(3) := '999'; -- per i mov. di gestione se il soggetto di riferimento non ï¿½ valorizzato troviamo  il valore 999
   
   PROVV_SPR  CONSTANT VARCHAR2(3):='SPR'; -- impegno/acc senza provvedimento  
   N_BLOCCHI_DOC CONSTANT  NUMBER :=200;

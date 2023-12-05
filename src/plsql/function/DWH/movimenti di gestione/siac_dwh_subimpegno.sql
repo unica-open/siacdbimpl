@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE TABLE siac.siac_dwh_subimpegno (
+﻿CREATE TABLE siac.siac_dwh_subimpegno (
   ente_proprietario_id INTEGER,
   ente_denominazione VARCHAR(500),
   bil_anno VARCHAR(4),
@@ -87,6 +87,7 @@ CREATE TABLE siac.siac_dwh_subimpegno (
   numriaccertato VARCHAR(500),
   numorigineplur VARCHAR(500),
   flagdariaccertamento VARCHAR(1),
+  flagdareanno         VARCHAR(1), -- 19.02.2020 Sofia jira siac-7292
   anno_atto_amministrativo VARCHAR(4),
   num_atto_amministrativo VARCHAR(500),
   oggetto_atto_amministrativo VARCHAR(500),
@@ -125,8 +126,32 @@ CREATE TABLE siac.siac_dwh_subimpegno (
   desc_siope_tipo_debito_bnkit VARCHAR(500),
   cod_siope_assenza_motivazione VARCHAR(200),
   desc_siope_assenza_motivazione VARCHAR(500),
-  desc_siope_assenza_motiv_bnkit VARCHAR(500)  
-) 
+  desc_siope_assenza_motiv_bnkit VARCHAR(500),
+   -- SIAC-7541 23.04.2020 Sofia
+  cod_cdr_struttura_comp       VARCHAR(200),
+  desc_cdr_struttura_comp      VARCHAR(500),
+  cod_cdc_struttura_comp       VARCHAR(200),
+  desc_cdc_struttura_comp      VARCHAR(500),
+  -- SIAC-7899 Sofia 26.11.2020 
+  comp_tipo_id          integer,
+  -- SIAC-7593 Sofia 06.05.2020 -- componente tipo impegno
+  comp_tipo_code        VARCHAR(200),
+  comp_tipo_desc        VARCHAR(500) ,
+  comp_tipo_macro_code  VARCHAR(200),
+  comp_tipo_macro_desc  VARCHAR(500),
+  comp_tipo_sotto_tipo_code  VARCHAR(200),
+  comp_tipo_sotto_tipo_desc  VARCHAR(500),
+  comp_tipo_ambito_code VARCHAR(200),
+  comp_tipo_ambito_desc VARCHAR(500),
+  comp_tipo_fonte_code  VARCHAR(200),
+  comp_tipo_fonte_desc  VARCHAR(500),
+  comp_tipo_fase_code   VARCHAR(200),
+  comp_tipo_fase_desc   VARCHAR(500),
+  comp_tipo_def_code    VARCHAR(200),
+  comp_tipo_def_desc    VARCHAR(500),
+  comp_tipo_gest_aut    VARCHAR(50),
+  comp_tipo_anno        INTEGER
+)
 WITH (oids = false);
 
 COMMENT ON COLUMN siac.siac_dwh_subimpegno.bil_anno

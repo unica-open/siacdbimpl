@@ -41,7 +41,7 @@ BEGIN
 	Funzione che estrae i dati dei capitoli di entrata/previsione suddivisi per Missione, 
     Programma, Macroaggregato e Pdce.
     Gli importi sono restituiti nei 3 anni di previsione.
-    Inoltre è anche restituito l'importo dei soli capitoli FPV relativi all'anno
+    Inoltre e' anche restituito l'importo dei soli capitoli FPV relativi all'anno
     precedente quello del bilancio.
     La funzione e' utilizzata dai report:
     	- BILR174 - Indicatori sintetici per Organismi ed enti strumentali delle Regioni e delle Province aut.
@@ -252,7 +252,15 @@ FROM strut_bilancio
 	LEFT JOIN capitoli on (strut_bilancio.programma_id =  capitoli.programma_id
         			AND strut_bilancio.macroag_id =  capitoli.macroaggregato_id)
     LEFT JOIN importi_cap on importi_cap.elem_id = capitoli.elem_id
-    LEFT JOIN conto_pdce on conto_pdce.elem_id = capitoli.elem_id) tab1
+    LEFT JOIN conto_pdce on conto_pdce.elem_id = capitoli.elem_id
+-- 19/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+WHERE capitoli.elem_id IS NULL OR capitoli.elem_id NOT IN (select elem_id
+			from siac_t_bil_elem_escludi_indicatori escludi
+            where escludi.ente_proprietario_id = p_ente_prop_id
+            	and escludi.validita_fine IS NULL
+                and escludi.data_cancellazione IS NULL)) tab1  
 UNION -- Unisco i dati relativi agli importi FPV di COMPETENZA dell'anno precedente
   SELECT  (annoIniRend::integer-1)::varchar bil_anno,
 		importi_fpv_anno_prec.missione_code::varchar code_missione, 
@@ -273,7 +281,15 @@ UNION -- Unisco i dati relativi agli importi FPV di COMPETENZA dell'anno precede
          from  siac_t_cap_u_importi_anno_prec importi_fpv_anno_prec
     where importi_fpv_anno_prec.ente_proprietario_id=p_ente_prop_id
     	and importi_fpv_anno_prec.anno= (annoIniRend::integer-1)::varchar
-        and importi_fpv_anno_prec.elem_cat_code in ('FPV','FPVC');
+        and importi_fpv_anno_prec.elem_cat_code in ('FPV','FPVC')
+-- 19/03/2020. SIAC-7446.
+--	Devono essere esclusi i capitoli presenti nella tabella siac_t_bil_elem_escludi_indicatori,
+--	creata per gestire un'esigenza di CMTO.     
+        and importi_fpv_anno_prec.elem_id NOT IN (select elem_id
+                    from siac_t_bil_elem_escludi_indicatori escludi
+                    where escludi.ente_proprietario_id = p_ente_prop_id
+                        and escludi.validita_fine IS NULL
+                        and escludi.data_cancellazione IS NULL);       
                     
 EXCEPTION
 	when no_data_found THEN

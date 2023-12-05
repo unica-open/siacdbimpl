@@ -1,8 +1,8 @@
-/*
+﻿/*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-CREATE TABLE siac.siac_dwh_accertamento (
+﻿CREATE TABLE siac.siac_dwh_accertamento (
   ente_proprietario_id INTEGER,
   ente_denominazione VARCHAR(500),
   bil_anno VARCHAR(4),
@@ -82,6 +82,7 @@ CREATE TABLE siac.siac_dwh_accertamento (
   numriaccertato VARCHAR(500),
   numorigineplur VARCHAR(500),
   flagdariaccertamento VARCHAR(1),
+  flagdareanno         VARCHAR(1), -- 19.02.2020 Sofia jira siac-7292
   anno_atto_amministrativo VARCHAR(4),
   num_atto_amministrativo VARCHAR(500),
   oggetto_atto_amministrativo VARCHAR(500),
@@ -114,7 +115,14 @@ CREATE TABLE siac.siac_dwh_accertamento (
   stato_programma varchar(200),
   versione_cronop varchar(200),
   desc_cronop varchar(500),
-  anno_cronop varchar(4)
+  anno_cronop varchar(4),
+   -- SIAC-7541 23.04.2020 Sofia
+  cod_cdr_struttura_comp       VARCHAR(200),
+  desc_cdr_struttura_comp      VARCHAR(500),
+  cod_cdc_struttura_comp       VARCHAR(200),
+  desc_cdc_struttura_comp      VARCHAR(500),
+  --- siac-8178 06.09.2021 Sofia
+  codice_verbale  varchar(250)
 )
 WITH (oids = false);
 

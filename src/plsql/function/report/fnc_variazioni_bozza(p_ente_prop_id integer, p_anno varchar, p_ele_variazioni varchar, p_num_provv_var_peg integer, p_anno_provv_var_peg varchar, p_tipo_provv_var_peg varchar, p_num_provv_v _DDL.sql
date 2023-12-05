@@ -1,8 +1,8 @@
 /*
-*SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
+*SPDX-FileCopyrightText: Copyright 2020 | CSI PIEMONTE
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_variazioni_bozza (
+CREATE OR REPLACE FUNCTION siac.fnc_variazioni_bozza (
   p_ente_prop_id integer,
   p_anno varchar,
   p_ele_variazioni varchar,
@@ -136,7 +136,8 @@ IF (p_ele_variazioni IS NOT NULL AND p_ele_variazioni <> '') OR
     
     sql_query=sql_query||' and		testata_variazione.ente_proprietario_id				= ' || p_ente_prop_id;
     sql_query=sql_query || ' and		anno_eserc.anno			= 	'''||p_anno||'''
-    and		tipologia_stato_var.variazione_stato_tipo_code in (''B'',''G'', ''C'', ''P'')
+    --10/10/2022 SIAC-8827  Aggiunto lo stato BD.
+    and		tipologia_stato_var.variazione_stato_tipo_code in (''B'',''G'', ''C'', ''P'', ''BD'')
     and		tipo_capitolo.elem_tipo_code = ''' || elemTipoCode|| '''    
     and		tipo_elemento.elem_det_tipo_code	in (''STA'',''SCA'',''STR'') ';
     
@@ -252,4 +253,8 @@ LANGUAGE 'plpgsql'
 VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
+PARALLEL UNSAFE
 COST 100 ROWS 1000;
+
+ALTER FUNCTION siac.fnc_variazioni_bozza (p_ente_prop_id integer, p_anno varchar, p_ele_variazioni varchar, p_num_provv_var_peg integer, p_anno_provv_var_peg varchar, p_tipo_provv_var_peg varchar, p_num_provv_var_bil integer, p_anno_provv_var_bil varchar, p_tipo_provv_var_bil varchar, p_code_sac_direz_peg varchar, p_code_sac_sett_peg varchar, p_code_sac_direz_bil varchar, p_code_sac_sett_bil varchar, p_contaparvarpeg integer, p_contaparvarbil integer, p_elemtipocode varchar)
+  OWNER TO siac;

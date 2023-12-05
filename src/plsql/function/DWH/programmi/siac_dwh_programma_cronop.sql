@@ -85,7 +85,9 @@ programma_sac_desc           VARCHAR(500),
 programma_cup                 VARCHAR(200),
 programma_cronop_descr_entrata VARCHAR(500),
 programma_cronop_descr_spesa VARCHAR(500),
-entrata_prevista_cronop_entrata  VARCHAR(200)
+entrata_prevista_cronop_entrata  VARCHAR(200),
+programma_cronop_note            VARCHAR(500)-- SIAC-8603 Sofia 26.05.2022
+
 )
 WITH (oids = false);
 

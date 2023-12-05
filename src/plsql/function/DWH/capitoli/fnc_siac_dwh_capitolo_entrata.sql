@@ -2,7 +2,7 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_capitolo_entrata (
+CREATE OR REPLACE FUNCTION siac.fnc_siac_dwh_capitolo_entrata (
   p_anno_bilancio varchar,
   p_ente_proprietario_id integer,
   p_data timestamp
@@ -189,6 +189,7 @@ DECLARE
   v_ex_anno VARCHAR:=null;
   v_ex_capitolo VARCHAR:= null;
   v_ex_articolo VARCHAR:=null;
+  v_FlagEntrataDubbiaEsigFCDE VARCHAR:=null;   -- SIAC-8531   Haitham 17/01/2022   Haitham 17/01/2022
 
 v_user_table varchar;
 params varchar;
@@ -336,8 +337,153 @@ v_anno := rec_elem_id.anno;
 v_elem_code := rec_elem_id.elem_code;
 v_elem_code2 := rec_elem_id.elem_code2;
 v_elem_code3 := rec_elem_id.elem_code3;
-v_elem_desc := rec_elem_id.elem_desc;
-v_elem_desc2 := rec_elem_id.elem_desc2;
+
+-- 17.02.2020 Sofia  Jira SIAC-7329
+-- v_elem_desc := rec_elem_id.elem_desc;
+
+v_elem_desc:=
+translate( rec_elem_id.elem_desc,
+chr(1)::varchar||
+chr(2)::varchar||
+chr(3)::varchar||
+chr(4)::varchar||
+chr(5)::varchar||
+chr(6)::varchar||
+chr(7)::varchar||
+chr(8)::varchar||
+chr(9)::varchar||
+chr(10)::varchar||
+chr(11)::varchar||
+chr(12)::varchar||
+chr(13)::varchar||
+chr(14)::varchar||
+chr(15)::varchar||
+chr(16)::varchar||
+chr(17)::varchar||
+chr(18)::varchar||
+chr(19)::varchar||
+chr(20)::varchar||
+chr(21)::varchar||
+chr(22)::varchar||
+chr(23)::varchar||
+chr(24)::varchar||
+chr(25)::varchar||
+chr(26)::varchar||
+chr(27)::varchar||
+chr(28)::varchar||
+chr(29)::varchar||
+chr(30)::varchar||
+chr(31)::varchar||
+chr(126)::varchar||
+chr(127)::varchar,
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar);
+
+-- 17.02.2020 Sofia  Jira SIAC-7329
+-- v_elem_desc2 := rec_elem_id.elem_desc2;
+
+v_elem_desc2 :=
+translate( rec_elem_id.elem_desc2,
+chr(1)::varchar||
+chr(2)::varchar||
+chr(3)::varchar||
+chr(4)::varchar||
+chr(5)::varchar||
+chr(6)::varchar||
+chr(7)::varchar||
+chr(8)::varchar||
+chr(9)::varchar||
+chr(10)::varchar||
+chr(11)::varchar||
+chr(12)::varchar||
+chr(13)::varchar||
+chr(14)::varchar||
+chr(15)::varchar||
+chr(16)::varchar||
+chr(17)::varchar||
+chr(18)::varchar||
+chr(19)::varchar||
+chr(20)::varchar||
+chr(21)::varchar||
+chr(22)::varchar||
+chr(23)::varchar||
+chr(24)::varchar||
+chr(25)::varchar||
+chr(26)::varchar||
+chr(27)::varchar||
+chr(28)::varchar||
+chr(29)::varchar||
+chr(30)::varchar||
+chr(31)::varchar||
+chr(126)::varchar||
+chr(127)::varchar,
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar||
+chr(32)::varchar);
+
+
+
 v_elem_tipo_code := rec_elem_id.elem_tipo_code;
 v_elem_tipo_desc := rec_elem_id.elem_tipo_desc;
 v_elem_stato_code := rec_elem_id.elem_stato_code;
@@ -674,6 +820,7 @@ v_FlagTrasferimentoOrganiComunitari := null;
 v_Note := null;
 v_FlagAccertatoPerCassa := null;
 v_flag_attributo := null;
+v_FlagEntrataDubbiaEsigFCDE := null; -- SIAC-8531   Haitham 17/01/2022
 
 FOR rec_attr IN
 SELECT ta.attr_code, dat.attr_tipo_code,
@@ -717,6 +864,8 @@ LOOP
      v_Note := v_flag_attributo;
   ELSIF rec_attr.attr_code = 'FlagAccertatoPerCassa' THEN
      v_FlagAccertatoPerCassa := v_flag_attributo;
+  ELSIF rec_attr.attr_code = 'FlagEntrataDubbiaEsigFCDE' THEN   -- SIAC-8531   Haitham 17/01/2022
+     v_FlagEntrataDubbiaEsigFCDE := v_flag_attributo;
   END IF;
 
 END LOOP;
@@ -890,7 +1039,7 @@ and   bil.periodo_id = per.periodo_id;
 
 IF NOT FOUND then
 --SIAC-6007 Indipendentemente dal tipo di capitolo, sia esso di previsione o gestione,
---il capitolo ricercato è di Gestione
+--il capitolo ricercato e di Gestione
   select
     v_anno_prec, elem.elem_code,elem.elem_code2
     into v_ex_anno, v_ex_capitolo, v_ex_articolo
@@ -899,7 +1048,8 @@ IF NOT FOUND then
   and   elem.elem_code2 = v_elem_code2
   and   elem.elem_code3 = v_elem_code3
   and   elem.elem_tipo_id = v_elem_tipo_id
-  and   elem.bil_id = v_bil_id_prec;
+  and   elem.bil_id = v_bil_id_prec
+  and   elem.data_cancellazione is null;  -- Haitham 10/02/2022 SIAC-8621
 END IF;
 
 esito:= '    Fine step dati ex capitolo - '||clock_timestamp();
@@ -1049,6 +1199,7 @@ flagaccertatopercassa
 ,ex_anno
 ,ex_capitolo
 ,ex_articolo
+,flag_pertinente_FCDE           -- SIAC-8531   Haitham 17/01/2022
 )
 VALUES (v_ente_proprietario_id,
         v_ente_denominazione,
@@ -1193,6 +1344,7 @@ VALUES (v_ente_proprietario_id,
         ,v_ex_anno
         ,v_ex_capitolo
         ,v_ex_articolo
+        ,v_FlagEntrataDubbiaEsigFCDE    -- SIAC-8531   Haitham 17/01/2022
        );
 esito:= '  Fine ciclo elementi ('||v_elem_id||') - '||clock_timestamp();
 return next;

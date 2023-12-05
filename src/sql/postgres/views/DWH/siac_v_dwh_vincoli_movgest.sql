@@ -1,8 +1,9 @@
-/*
+﻿/*
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE VIEW siac.siac_v_dwh_vincoli_movgest
+drop view if exists siac.siac_v_dwh_vincoli_movgest;
+CREATE OR REPLACE VIEW siac.siac_v_dwh_vincoli_movgest
 (
     ente_proprietario_id,
     bil_code,
@@ -16,8 +17,18 @@
     anno_a,
     numero_a,
     importo_vincolo,
-    tipo_avanzo_vincolo)
+    tipo_avanzo_vincolo,
+    -- 23.02.2021 Sofia Jira SIAC-8920
+    movgest_ts_r_id,
+    importo_pending
+    )
 AS
+-- 23.02.2021 Sofia Jira SIAC-8920
+select query_vincoli.*,
+       coalesce(pending.importo_pending,0) importo_pending
+
+from
+(
 SELECT bil.ente_proprietario_id,
        bil.bil_code,
        periodo.anno AS anno_bilancio,
@@ -29,7 +40,9 @@ SELECT bil.ente_proprietario_id,
        mova.movgest_anno AS anno_a,
        mova.movgest_numero AS numero_a,
        a.movgest_ts_importo AS importo_vincolo,
-       dat.avav_tipo_code AS tipo_avanzo_vincolo
+       dat.avav_tipo_code AS tipo_avanzo_vincolo,
+       -- 23.02.2021 Sofia Jira SIAC-8920
+       a.movgest_ts_r_id
 FROM siac_r_movgest_ts a
      JOIN siac_t_movgest_ts movtsa ON a.movgest_ts_b_id = movtsa.movgest_ts_id -- impegno
      JOIN siac_t_movgest mova ON mova.movgest_id = movtsa.movgest_id
@@ -69,7 +82,9 @@ SELECT bil.ente_proprietario_id,
        mova.movgest_anno AS anno_a,
        mova.movgest_numero AS numero_a,
        a.movgest_ts_importo AS importo_vincolo,
-       dat.avav_tipo_code AS tipo_avanzo_vincolo
+       dat.avav_tipo_code AS tipo_avanzo_vincolo,
+       -- 23.02.2021 Sofia Jira SIAC-8920
+       a.movgest_ts_r_id
 FROM siac_r_movgest_ts a
      JOIN siac_t_movgest_ts movtsa ON a.movgest_ts_a_id = movtsa.movgest_ts_id -- accertamento
      JOIN siac_t_movgest mova ON mova.movgest_id = movtsa.movgest_id
@@ -99,4 +114,7 @@ AND   mova.validita_fine IS NULL
 AND   movtipoa.data_cancellazione IS NULL
 AND   movtipoa.validita_fine IS NULL
 AND   bil.data_cancellazione IS NULL
-AND   periodo.data_cancellazione IS NULL;
+AND   periodo.data_cancellazione IS NULL
+) query_vincoli
+  left join siac_t_vincolo_pending pending on (pending.movgest_ts_r_id=query_vincoli.movgest_ts_r_id and pending.data_cancellazione is null);
+alter view siac.siac_v_dwh_vincoli_movgest owner to siac;

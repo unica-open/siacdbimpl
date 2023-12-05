@@ -34,7 +34,8 @@ RETURNS TABLE (
   stato_reversale varchar,
   display_error varchar,
   code_distinta varchar,
-  desc_distinta varchar
+  desc_distinta varchar,
+  conto_tesoreria varchar
 ) AS
 $body$
 DECLARE
@@ -99,7 +100,7 @@ importo_prec_competenza_app=0;
 importo_prec_residui_app=0;
 code_distinta ='';
 desc_distinta='';
-
+conto_tesoreria:='';
 
 RTN_MESSAGGIO:='Estrazione dei dati delle reversali ''.';
 
@@ -272,7 +273,9 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
         t_bil_elem.elem_id, d_ord_stato.ord_stato_code, 
         t_movgest.movgest_anno anno_accertamento,
         SUM(t_ord_ts_det.ord_ts_det_importo) IMPORTO_TOTALE,
-        d_distinta.dist_code, d_distinta.dist_desc
+        d_distinta.dist_code, d_distinta.dist_desc, 
+        --12/10/2020 SIAC-7797: aggiunto il conto_tesoreria
+        COALESCE(d_contotes.contotes_code,'') conto_tesoreria
 		FROM  	siac_t_ente_proprietario ep,
         		siac_t_ente_oil OL,
                 siac_t_bil t_bil,
@@ -280,7 +283,13 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
                 siac_r_ordinativo_bil_elem r_ordinativo_bil_elem,
 				siac_t_bil_elem t_bil_elem,  
                 siac_t_ordinativo t_ordinativo
-                left join siac_d_distinta d_distinta on (t_ordinativo.dist_id= d_distinta.dist_id and d_distinta.data_cancellazione is NULL), 
+                left join siac_d_distinta d_distinta 
+                	on (t_ordinativo.dist_id= d_distinta.dist_id 
+                    	and d_distinta.data_cancellazione is NULL)
+                --12/10/2020 SIAC-7797: aggiunto il conto_tesoreria
+                LEFT JOIN siac_d_contotesoreria d_contotes 
+                on (d_contotes.contotes_id = t_ordinativo.contotes_id 
+                	and d_contotes.data_cancellazione is null), 
                 siac_t_ordinativo_ts t_ord_ts,
                 siac_t_ordinativo_ts_det t_ord_ts_det,
                 siac_d_ordinativo_ts_det_tipo d_ts_det_tipo,
@@ -371,7 +380,8 @@ select 	ep.ente_denominazione, ep.codice_fiscale cod_fisc_ente,
               OL.ente_oil_resp_ord, OL.ente_oil_tes_desc, OL.ente_oil_resp_amm,        
               t_bil_elem.elem_code , t_bil_elem.elem_code2 ,
               t_bil_elem.elem_id, d_ord_stato.ord_stato_code, t_movgest.movgest_anno,
-              d_distinta.dist_code, d_distinta.dist_desc
+              d_distinta.dist_code, d_distinta.dist_desc,
+              d_contotes.contotes_code
             ORDER BY t_ordinativo.ord_numero, t_ordinativo.ord_emissione_data            
 loop
 
@@ -426,6 +436,8 @@ debitore_nome=COALESCE(elencoReversali.soggetto_desc,'');
        
 code_distinta=COALESCE(elencoReversali.dist_code,'');
 desc_distinta=COALESCE(elencoReversali.dist_desc,'');
+--12/10/2020 SIAC-7797: aggiunto il conto_tesoreria
+conto_tesoreria:=COALESCE(elencoReversali.conto_tesoreria,'');
 
 return next;
 
@@ -452,6 +464,7 @@ importo_prec_residui=0;
 stato_reversale='';
 code_distinta='';
 desc_distinta='';
+conto_tesoreria:='';
 
 --raise notice 'fine numero reversale % ',elencoReversali.ord_numero;
 end loop;

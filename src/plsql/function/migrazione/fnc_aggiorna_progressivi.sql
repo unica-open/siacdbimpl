@@ -2,14 +2,12 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-create or replace function fnc_aggiorna_progressivi(
-							enteProprietarioId integer,
-							elemento varchar,
-  							loginOperazione varchar,
-                            out codResult integer,
-							out messaggioRisultato varchar)
-RETURNS record AS
-$body$
+
+
+CREATE OR REPLACE FUNCTION siac.fnc_aggiorna_progressivi(enteproprietarioid integer, elemento character varying, loginoperazione character varying, OUT codresult integer, OUT messaggiorisultato character varying)
+ RETURNS record
+ LANGUAGE plpgsql
+AS $function$
 DECLARE
 
 	strMessaggio VARCHAR(1500):='';
@@ -25,13 +23,9 @@ DECLARE
     MOVGEST_ACCERTAMENTI  CONSTANT varchar:='A';
     SOGGETTI              CONSTANT varchar:='S';
     SIAC_D_AMBITO_CODE    CONSTANT varchar:='AMBITO_FIN';
-    MUTUO			      CONSTANT varchar:='M';
-    VOCEMUTUO			  CONSTANT varchar:='VM';
     LIQUIDAZIONE 		  CONSTANT varchar:='L';
 
     SOGGETTI_KEY          CONSTANT varchar:='sog';
-    MUTUO_KEY          	  CONSTANT varchar:='mut';
-    VOCEMUTUO_KEY         CONSTANT varchar:='voce';
     LIQUIDAZIONE_KEY	  CONSTANT varchar:='liq_';
     siac_d_ambito_id integer := 0;
 
@@ -61,16 +55,6 @@ begin
               where s.ente_proprietario_id='||enteProprietarioId||'
               and fnc_migr_isnumeric(soggetto_code)
 			  order by  fnc_migr_sortnum(soggetto_code) desc limit 1)sogg;';
-	elsif elemento=MUTUO then
-	    cursorSql := 'select '''||MUTUO_KEY||'''::varchar prog_key , mut.num prog_value from
-             (select mut_code::integer num  from siac_t_mutuo s
-              where s.ente_proprietario_id='||enteProprietarioId||' and fnc_migr_isnumeric(mut_code)
-			  order by  fnc_migr_sortnum(mut_code) desc limit 1)mut;';
-	elsif elemento=VOCEMUTUO then
-	    cursorSql := 'select '''||VOCEMUTUO_KEY||'''::varchar prog_key , mut.num prog_value from
-             (select mut_voce_code::integer num  from siac_t_mutuo_voce s
-              where s.ente_proprietario_id='||enteProprietarioId||' and fnc_migr_isnumeric(mut_voce_code)
-			  order by  fnc_migr_sortnum(mut_voce_code) desc limit 1)mut;';
     elsif elemento=LIQUIDAZIONE then
 	    cursorSql := 'select '''||LIQUIDAZIONE_KEY||'''||liq_anno prog_key , max(liq_numero) prog_value from
         			  siac_t_liquidazione where ente_proprietario_id='||enteProprietarioId||'group by liq_anno;';
@@ -133,9 +117,5 @@ exception
         codResult := -1;
         return;
 end;
-$body$
-LANGUAGE 'plpgsql'
-VOLATILE
-CALLED ON NULL INPUT
-SECURITY INVOKER
-COST 100;
+$function$
+

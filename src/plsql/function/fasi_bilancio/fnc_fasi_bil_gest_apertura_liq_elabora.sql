@@ -2,7 +2,22 @@
 *SPDX-FileCopyrightText: Copyright 2020 | CSI Piemonte
 *SPDX-License-Identifier: EUPL-1.2
 */
-﻿CREATE OR REPLACE FUNCTION fnc_fasi_bil_gest_apertura_liq_elabora_liq (
+
+
+DROP FUNCTION IF EXISTS siac.fnc_fasi_bil_gest_apertura_liq_elabora_liq 
+(
+  enteproprietarioid integer,
+  annobilancio integer,
+  fasebilelabid integer,
+  minid integer,
+  maxid integer,
+  loginoperazione varchar,
+  dataelaborazione timestamp,
+  out codicerisultato integer,
+  out messaggiorisultato varchar
+);
+
+CREATE OR REPLACE FUNCTION siac.fnc_fasi_bil_gest_apertura_liq_elabora_liq (
   enteproprietarioid integer,
   annobilancio integer,
   fasebilelabid integer,
@@ -302,6 +317,45 @@ BEGIN
      and   fase.validita_fine is null;
 
 
+     -- SIAC-8551 28.04.2022  Sofia - inizio  
+     strMessaggio:='Verifica scarti in fase_bil_t_gest_apertura_liq per liquidazione riferita a documento collegato a prov.cassa di anno in chiusura.';
+     codResult:=null;
+	 insert into fase_bil_t_elaborazione_log
+     (fase_bil_elab_id,fase_bil_elab_log_operazione,
+      validita_inizio, login_operazione, ente_proprietario_id
+     )
+     values
+     (faseBilElabId,strMessaggio,clock_timestamp(),loginOperazione,enteProprietarioId)
+     returning fase_bil_elab_log_id into codResult;
+
+     if codResult is null then
+     	raise exception ' Errore in inserimento LOG.';
+     end if;
+
+	 update fase_bil_t_gest_apertura_liq fase
+     set   fl_elab='X',
+           scarto_code='LIQ4',
+           scarto_desc='Liquidazione su documento collegato a prov. cassa su anno in chiusura.'
+     where fase.fase_bil_elab_id=faseBilElabId
+     and   fase.fase_bil_gest_ape_liq_id between minId and maxId
+     and   fase.fl_elab='N'
+     and   exists (select 1
+                   from siac_r_subdoc_liquidazione rsub,siac_r_subdoc_prov_cassa rprov,siac_t_prov_cassa p
+    		       where rsub.liq_id=fase.liq_orig_id
+    		       AND   rprov.subdoc_id=rsub.subdoc_id 
+    		       AND   p.provc_id=rprov.provc_id
+    		       AND   p.provc_anno::integer=(annoBilancio-1)
+                   and   rsub.data_cancellazione is null
+                   and   rsub.validita_fine is NULL
+                   and   rprov.data_cancellazione is null
+                   and   rprov.validita_fine is null
+                   and   p.data_cancellazione is null
+                   and   p.validita_fine is null
+                   )
+     and   fase.data_cancellazione is null
+     and   fase.validita_fine is null;
+     -- SIAC-8551 28.04.2022  Sofia - fine 
+    
      strMessaggio:='Inizio ciclo per generazione liquidazioni.';
      codResult:=null;
 	 insert into fase_bil_t_elaborazione_log
@@ -1126,3 +1180,16 @@ VOLATILE
 CALLED ON NULL INPUT
 SECURITY INVOKER
 COST 100;
+
+ALTER FUNCTION  siac.fnc_fasi_bil_gest_apertura_liq_elabora_liq 
+(
+  integer,
+  integer,
+  integer,
+  integer,
+  integer,
+  varchar,
+  timestamp,
+  out integer,
+  OUT varchar
+ ) owner to siac;
